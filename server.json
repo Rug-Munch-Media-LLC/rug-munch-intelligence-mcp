@@ -3,7 +3,7 @@
   "display_name": "Rug Munch Intelligence",
   "description": "Rug Munch Intelligence MCP: 97 tools for crypto scam detection, rug pull prevention, and intelligence across 7 chains.",
   "version": "2.0.0",
-  "homepage": "https://cryptorugmunch.app",
+  "homepage": "https://rugmunch.io",
   "repository": "https://github.com/Rug-Munch-Media-LLC/rug-munch-mcp",
   "author": {
     "name": "CryptoRugMunch",
@@ -31,7 +31,7 @@
     "transport": "stdio"
   },
   "x402": {
-    "discovery_url": "https://cryptorugmunch.app/.well-known/x402",
+    "discovery_url": "https://rugmunch.io/.well-known/x402",
     "payment_network": "base",
     "payment_token": "USDC"
   },
@@ -43,7 +43,7 @@
   "env": {
     "RUG_MUNCH_API_BASE": {
       "description": "API base URL",
-      "default": "https://cryptorugmunch.app/api/v1",
+      "default": "https://rugmunch.io/api/v1",
       "required": false
     },
     "RUG_MUNCH_API_KEY": {

@@ -3,9 +3,9 @@ display_name: Rug Munch Intelligence
 description: "97 tools for scam detection, rug pull prevention, and crypto intelligence across 7 chains. The Bloomberg of Shitcoins Terminal Ultimate Edition."
 version: 2.0.0
 author: CryptoRugMunch
-homepage: https://cryptorugmunch.app
+homepage: https://rugmunch.io
 repository: https://github.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp
-license: MIT
+license: Proprietary
 
 categories:
   - security
@@ -23,7 +23,7 @@ commands:
 environment:
   RUG_MUNCH_API_BASE:
     description: API base URL
-    default: https://cryptorugmunch.app/api/v1
+    default: https://rugmunch.io/api/v1
     required: false
   RUG_MUNCH_API_KEY:
     description: API key for premium access (optional)
@@ -41,6 +41,6 @@ chains:
 
 x402:
   enabled: true
-  discovery_url: https://cryptorugmunch.app/.well-known/x402
+  discovery_url: https://rugmunch.io/.well-known/x402
   network: base
   token: USDC

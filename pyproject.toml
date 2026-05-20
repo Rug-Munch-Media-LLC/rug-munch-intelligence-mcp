@@ -42,7 +42,7 @@ dev = [
 rug-munch-intelligence-mcp = "rug_munch_mcp.server:main"
 
 [project.urls]
-Homepage = "https://cryptorugmunch.app"
+Homepage = "https://rugmunch.io"
 Repository = "https://github.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp"
 Documentation = "https://github.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp#readme"
 
