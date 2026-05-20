@@ -408,11 +408,6 @@ python -m rug_munch_mcp.server
 
 ## License
 
-MIT License — Copyright 2026 Rug Munch Media LLC. See [LICENSE](LICENSE) for details.
-
----
-
-<p align="center">
-  <strong>Built with 🍔 by Rug Munch Media LLC</strong><br/>
-  <a href="https://cryptorugmunch.app">cryptorugmunch.app</a> · <a href="https://rugmunch.io">rugmunch.io</a> · <a href="https://github.com/Rug-Munch-Media-LLC">GitHub</a>
-</p>
+Proprietary — Copyright 2026 Rug Munch Media LLC. All rights reserved.
+Commercial access via x402 API at https://cryptorugmunch.app/api/v1
+For commercial licensing: dev@cryptorugmunch.app
