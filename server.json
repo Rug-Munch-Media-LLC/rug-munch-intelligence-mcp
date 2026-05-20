@@ -1,0 +1,41 @@
+{
+  "name": "io.github.Rug-Munch-Media-LLC/rug-munch-mcp",
+  "display_name": "Rug Munch Intelligence",
+  "description": "97 tools for scam detection, rug pull prevention, and crypto intelligence across 7 chains. The Bloomberg of Shitcoins Terminal Ultimate Edition.",
+  "version": "2.0.0",
+  "homepage": "https://cryptorugmunch.app",
+  "repository": "https://github.com/Rug-Munch-Media-LLC/rug-munch-mcp",
+  "author": {
+    "name": "CryptoRugMunch",
+    "url": "https://github.com/cryptorugmuncher"
+  },
+  "license": "MIT",
+  "categories": ["security", "finance", "blockchain", "analytics"],
+  "tools": 97,
+  "chains": ["base", "solana", "ethereum", "bsc", "arbitrum", "optimism", "polygon"],
+  "mcp": {
+    "protocol": "2024-11-05",
+    "transport": "stdio"
+  },
+  "x402": {
+    "discovery_url": "https://cryptorugmunch.app/.well-known/x402",
+    "payment_network": "base",
+    "payment_token": "USDC"
+  },
+  "install": {
+    "pip": "pip install rug-munch-mcp",
+    "uvx": "uvx rug-munch-mcp",
+    "smithery": "npx @smithery/cli install rug-munch-mcp"
+  },
+  "env": {
+    "RUG_MUNCH_API_BASE": {
+      "description": "API base URL",
+      "default": "https://cryptorugmunch.app/api/v1",
+      "required": false
+    },
+    "RUG_MUNCH_API_KEY": {
+      "description": "API key for premium access (optional)",
+      "required": false
+    }
+  }
+}
