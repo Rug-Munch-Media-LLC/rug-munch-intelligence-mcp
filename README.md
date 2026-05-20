@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp/main/assets/banner.png" alt="Rug Munch Intelligence — MCP Server" width="800" />
+  <img src="https://img.shields.io/badge/MCP-Compatible-6E40C9?logo=modelcontextprotocol&logoColor=white" alt="MCP Compatible" />
+  <img src="https://img.shields.io/badge/Tools-97-00D4AA" alt="97 Tools" />
+  <img src="https://img.shields.io/badge/Chains-7-F7931A" alt="7 Chains" />
+  <img src="https://img.shields.io/badge/x402-Payment-FF6900?logo=coinbase&logoColor=white" alt="x402 Payment" />
+  <img src="https://img.shields.io/badge/Tier-Free-22C55E" alt="Free Tier" />
 </p>
 
 <h1 align="center">Rug Munch Intelligence — MCP Server</h1>
@@ -11,25 +15,40 @@
   Keeping retail investors safe.
 </p>
 
-<p align="center">
-  <img src="https://img.shields.io/badge/MCP-Compatible-6E40C9?logo=modelcontextprotocol&logoColor=white" alt="MCP Compatible" />
-  <img src="https://img.shields.io/pypi/v/rug-munch-intelligence-mcp?color=3776AB&logo=pypi&logoColor=white" alt="PyPI" />
-  <img src="https://img.shields.io/badge/Tools-97-00D4AA" alt="97 Tools" />
-  <img src="https://img.shields.io/badge/Chains-7-F7931A" alt="7 Chains" />
-  <img src="https://img.shields.io/badge/x402-Payment-FF6900?logo=coinbase&logoColor=white" alt="x402 Payment" />
-  <img src="https://img.shields.io/badge/Tier-Free-22C55E" alt="Free Tier" />
-  <img src="https://img.shields.io/badge/Smithery-Deploy-1a1a2e?logo=data:image/svg+xml;base64,&logoColor=white" alt="Smithery" />
-  <img src="https://img.shields.io/badge/Glama-MCP-FF4081" alt="Glama" />
-  <img src="https://img.shields.io/badge/Coinbase-x402-0052FF" alt="Coinbase x402" />
-</p>
-
 ---
 
 ## Mission
 
 We are building scam detection tools to keep retail investors and the broader crypto space safe from scams and scammers. **The Bloomberg of Shitcoins — terminal ultimate edition.**
 
----
+## Architecture
+
+This MCP server is a **client for the Rug Munch Intelligence x402 API**. It wraps all 97 tools into the Model Context Protocol so AI agents like Claude Desktop, Cursor, and Windsurf can use them natively.
+
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│  AI Agent       │     │  x402 Gateway     │     │  RMI Backend    │
+│  (Claude/Cursor)│     │  (Cloudflare)     │     │  (97 tools)     │
+│                 │     │                   │     │                 │
+│  this MCP ──────┼────►│  Base worker     ├────►│  intelligence   │
+│  server         │     │  Solana worker    │     │  security       │
+│                 │     │                   │     │  market         │
+│  OR direct ─────┼────►│                   │     │  forensics      │
+│  HTTP calls     │     │  payment check    │     │  analysis       │
+│                 │     │  trial enforcement│     │  social         │
+└─────────────────┘     └──────────────────┘     └─────────────────┘
+```
+
+**Two ways to access the same 97 tools:**
+
+1. **This MCP server** — `pip install rug-munch-intelligence-mcp` — for AI agents
+2. **Direct HTTP** — `POST https://cryptorugmunch.app/api/v1/x402-tools/{tool}` — for apps, bots, scripts
+
+Both go through the same x402 payment gateway and hit the same backend. The MCP server just translates MCP protocol into HTTP calls.
+
+The x402 gateways live here:
+- [x402-gateway-base](https://github.com/Rug-Munch-Media-LLC/x402-gateway-base) — Base + EVM chains
+- [x402-gateway-solana](https://github.com/Rug-Munch-Media-LLC/x402-gateway-solana) — Solana
 
 ## Quick Start
 
@@ -37,261 +56,14 @@ We are building scam detection tools to keep retail investors and the broader cr
 pip install rug-munch-intelligence-mcp
 ```
 
-### Claude Desktop Configuration
-
-Add to your `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "rug-munch": {
-      "command": "uvx",
-      "args": ["rug-munch-intelligence-mcp"],
-      "env": {
-        "RUG_MUNCH_API_BASE": "https://cryptorugmunch.app/api/v1"
-      }
-    }
-  }
-}
-```
-
-> No API key required for the free tier. Set `RUG_MUNCH_API_KEY` for premium access.
-
----
-
-## Supported Chains
-
-| Chain | Symbol | Status |
-|-------|--------|--------|
-| Base | BASE | ✅ Live |
-| Solana | SOL | ✅ Live |
-| Ethereum | ETH | ✅ Live |
-| BSC | BNB | ✅ Live |
-| Arbitrum | ARB | ✅ Live |
-| Optimism | OP | ✅ Live |
-| Polygon | MATIC | ✅ Live |
-
----
-
-## Tool Catalog — 97 Tools, 10 Categories
-
-### Intelligence (28 Tools)
-
-| Tool | Description | Chains |
-|------|-------------|--------|
-| `whale_scan` | Track whale wallet movements and large transactions | All 7 |
-| `smartmoney` | Identify smart money wallets and their positions | All 7 |
-| `cluster` | Cluster related wallets by behavior patterns | All 7 |
-| `airdrop_finder` | Find eligible airdrops for a wallet | All 7 |
-| `whale_profile` | Deep profile of a whale wallet's history | All 7 |
-| `insider` | Detect insider trading patterns before launches | All 7 |
-| `smart_money_alpha` | Alpha signals from smart money activity | All 7 |
-| `social_signal` | Social media signal aggregation for tokens | All 7 |
-| `sentiment` | Market sentiment analysis across sources | All 7 |
-| `copy_trade_finder` | Find wallets worth copy-trading | All 7 |
-| `liquidity_flow` | Track liquidity inflows and outflows | All 7 |
-| `risk_monitor` | Continuous risk monitoring for positions | All 7 |
-| `rug_pull_predictor` | ML-based rug pull prediction scoring | All 7 |
-| `meme_vibe_score` | Meme coin community vibe and virality scoring | All 7 |
-| `nft_wash_detector` | Detect NFT wash trading patterns | ETH, SOL, Base |
-| `gas_forecast` | Gas price forecasting and optimization | EVM chains |
-| `bridge_security` | Cross-chain bridge risk assessment | All 7 |
-| `defi_yield_scanner` | Scan DeFi yields and risk-adjusted returns | All 7 |
-| `portfolio_tracker` | Track and analyze portfolio composition | All 7 |
-| `token_deep_dive` | Deep fundamental analysis of any token | All 7 |
-| `token_comparison` | Side-by-side token comparison analysis | All 7 |
-| `forensic_valuation` | Forensic-based token valuation modeling | All 7 |
-| `comprehensive_audit` | Full-scope audit of a token or contract | All 7 |
-| `investigation_report` | Generate detailed investigation reports | All 7 |
-| `market_overview` | Real-time market overview and metrics | All 7 |
-| `chain_health` | Blockchain network health and congestion metrics | All 7 |
-| `anomaly` | Detect anomalous on-chain behavior | All 7 |
-| `honeypot_check` | Check if a token is a honeypot scam | All 7 |
-| `mev_protection` | Assess MEV exposure and protection strategies | EVM chains |
-
-### Security (17 Tools)
-
-| Tool | Description | Chains |
-|------|-------------|--------|
-| `urlcheck` | Check URLs for phishing and scam indicators | — |
-| `rugshield` | Real-time rug pull shield and protection | All 7 |
-| `clone_detect` | Detect cloned/fake tokens and contracts | All 7 |
-| `fresh_pair` | Analyze freshly launched trading pairs | All 7 |
-| `profile_flip` | Profile flip risk for token distributions | All 7 |
-| `audit` | Smart contract security audit | All 7 |
-| `honeypot_check` | Honeypot detection in security context | All 7 |
-| `rug_pull_predictor` | Rug pull prediction (security focus) | All 7 |
-| `bridge_security` | Bridge security assessment (security focus) | All 7 |
-| `mev_protection` | MEV protection analysis (security focus) | EVM chains |
-| `risk_monitor` | Risk monitoring (security focus) | All 7 |
-| `anomaly` | Anomaly detection (security focus) | All 7 |
-| `comprehensive_audit` | Comprehensive audit (security focus) | All 7 |
-| `investigation_report` | Investigation report (security focus) | All 7 |
-| `forensic_valuation` | Forensic valuation (security focus) | All 7 |
-| `gas_forecast` | Gas forecast (security focus) | EVM chains |
-| `chain_health` | Chain health (security focus) | All 7 |
-
-### Market (14 Tools)
-
-| Tool | Description | Chains |
-|------|-------------|--------|
-| `pulse` | Real-time market pulse and momentum | All 7 |
-| `coingecko_global` | Global market data from CoinGecko | All 7 |
-| `coingecko_trending` | Trending tokens on CoinGecko | All 7 |
-| `coingecko_markets` | Market cap and volume data | All 7 |
-| `coingecko_categories` | CoinGecko category analysis | All 7 |
-| `market_overview` | Market overview (macro focus) | All 7 |
-| `sentiment` | Sentiment analysis (market focus) | All 7 |
-| `social_signal` | Social signals (market focus) | All 7 |
-| `smart_money_alpha` | Smart money alpha (market focus) | All 7 |
-| `copy_trade_finder` | Copy trade finder (market focus) | All 7 |
-| `defi_yield_scanner` | DeFi yield scanner (market focus) | All 7 |
-| `liquidity_flow` | Liquidity flow (market focus) | All 7 |
-| `gas_forecast` | Gas forecast (market focus) | EVM chains |
-| `chain_health` | Chain health (market focus) | All 7 |
-
-### Analysis (12 Tools)
-
-| Tool | Description | Chains |
-|------|-------------|--------|
-| `tx_decoder` | Decode and interpret transactions | All 7 |
-| `wallet` | Comprehensive wallet analysis | All 7 |
-| `contract_info` | Extract smart contract information | All 7 |
-| `storage_reader` | Read contract storage slots | EVM chains |
-| `meme_vibe_score` | Meme vibe analysis (analysis focus) | All 7 |
-| `token_deep_dive` | Token deep dive (analysis focus) | All 7 |
-| `token_comparison` | Token comparison (analysis focus) | All 7 |
-| `forensic_valuation` | Forensic valuation (analysis focus) | All 7 |
-| `portfolio_tracker` | Portfolio tracker (analysis focus) | All 7 |
-| `comprehensive_audit` | Comprehensive audit (analysis focus) | All 7 |
-| `investigation_report` | Investigation report (analysis focus) | All 7 |
-| `risk_monitor` | Risk monitor (analysis focus) | All 7 |
-
-### Forensics (7 Tools)
-
-| Tool | Description | Chains |
-|------|-------------|--------|
-| `forensics_threat_check` | Threat intelligence check for addresses | All 7 |
-| `forensics_risk_report` | Detailed forensics risk report | All 7 |
-| `forensics_deep_scan` | Deep forensic scan of wallet/activity | All 7 |
-| `forensics_cross_chain` | Cross-chain forensic correlation | All 7 |
-| `bundle_security_pack` | Bundle of security forensics tools | All 7 |
-| `forensics_trace` | Trace funds through complex transaction graphs | All 7 |
-| `forensics_entity` | Entity resolution from on-chain footprints | All 7 |
-
-### Social (7 Tools)
-
-| Tool | Description | Chains |
-|------|-------------|--------|
-| `tw_profile` | Twitter/X profile analysis | — |
-| `tw_timeline` | Twitter/X timeline analysis | — |
-| `tw_search` | Twitter/X search for crypto mentions | — |
-| `profile_get` | Get Rug Munch user profile | — |
-| `profile_badges` | Get user badges and reputation | — |
-| `social_signal` | Social signal aggregation | All 7 |
-| `sentiment` | Sentiment from social channels | All 7 |
-
-### OSINT (3 Tools)
-
-| Tool | Description | Chains |
-|------|-------------|--------|
-| `osint_search` | Open source intelligence search | — |
-| `osint_identity_hunt` | Cross-reference identities across platforms | — |
-| `osint_investigate` | Deep OSINT investigation | — |
-
-### Launchpad (3 Tools)
-
-| Tool | Description | Chains |
-|------|-------------|--------|
-| `launch` | Track token launches in real-time | All 7 |
-| `launch_intel` | Intelligence on upcoming launches | All 7 |
-| `sniper_alert` | Snipe alerts for high-potential launches | All 7 |
-
-### Meta (3 Tools)
-
-| Tool | Description | Chains |
-|------|-------------|--------|
-| `list_bundles` | List available tool bundles | — |
-| `tools_discovery` | Discover all available tools | — |
-| `framework_discovery` | Discover framework capabilities | — |
-
-### News (3 Tools)
-
-| Tool | Description | Chains |
-|------|-------------|--------|
-| `news_headlines` | Latest crypto news headlines | — |
-| `news_twitter` | Crypto news from Twitter/X | — |
-| `news_combined` | Combined news from all sources | — |
-
----
-
-## x402 Payment Protocol
-
-Rug Munch Intelligence uses the **Coinbase x402 payment protocol** for transparent, per-call API payments. No subscriptions — pay only for what you use.
-
-### How It Works
-
-1. Your MCP client makes a tool call
-2. The request hits `https://cryptorugmunch.app/api/v1/x402-tools/{tool_name}`
-3. If payment is required, the server returns a **402 Payment Required** with a payment faciliatation URL
-4. The x402 client middleware handles payment automatically (via USDC on Base)
-5. The request is replayed with payment proof and the result is returned
-
-All payment handling is transparent — your MCP client never sees the 402 dance.
-
-### Free Tier
-
-| Method | Free Calls |
-|--------|-----------|
-| Fingerprint (browser/device) | 1 free call |
-| Wallet signature | 3 free calls |
-
-No API key needed. Just start using tools and the trial kicks in automatically.
-
-### Per-Call Pricing
-
-Each tool call costs a small amount of USDC on Base. Pricing varies by tool complexity:
-
-- **Basic tools** (news, meta, social lookups): ~$0.001–$0.005
-- **Standard tools** (whale_scan, sentiment, market): ~$0.01–$0.05
-- **Premium tools** (forensics_deep_scan, comprehensive_audit): ~$0.05–$0.25
-
-Visit [cryptorugmunch.app](https://cryptorugmunch.app) for full pricing details.
-
-### x402 Discovery
-
-```bash
-curl https://cryptorugmunch.app/.well-known/x402
-```
-
----
-
-## RugCharts — The DexScreener Killer
-
-**DexScreener killer** — live trades as they come in, TA bot analysis, beautiful charting, multichain coverage. Better product than DexScreener.
-
-RugCharts delivers:
-
-- **Live trade streaming** — see every trade as it happens, not delayed
-- **TA bot analysis** — automated technical analysis overlays on every chart
-- **Beautiful charting** — candlestick, volume, liquidity depth, all in one view
-- **Multichain coverage** — Base, Solana, Ethereum, BSC, Arbitrum, Optimism, Polygon
-- **Rug intelligence baked in** — every chart shows our rug pull risk score front and center
-
-Coming soon at [rugmunch.io](https://rugmunch.io)
-
----
-
-## Client Configuration
-
 ### Claude Desktop
 
 ```json
 {
   "mcpServers": {
-    "rug-munch": {
-      "command": "uvx",
-      "args": ["rug-munch-intelligence-mcp"],
+    "rug-munch-intelligence": {
+      "command": "python3",
+      "args": ["-m", "rug_munch_mcp"],
       "env": {
         "RUG_MUNCH_API_BASE": "https://cryptorugmunch.app/api/v1"
       }
@@ -300,111 +72,207 @@ Coming soon at [rugmunch.io](https://rugmunch.io)
 }
 ```
 
-### Cursor
+### Cursor / Windsurf
 
-```json
-{
-  "mcpServers": {
-    "rug-munch": {
-      "command": "uvx",
-      "args": ["rug-munch-intelligence-mcp"],
-      "env": {
-        "RUG_MUNCH_API_BASE": "https://cryptorugmunch.app/api/v1"
-      }
-    }
-  }
-}
+Same config in your MCP settings file. Point the command at the installed module.
+
+### Direct HTTP (no install needed)
+
+```bash
+curl -X POST https://cryptorugmunch.app/api/v1/x402-tools/whale_scan \
+  -H "Content-Type: application/json" \
+  -d '{"chain":"solana","token_address":"So11111111111111111111111111111111111111112"}'
 ```
 
-### Windsurf
+First call is free (fingerprint trial). After that, x402 USDC micropayment required.
 
-```json
-{
-  "mcpServers": {
-    "rug-munch": {
-      "command": "uvx",
-      "args": ["rug-munch-intelligence-mcp"],
-      "env": {
-        "RUG_MUNCH_API_BASE": "https://cryptorugmunch.app/api/v1"
-      }
-    }
-  }
-}
-```
+## Payment
 
----
+All tool calls go through the x402 micropayment system:
 
-## API Endpoint Reference
+- **Free tier** — 1 call per tool (fingerprint-based), 3 with wallet verification
+- **Per-call** — $0.01 to $0.15 per tool via USDC on Base or Solana
+- **Refund** — POST `/api/v1/x402/refund` if a call returns no data
+- **Dashboard** — GET `/api/v1/x402/dashboard` for your usage stats
 
-All tools are accessible via the public x402-gated API:
+The MCP server doesn't handle payments itself — the x402 gateway does that transparently. You just make tool calls and they work.
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `POST /api/v1/x402-tools/{tool_name}` | POST | Execute any of the 97 tools |
-| `GET /api/v1/x402-tools` | GET | List all available tools |
-| `GET /.well-known/x402` | GET | x402 payment discovery |
+## 97 Tools
 
-**Base URL:** `https://cryptorugmunch.app`
+### Intelligence (28)
+| Tool | Description |
+|------|-------------|
+| whale_scan | Track top whale wallets — large buys/sells, exchange flows, accumulation |
+| smartmoney | Real-time smart money tracking — top 100 wallets, patterns, alerts |
+| cluster | Wallet cluster analysis — linked wallets, sybil networks, coordinated manipulation |
+| insider | Insider trading detection — pre-launch accumulation, coordinated buying |
+| whale_profile | Advanced whale decoder — balance, TX patterns, persona classification |
+| airdrop_finder | Find unclaimed airdrops for any wallet across chains |
+| copy_trade_finder | Identify profitable wallets worth following — win rates, best trades |
+| social_signal | Twitter + news + on-chain sentiment combined into one score |
+| sentiment | Real-time social sentiment (0-100) across Twitter, Telegram, RSS |
+| smart_money_alpha | Smart money alpha signals — what profitable wallets are buying now |
+| liquidity_flow | Track liquidity inflows/outflows for any token or pool |
+| risk_monitor | Real-time risk monitoring — rug pulls, liquidity removals, whale dumps |
+| rug_pull_predictor | AI-powered rug pull prediction before it happens |
+| meme_vibe_score | Meme token community vibe and virality score |
+| nft_wash_detector | Detect fake NFT volume and floor price manipulation |
+| gas_forecast | Predict optimal gas prices and cheapest transaction windows |
+| bridge_security | Cross-chain bridge security — TVL, exploits, audit status |
+| defi_yield_scanner | Find best DeFi yields, detect unsustainable APYs |
+| portfolio_tracker | Multi-wallet portfolio tracker — PnL, allocation, gains |
+| token_deep_dive | Deep token analysis across all data sources |
+| token_comparison | Side-by-side token comparison on metrics, risk, sentiment |
+| forensic_valuation | Forensic-level token valuation combining all signals |
+| comprehensive_audit | Full audit: contract + holders + deployer + social + liquidity |
+| investigation_report | Structured investigation report for any token or wallet |
+| market_overview | Full market overview — BTC, ETH, trending, TVL, sentiment |
+| chain_health | Chain health metrics — TVL, gas, block times, protocols |
+| anomaly | Market anomaly detection — volume spikes, manipulation, extremes |
+| honeypot_check | Can you actually sell? Simulates buy/sell to detect traps |
+| mev_protection | MEV exposure analysis — sandwich risk, front-running detection |
 
-Each tool call accepts a JSON body with at minimum a `chain` parameter:
+### Security (17)
+| Tool | Description |
+|------|-------------|
+| urlcheck | URL safety analysis — domain age, scam patterns, risk score |
+| rugshield | Quick pre-buy rug check — safe/unsafe verdict with factors |
+| clone_detect | Token clone detection — copies of legitimate projects |
+| audit | Deep contract audit — mint, freeze, liquidity, holders |
+| fresh_pair | Newly created pair detection and risk scoring |
+| profile_flip | Wallet behavioral pattern change detection |
+| honeypot_check | Honeypot detection — can you sell? Transfer taxes, locks |
+| rug_pull_predictor | AI rug pull prediction |
+| bridge_security | Bridge security assessment |
+| mev_protection | MEV exposure analysis |
+| risk_monitor | Real-time risk monitoring |
+| anomaly | Market anomaly detector |
+| comprehensive_audit | Full token audit |
+| investigation_report | Investigation report |
+| forensic_valuation | Forensic valuation |
+| gas_forecast | Gas price forecaster |
+| chain_health | Chain health metrics |
 
-```json
-{
-  "chain": "solana",
-  "address": "TokenOrWalletAddress"
-}
-```
+### Market (14)
+| Tool | Description |
+|------|-------------|
+| pulse | Market pulse — momentum, volume spikes, whale alerts, trending |
+| coingecko_global | Global crypto market data from CoinGecko |
+| coingecko_trending | Trending coins on CoinGecko |
+| coingecko_markets | Top markets by cap, volume, change |
+| coingecko_categories | Crypto categories and sector performance |
+| market_overview | Aggregated market overview from 10+ sources |
+| sentiment | Social sentiment score |
+| social_signal | Combined social + on-chain signal |
+| smart_money_alpha | Smart money buying signals |
+| copy_trade_finder | Profitable wallet finder |
+| defi_yield_scanner | DeFi yield scanner |
+| liquidity_flow | Liquidity tracking |
+| gas_forecast | Gas forecaster |
+| chain_health | Chain health |
 
----
+### Analysis (12)
+| Tool | Description |
+|------|-------------|
+| tx_decoder | Decode any transaction — calls, transfers, swaps, traces |
+| wallet | Comprehensive wallet analysis — balance, tokens, risk, behavior |
+| contract_info | Contract metadata, verification, ABI, functions |
+| storage_reader | Read on-chain contract storage slots |
+| meme_vibe_score | Meme community virality score |
+| token_deep_dive | Deep cross-source token analysis |
+| token_comparison | Side-by-side token comparison |
+| forensic_valuation | Forensic-level valuation |
+| portfolio_tracker | Portfolio tracker |
+| comprehensive_audit | Full audit |
+| investigation_report | Investigation report |
+| risk_monitor | Risk monitoring |
+
+### Forensics (7)
+| Tool | Description |
+|------|-------------|
+| forensics_threat_check | Threat assessment — known patterns, flags, history |
+| forensics_risk_report | Structured risk report with evidence |
+| forensics_deep_scan | Deep forensic scan — deployer, holders, social, contract |
+| forensics_cross_chain | Cross-chain forensic correlation |
+| bundle_security_pack | Security bundle — multiple checks in one call |
+| honeypot_check | Honeypot detection |
+| rug_pull_predictor | Rug pull prediction |
+
+### Social (7)
+| Tool | Description |
+|------|-------------|
+| tw_profile | Twitter/X user profile — followers, bio, verification |
+| tw_timeline | User's recent tweets — text, engagement, timestamps |
+| tw_search | Search Twitter/X for matching tweets |
+| profile_get | RMI user profile data |
+| profile_badges | User badge and reputation data |
+| social_signal | Combined social + on-chain signal |
+| sentiment | Real-time sentiment score |
+
+### OSINT (3)
+| Tool | Description |
+|------|-------------|
+| osint_search | Open-source intelligence search |
+| osint_identity_hunt | Cross-reference identities across platforms |
+| osint_investigate | Deep OSINT investigation for any entity |
+
+### Launchpad (3)
+| Tool | Description |
+|------|-------------|
+| launch | Token launch analysis — bonding curve, liquidity, holders |
+| launch_intel | Launch intelligence — new tokens, trending pairs |
+| sniper_alert | Sniper bot detection on new launches |
+
+### News (3)
+| Tool | Description |
+|------|-------------|
+| news_headlines | Latest crypto news headlines |
+| news_twitter | Crypto Twitter/X news feed |
+| news_combined | Combined news from all sources |
+
+### Meta (3)
+| Tool | Description |
+|------|-------------|
+| list_bundles | List available tool bundles |
+| tools_discovery | Discover all available tools and their specs |
+| framework_discovery | Framework integration guides (LangChain, OpenAI, etc.) |
+
+## Supported Chains
+
+| Chain     | Symbol | Payment |
+|-----------|--------|---------|
+| Solana    | SOL    | USDC via x402 facilitator |
+| Base      | BASE   | USDC, self-verified |
+| Ethereum  | ETH    | USDC, self-verified |
+| BSC       | BSC    | USDC, self-verified |
+| Arbitrum  | ARB    | USDC, self-verified |
+| Optimism  | OP     | USDC, self-verified |
+| Polygon   | POL    | USDC, self-verified |
 
 ## Environment Variables
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `RUG_MUNCH_API_BASE` | No | `https://cryptorugmunch.app/api/v1` | API base URL |
-| `RUG_MUNCH_API_KEY` | No | — | API key for premium access (optional) |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RUG_MUNCH_API_BASE` | `https://cryptorugmunch.app/api/v1` | API base URL |
+| `RUG_MUNCH_API_KEY` | (none) | Optional API key for authenticated access |
 
-> **No other environment variables are needed.** No secrets, no database strings, no internal endpoints.
+## Framework Integrations
 
----
+The tools work with any framework that supports MCP or HTTP:
 
-## Installation
+- **Claude Desktop** — MCP stdio transport
+- **Cursor** — MCP stdio transport
+- **Windsurf** — MCP stdio transport
+- **LangChain** — HTTP via `langchain-community` tools
+- **OpenAI Agents** — HTTP function calling
+- **CrewAI** — HTTP tool integration
+- **AutoGen** — HTTP tool integration
 
-### From PyPI
+## Related Repos
 
-```bash
-pip install rug-munch-intelligence-mcp
-```
-
-### From Source
-
-```bash
-git clone https://github.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp.git
-cd rug-munch-intelligence-mcp
-pip install -e .
-```
-
-### Via Smithery
-
-```bash
-npx @smithery/cli install rug-munch-intelligence-mcp
-```
-
----
-
-## Development
-
-```bash
-# Clone and setup
-git clone https://github.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp.git
-cd rug-munch-intelligence-mcp
-pip install -e ".[dev]"
-
-# Run server locally
-python -m rug_munch_mcp.server
-```
-
----
+- [x402-gateway-base](https://github.com/Rug-Munch-Media-LLC/x402-gateway-base) — x402 payment gateway for Base + EVM
+- [x402-gateway-solana](https://github.com/Rug-Munch-Media-LLC/x402-gateway-solana) — x402 payment gateway for Solana
+- [rugcharts](https://github.com/Rug-Munch-Media-LLC/rugcharts) — Professional charting & TA analysis
 
 ## License
 
