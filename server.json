@@ -1,7 +1,7 @@
 {
-  "name": "io.github.Rug-Munch-Media-LLC/rug-munch-mcp",
+  "name": "io.github.Rug-Munch-Media-LLC/rug-munch-intelligence-mcp",
   "display_name": "Rug Munch Intelligence",
-  "description": "97 tools for scam detection, rug pull prevention, and crypto intelligence across 7 chains. The Bloomberg of Shitcoins Terminal Ultimate Edition.",
+  "description": "Rug Munch Intelligence MCP: 97 tools for crypto scam detection, rug pull prevention, and intelligence across 7 chains.",
   "version": "2.0.0",
   "homepage": "https://cryptorugmunch.app",
   "repository": "https://github.com/Rug-Munch-Media-LLC/rug-munch-mcp",
@@ -10,9 +10,22 @@
     "url": "https://github.com/cryptorugmuncher"
   },
   "license": "MIT",
-  "categories": ["security", "finance", "blockchain", "analytics"],
+  "categories": [
+    "security",
+    "finance",
+    "blockchain",
+    "analytics"
+  ],
   "tools": 97,
-  "chains": ["base", "solana", "ethereum", "bsc", "arbitrum", "optimism", "polygon"],
+  "chains": [
+    "base",
+    "solana",
+    "ethereum",
+    "bsc",
+    "arbitrum",
+    "optimism",
+    "polygon"
+  ],
   "mcp": {
     "protocol": "2024-11-05",
     "transport": "stdio"

@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "rug-munch-mcp"
+name = "rug-munch-intelligence-mcp"
 version = "2.0.0"
 description = "Rug Munch Intelligence MCP Server — 97 tools for scam detection, rug pull prevention, and crypto intelligence across 7 chains"
 readme = "README.md"
@@ -39,12 +39,12 @@ dev = [
 ]
 
 [project.scripts]
-rug-munch-mcp = "rug_munch_mcp.server:main"
+rug-munch-intelligence-mcp = "rug_munch_mcp.server:main"
 
 [project.urls]
 Homepage = "https://cryptorugmunch.app"
-Repository = "https://github.com/Rug-Munch-Media-LLC/rug-munch-mcp"
-Documentation = "https://github.com/Rug-Munch-Media-LLC/rug-munch-mcp#readme"
+Repository = "https://github.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp"
+Documentation = "https://github.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp#readme"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/rug_munch_mcp"]

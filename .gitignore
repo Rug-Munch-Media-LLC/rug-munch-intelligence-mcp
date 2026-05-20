@@ -1,9 +1,11 @@
 __pycache__/
+*.pyc
 *.egg-info/
 dist/
 build/
-.eggs/
-*.pyc
+.venv/
 .env
-.mcpregistry_*
-.gitnexus
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

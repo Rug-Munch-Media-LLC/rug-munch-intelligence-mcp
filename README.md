@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Rug-Munch-Media-LLC/rug-munch-mcp/main/assets/banner.png" alt="Rug Munch Intelligence — MCP Server" width="800" />
+  <img src="https://raw.githubusercontent.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp/main/assets/banner.png" alt="Rug Munch Intelligence — MCP Server" width="800" />
 </p>
 
 <h1 align="center">Rug Munch Intelligence — MCP Server</h1>
@@ -13,7 +13,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/MCP-Compatible-6E40C9?logo=modelcontextprotocol&logoColor=white" alt="MCP Compatible" />
-  <img src="https://img.shields.io/pypi/v/rug-munch-mcp?color=3776AB&logo=pypi&logoColor=white" alt="PyPI" />
+  <img src="https://img.shields.io/pypi/v/rug-munch-intelligence-mcp?color=3776AB&logo=pypi&logoColor=white" alt="PyPI" />
   <img src="https://img.shields.io/badge/Tools-97-00D4AA" alt="97 Tools" />
   <img src="https://img.shields.io/badge/Chains-7-F7931A" alt="7 Chains" />
   <img src="https://img.shields.io/badge/x402-Payment-FF6900?logo=coinbase&logoColor=white" alt="x402 Payment" />
@@ -34,7 +34,7 @@ We are building scam detection tools to keep retail investors and the broader cr
 ## Quick Start
 
 ```bash
-pip install rug-munch-mcp
+pip install rug-munch-intelligence-mcp
 ```
 
 ### Claude Desktop Configuration
@@ -46,7 +46,7 @@ Add to your `claude_desktop_config.json`:
   "mcpServers": {
     "rug-munch": {
       "command": "uvx",
-      "args": ["rug-munch-mcp"],
+      "args": ["rug-munch-intelligence-mcp"],
       "env": {
         "RUG_MUNCH_API_BASE": "https://cryptorugmunch.app/api/v1"
       }
@@ -291,7 +291,7 @@ Coming soon at [rugmunch.io](https://rugmunch.io)
   "mcpServers": {
     "rug-munch": {
       "command": "uvx",
-      "args": ["rug-munch-mcp"],
+      "args": ["rug-munch-intelligence-mcp"],
       "env": {
         "RUG_MUNCH_API_BASE": "https://cryptorugmunch.app/api/v1"
       }
@@ -307,7 +307,7 @@ Coming soon at [rugmunch.io](https://rugmunch.io)
   "mcpServers": {
     "rug-munch": {
       "command": "uvx",
-      "args": ["rug-munch-mcp"],
+      "args": ["rug-munch-intelligence-mcp"],
       "env": {
         "RUG_MUNCH_API_BASE": "https://cryptorugmunch.app/api/v1"
       }
@@ -323,7 +323,7 @@ Coming soon at [rugmunch.io](https://rugmunch.io)
   "mcpServers": {
     "rug-munch": {
       "command": "uvx",
-      "args": ["rug-munch-mcp"],
+      "args": ["rug-munch-intelligence-mcp"],
       "env": {
         "RUG_MUNCH_API_BASE": "https://cryptorugmunch.app/api/v1"
       }
@@ -373,21 +373,21 @@ Each tool call accepts a JSON body with at minimum a `chain` parameter:
 ### From PyPI
 
 ```bash
-pip install rug-munch-mcp
+pip install rug-munch-intelligence-mcp
 ```
 
 ### From Source
 
 ```bash
-git clone https://github.com/Rug-Munch-Media-LLC/rug-munch-mcp.git
-cd rug-munch-mcp
+git clone https://github.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp.git
+cd rug-munch-intelligence-mcp
 pip install -e .
 ```
 
 ### Via Smithery
 
 ```bash
-npx @smithery/cli install rug-munch-mcp
+npx @smithery/cli install rug-munch-intelligence-mcp
 ```
 
 ---
@@ -396,8 +396,8 @@ npx @smithery/cli install rug-munch-mcp
 
 ```bash
 # Clone and setup
-git clone https://github.com/Rug-Munch-Media-LLC/rug-munch-mcp.git
-cd rug-munch-mcp
+git clone https://github.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp.git
+cd rug-munch-intelligence-mcp
 pip install -e ".[dev]"
 
 # Run server locally

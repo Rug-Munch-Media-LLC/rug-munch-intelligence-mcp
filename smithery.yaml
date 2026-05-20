@@ -1,10 +1,10 @@
-name: rug-munch-mcp
+name: rug-munch-intelligence-mcp
 display_name: Rug Munch Intelligence
 description: "97 tools for scam detection, rug pull prevention, and crypto intelligence across 7 chains. The Bloomberg of Shitcoins Terminal Ultimate Edition."
 version: 2.0.0
 author: CryptoRugMunch
 homepage: https://cryptorugmunch.app
-repository: https://github.com/Rug-Munch-Media-LLC/rug-munch-mcp
+repository: https://github.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp
 license: MIT
 
 categories:
@@ -18,7 +18,7 @@ commands:
     type: stdio
     command: uvx
     args:
-      - rug-munch-mcp
+      - rug-munch-intelligence-mcp
 
 environment:
   RUG_MUNCH_API_BASE:
