@@ -58,7 +58,7 @@ SUPABASE_JWT_SECRET=...
 
 ## MCP (Model Context Protocol) Integration
 
-- **`/api/v1/x402/tools-catalog`** — Full MCP catalog of 97+ tools
+- **`/api/v1/x402/tools-catalog`** — Full MCP catalog of 51 (44 MCP + 7 bundles) tools
 - **`app/mcp/x402_mcp_server.py`** — MCP server implementation
 - **`app/mcp_router.py`** — Routes MCP tool calls to backend functions
 - **GitHub repo**: `Rug-Munch-Media-LLC/rug-munch-intelligence-mcp` (public)
