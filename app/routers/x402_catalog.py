@@ -127,6 +127,40 @@ def load_external_mcp_tools() -> List[Dict]:
         return []
 
 
+def discover_route_tools() -> List[Dict]:
+    """Discover tools from FastAPI route definitions"""
+    tools = []
+    backend_dir = os.path.dirname(__file__)
+    skip = {'bundles', 'discovery', 'frameworks', 'comprehensive_audit',
+            'anthropic-tools', 'gemini-tools', 'langchain-tools', 'openai-tools',
+            'bundles/all_in_one', 'bundles/intelligence_pack', 'bundles/security_pack'}
+    
+    for fname in ["x402_tools.py", "x402_forensic_tools.py"]:
+        fpath = os.path.join(backend_dir, fname)
+        if not os.path.exists(fpath):
+            continue
+        with open(fpath) as f:
+            content = f.read()
+        # Find all route paths
+        routes = re.findall(r'@router\.(?:get|post)\("/([^"]+)"\)', content)
+        for route in routes:
+            if route in skip:
+                continue
+            # Try to find docstring for description
+            desc = f"Tool: {route}"
+            doc_match = re.search(rf'@router\.(?:get|post)\("/{route}"\)[\s\S]*?"""([^"]*)"""', content)
+            if doc_match:
+                desc = doc_match.group(1).strip().split('\n')[0].strip()
+            tools.append({
+                "id": route, "name": route.replace('_', ' ').title(),
+                "description": desc,
+                "price": "$0.01", "priceUsd": 0.01, "category": "api",
+                "trialFree": 1, "method": "POST",
+                "service": "rmi-native", "source": "route", "chains": [],
+            })
+    return tools
+
+
 def get_catalog():
     """Build full tool catalog from all gateways + external MCP servers"""
     # Always rebuild (no stale caching)
@@ -155,6 +189,14 @@ def get_catalog():
                             all_tools[t["id"]]["chains"].append(chain_dir.upper())
                     services.add("rmi-native")
                     categories.add(t["category"])
+    
+    # Discover tools from FastAPI route definitions
+    route_tools = discover_route_tools()
+    for t in route_tools:
+        if t["id"] not in all_tools:
+            all_tools[t["id"]] = t
+            services.add("rmi-native")
+            categories.add(t["category"])
     
     # Load external MCP tools
     external_tools = load_external_mcp_tools()
