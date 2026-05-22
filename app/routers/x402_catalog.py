@@ -69,7 +69,7 @@ def parse_gateway_tools(gateway_dir: str) -> List[Dict]:
     
     # Extract tool definitions using regex
     tools = []
-    pattern = r'(\w+):\s*\{\s*name:\s*"([^"]+)",\s*description:\s*"([^"]+)",\s*price:\s*"\$([^"]+)",\s*priceAtomic:\s*"([^"]+)",\s*category:\s*"([^"]+)",\s*trialFree:\s*(\d+),\s*method:\s*"([^"]+)"'
+    pattern = r'(\w+):\s*\{\s*name:\s*"([^"]+)",\s*description:\s*"([^"]+)",\s*price:\s*"\$?([^"]+)",\s*priceAtomic:\s*"([^"]+)",\s*category:\s*"([^"]+)",\s*trialFree:\s*(\d+).*?method:\s*"([^"]+)"'
     
     for match in re.finditer(pattern, content):
         tool_id, name, desc, price, atomic, category, trial, method = match.groups()
@@ -111,7 +111,7 @@ def load_external_mcp_tools() -> List[Dict]:
 def get_catalog():
     """Build full tool catalog from all gateways + external MCP servers"""
     # Always rebuild (no stale caching)
-    gateway_base = "/srv/rmi/backend/x402-gateway"
+    gateway_base = "/app/x402-gateway"
     chains = {}
     all_tools = {}  # Dedup by tool id
     services = set()
