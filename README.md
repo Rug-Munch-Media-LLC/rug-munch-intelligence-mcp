@@ -25,7 +25,7 @@ Rug Munch Intelligence (RMI) is the proprietary crypto scam detection platform. 
 - Real-time rug-pull detection across 7 chains
 - On-chain behavioral analysis engines
 - x402 Protocol v2 — pay-per-tool API access via crypto micropayments
-- 97+ intelligence tools via MCP (Model Context Protocol) catalog
+- 51 (auto-discovered) intelligence tools via MCP (Model Context Protocol) catalog
 - Multi-source news aggregation (15+ feeds: RSS, Reddit, API)
 - Wallet clustering, Sybil detection, scam pattern databases
 - Gamification, payments, content syndication
@@ -47,7 +47,7 @@ Rug Munch Intelligence (RMI) is the proprietary crypto scam detection platform. 
 
 ## x402 Payment Protocol
 
-The platform exposes 97+ tools via x402 HTTP 402 Payment Required protocol:
+The platform exposes 51 (auto-discovered) tools via x402 HTTP 402 Payment Required protocol:
 
 | Chain | Verification | Status |
 |-------|-------------|--------|

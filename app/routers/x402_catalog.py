@@ -67,24 +67,43 @@ def parse_gateway_tools(gateway_dir: str) -> List[Dict]:
     with open(index_path, 'r') as f:
         content = f.read()
     
-    # Extract tool definitions using regex
     tools = []
-    pattern = r'(\w+):\s*\{\s*name:\s*"([^"]+)",\s*description:\s*"([^"]+)",\s*price:\s*"\$?([^"]+)",\s*priceAtomic:\s*"([^"]+)",\s*category:\s*"([^"]+)",\s*trialFree:\s*(\d+).*?method:\s*"([^"]+)"'
+    # Find each tool definition block: word: { ... }
+    # Match the tool ID and capture everything between { and the matching }
+    tool_blocks = re.finditer(r'(\w+):\s*(\{[^}]+\})', content)
     
-    for match in re.finditer(pattern, content):
-        tool_id, name, desc, price, atomic, category, trial, method = match.groups()
-        tools.append({
-            "id": tool_id,
-            "name": name,
-            "description": desc,
-            "price": f"${price}",
-            "priceUsd": float(price),
-            "category": category.lower(),
-            "trialFree": int(trial),
-            "method": method,
-            "service": "rmi-native",
-            "source": "native",
-        })
+    for match in tool_blocks:
+        tool_id = match.group(1)
+        block = match.group(2)
+        
+        # Skip non-tool blocks (interface, type, etc.)
+        if tool_id in ('interface', 'type', 'export', 'import', 'const', 'let', 'var'):
+            continue
+        if tool_id.startswith('//') or tool_id.startswith('RMI_TOOLS'):
+            continue
+        
+        # Extract individual fields
+        name = re.search(r'name:\s*"([^"]*)"', block)
+        desc = re.search(r'description:\s*"([^"]*)"', block)
+        price = re.search(r'price:\s*"\$?([^"]*)"', block)
+        atomic = re.search(r'priceAtomic:\s*"([^"]*)"', block)
+        category = re.search(r'category:\s*"([^"]*)"', block)
+        trial = re.search(r'trialFree:\s*(\d+)', block)
+        method = re.search(r'method:\s*"([^"]*)"', block)
+        
+        if name and category:
+            tools.append({
+                "id": tool_id,
+                "name": name.group(1),
+                "description": desc.group(1) if desc else "",
+                "price": f"${price.group(1)}" if price else "$0",
+                "priceUsd": float(price.group(1)) if price else 0,
+                "category": category.group(1).lower(),
+                "trialFree": int(trial.group(1)) if trial else 0,
+                "method": method.group(1) if method else "POST",
+                "service": "rmi-native",
+                "source": "native",
+            })
     
     return tools
 
