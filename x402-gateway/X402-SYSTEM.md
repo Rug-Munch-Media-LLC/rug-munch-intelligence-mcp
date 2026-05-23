@@ -1,4 +1,4 @@
-# Rug Munch Intelligence x402 System Documentation
+# Rug Munch Intelligence x402 — Multi-Facilitator Payment System
 
 ## Architecture Overview
 
@@ -17,18 +17,22 @@
             │                      │                  │
             ▼                      ▼                  ▼
 ┌─────────────────────────────────────────────────────────────┐
-│              PAYMENT VERIFICATION (x402)                     │
-│  PayAI Facilitator — USDC on Solana & Base                   │
-│  Wallet Connect — Phantom, MetaMask, WalletConnect, CB       │
+│           SMART FACILITATOR ROUTER (auto-picks best)         │
+│                                                             │
+│  Coinbase CDP  PayAI   Cloudflare  Pieverse   AsterPay      │
+│  (Base/Poly/    (Base/  (Eth/Base   (BNB      (EUR/SEPA    │
+│   Arb/Sol)      Sol)    Sepolia)    Chain)    off-ramp)     │
+│                                                             │
+│  MERX TRON     Primev     Satoshi    x402-rs    EIP-7702    │
+│  (TRON USDT/   (Eth       (BTC→     (self-     (all EVM    │
+│   USDC/USDD)   fee-free)  Base/Sol)  hosted)    chains)     │
 └──────────────────────────┬──────────────────────────────────┘
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                   BACKEND (rugmunch.io)                      │
-│  FastAPI — 80+ modules                                       │
-│  /api/v1/x402-tools/* — 64 RMI security tools                │
-│  /api/v1/helius/* — Whale scan, syndicate, sniper detect     │
-│  /api/v1/scam-finder/* — Clone detect, fresh pairs, flips    │
+│  FastAPI — 90+ modules  |  13 payment chains                 │
+│  /api/v1/x402-tools/* — 64+ RMI security tools               │
 └──────────────────────────┬──────────────────────────────────┘
                            │
                            ▼
@@ -39,13 +43,31 @@
 └─────────────────────────────────────────────────────────────┘
 ```
 
+## Payment Chains & Facilitators
+
+| Chain | Facilitators | Tokens | Settlement |
+|-------|-------------|--------|------------|
+| Base | Coinbase CDP (free), PayAI, EIP-7702 | USDC | Instant/Deferred |
+| Solana | Coinbase CDP (free), PayAI | USDC | Instant/Deferred |
+| Ethereum | Primev (free), PayAI, Cloudflare, EIP-7702 | USDC/USDT/DAI/ETH | Fee-free |
+| BNB Chain | Pieverse, EIP-7702 | USDC/USDT | Instant |
+| Polygon | Coinbase CDP, EIP-7702 | USDC | Instant |
+| Arbitrum | Coinbase CDP, EIP-7702 | USDC | Instant |
+| TRON | MERX x402 | USDT/USDC/USDD | Sub-3s |
+| Bitcoin | Satoshi Facilitator | BTC→Base/Sol | Cross-chain |
+| Avalanche | EIP-7702 | USDC/AVAX | Self-verify |
+| Fantom | EIP-7702 | USDC/FTM | Self-verify |
+| Gnosis | EIP-7702 | USDC/XDAI | Self-verify |
+| Optimism | EIP-7702 | USDC/ETH | Self-verify |
+| SEPA/EUR | AsterPay (MiCA) | EUR/USDC | Fiat off-ramp |
+
 ## Quick Start — MCP Client
 
 ### Smithery
 ```json
 {
   "mcpServers": {
-    "rugmunch-solana": {
+    "rmi-solana": {
       "command": "npx",
       "args": ["-y", "mcp-remote@latest", "https://sol.rugmunch.io/mcp"]
     }
@@ -57,7 +79,7 @@
 ```json
 {
   "mcpServers": {
-    "rugmunch-base": {
+    "rmi-base": {
       "command": "npx", 
       "args": ["-y", "mcp-remote@latest", "https://base.rugmunch.io/mcp"]
     }
@@ -83,7 +105,7 @@ Add to `claude_desktop_config.json`:
 ### Discovery
 | Endpoint | Description |
 |----------|-------------|
-| `/.well-known/x402` | x402 payment discovery |
+| `/.well-known/x402` | x402 multi-facilitator payment discovery (13 chains, 10 facilitators) |
 | `/llms.txt` | AI agent discovery (llms.txt standard) |
 | `/openai-tools` | OpenAI function calling format |
 | `/anthropic-tools` | Anthropic tool format |
@@ -102,26 +124,39 @@ Add to `claude_desktop_config.json`:
 ### REST API
 | Endpoint | Description |
 |----------|-------------|
+| `/api/v1/x402/stats` | Live facilitator stats, chain coverage, router metrics |
+| `/api/v1/x402/transparency` | Public payment ledger |
+| `/api/v1/x402/ledger` | Anonymized payment history |
+| `/api/v1/x402/receipt/{id}/verify` | Public receipt verification |
+| `/api/v1/x402/refund` | Refund request endpoint |
+| `/api/v1/x402-tools/discovery` | Full tool catalog + chain options |
 | `/tools/{name}` | Execute tool via REST |
 | `/health` | Worker health + tool counts |
 | `/about` | Organization + tool listing |
-| `/api` | API endpoint directory |
-| `/pricing` | HTML pricing page |
 
 ## Payment Flow
 
-### x402 (Bot Payment)
-1. Client requests tool → receives 402 Payment Required with `PAYMENT-REQUIRED` header
-2. Client sends USDC tx on Solana or Base
-3. Client includes `PAYMENT-SIGNATURE` header with base64-encoded payment proof
-4. Gateway verifies via PayAI facilitator
-5. Tool executes, result returned
+### x402 Bot Payment (Multi-Chain)
+1. Bot requests tool → receives 402 Payment Required
+2. 402 response lists ALL 13 chains + facilitators + tokens
+3. Bot pays on ANY supported chain (USDC, USDT, BTC, EUR, etc.)
+4. Bot includes `X-Pay` header with payment proof
+5. Smart router auto-picks best facilitator for that chain/token
+6. Payment verified → tool executes → result returned
+7. If facilitator fails, router auto-falls to next best
+
+### Router Logic
+- Chain match → Bot pays on TRON → MERX TRON handles it
+- Token match → Bot pays USDT → Pieverse on BSC, MERX on TRON
+- Health → Unhealthy facilitators skipped
+- Priority → Fee-free > instant > deferred
+- Auto-fallback → CDP quota exceeded → PayAI takes over
 
 ### Human Payment (Web)
 1. User connects wallet (Phantom, MetaMask, WalletConnect, Coinbase Wallet)
 2. Selects tool and payment method (USDC-SOL, USDC-Base, SOL, ETH, USDT)
 3. Signs transaction in wallet
-4. Payment verified on-chain
+4. Payment verified on-chain via appropriate facilitator
 5. Tool executes, result displayed
 
 ### Trial Mode
@@ -141,33 +176,34 @@ pulse, market_overview, chain_health, token_deep_dive, liquidity_depth, unlock_c
 ### Analysis (6 tools)
 wallet, forensics, portfolio_tracker, token_comparison, portfolio_aggregate, wallet_pnl
 
-### Social (5 tools)
+### Social (6 tools)
 sentiment, social_signal, tw_profile, tw_timeline, tw_search, sentiment_spike
 
-### Launch (3 tools)
+### Launch (4 tools)
 launch, sniper_alert, airdrop_finder, airdrop_check
+
+### Premium Investigation (4 tools)
+forensic_valuation, osint_identity_hunt, investigation_report, forensic_pack
 
 ### Data Providers (154 tools across 28 services)
 DexScreener, Jupiter, PumpFun, Raydium, DeFiLlama, DexPaprika, CoinCap, CoinMarketCap, CryptoPanic, CryptoCompare, Blockchair, Blockchain.com, Mempool, Solana RPC, Helius, Birdeye, CoinGecko, CryptoIZ, Blockrun, AgentFi, Moralis, GMGN, Nansen, Arkham, Dune, Solscan, QuickNode, FreeUSDC
 
-## Department Links
+## Links
 
 - **Solana Gateway**: https://sol.rugmunch.io
 - **Base Gateway**: https://base.rugmunch.io
 - **MCP Catalog**: https://sol.rugmunch.io/mcp
-- **Smithery**: https://smithery.ai/server/rugmunch-solana
-- **Glama**: https://glama.ai/mcp/servers/rugmunch-solana
+- **Smithery**: https://smithery.ai/server/@cryptorugmunch/x402
+- **Glama**: https://glama.ai/mcp/servers/rugmunch
 - **GitHub**: https://github.com/Rug-Munch-Media-LLC/rugmuncher-backend
 - **Website**: https://rugmunch.io
 - **X/Twitter**: https://x.com/cryptorugmunch
 
 ## Pricing
-All tools priced $0.01 - $0.15 USDC per call. Trial mode: 1-5 free calls per tool.
+All tools priced $0.01 - $0.40 USDC per call. Trial mode: 1-5 free calls per tool.
+Multi-chain: pay on any supported chain with any supported token.
+Fee-free options: Coinbase CDP (1K tx/mo free) and Primev FastRPC (always free on Ethereum).
 
-## Architecture Decisions
-- **Cloudflare Workers at edge** — sub-50ms latency globally
-- **No backend proxy for RMI tools** — execute directly in worker for speed
-- **Backend proxy for chain-specific tools** — whale_scan, syndicate, clone_detect hit backend API
-- **MCP external tools via mcp-router** — 154 tools from 28 providers, fetched on demand
-- **5-layer social fallback** — fxtwitter → syndication → CryptoPanic → CoinGecko → LunarCrush
-- **DexScreener as primary data source** — 8 market gap tools use DexScreener directly
+## Facilitator Registry
+Source: `/root/backend/app/facilitators/` — 14 modules, pluggable architecture.
+Startup: `register_all_facilitators()` called from main.py — auto-detects and registers.
