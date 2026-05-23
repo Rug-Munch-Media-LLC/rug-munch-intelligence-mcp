@@ -3579,3 +3579,100 @@ async def framework_discovery():
             "payment": "USDC via x402 protocol"
         }
     }
+
+
+# ═══════════════════════════════════════════════════════════
+# MCP Proxy — handles external MCP tool execution from workers
+# ═══════════════════════════════════════════════════════════
+
+class MCPProxyRequest(BaseModel):
+    service: str
+    tool: str
+    arguments: Dict[str, Any] = {}
+
+@router.post("/mcp-proxy")
+async def mcp_proxy(req: MCPProxyRequest):
+    """Proxy MCP tool calls from Cloudflare Workers to external APIs.
+    Maps service_tool to the appropriate external API and executes."""
+    svc = req.service.lower()
+    tool = req.tool
+    args = req.arguments
+    
+    # Service routing table — maps to known external APIs
+    routes = {
+        "dexscreener": "https://api.dexscreener.com",
+        "jupiter": "https://quote-api.jup.ag/v6",
+        "pumpfun": "https://frontend-api.pump.fun",
+        "raydium": "https://api.raydium.io/v2",
+        "defillama": "https://api.llama.fi",
+        "dexpaprika": "https://api.dexpaprika.com",
+        "coincap": "https://api.coincap.io/v2",
+        "coinmarketcap": "https://pro-api.coinmarketcap.com/v1",
+        "cryptopanic": "https://cryptopanic.com/api/v1",
+        "cryptocompare": "https://min-api.cryptocompare.com/data",
+        "blockchair": "https://api.blockchair.com",
+        "blockchain": "https://blockchain.info",
+        "mempool": "https://mempool.space/api",
+        "solana": "https://api.mainnet-beta.solana.com",
+        "helius": "https://api.helius.xyz/v0",
+        "birdeye": "https://public-api.birdeye.com",
+        "coingecko": "https://api.coingecko.com/api/v3",
+        "cryptoiz": "https://api.cryptoiz.com",
+        "blockrun": "https://api.blockrun.ai",
+        "agentfi": "https://api.agentfi.xyz",
+        "moralis": "https://deep-index.moralis.io/api/v2.2",
+        "gmgn": "https://gmgn.ai/api",
+        "nansen": "https://api.nansen.ai",
+        "arkham": "https://api.arkhamintelligence.com",
+        "dune": "https://api.dune.com/api/v1",
+        "solscan": "https://public-api.solscan.io",
+        "quicknode": "https://api.quicknode.com",
+    }
+    
+    base_url = routes.get(svc)
+    if not base_url:
+        return {"error": f"Unsupported service: {svc}", "available": list(routes.keys())}
+    
+    # Construct the endpoint based on tool name
+    tool_endpoints = {
+        # DexScreener
+        "getLatestTokenProfiles": "/token-profiles/latest/v1",
+        "getLatestBoostedTokens": "/token-boosted/latest/v1",
+        "getPairs": f"/latest/dex/pairs/solana/{args.get('pairAddresses', args.get('tokenAddresses', ''))}",
+        # Jupiter
+        "getQuote": "/quote",
+        "getPrice": "/price",
+        "getTokens": "/tokens",
+        # CoinGecko
+        "getPrice": "/simple/price",
+        # DeFiLlama
+        "getTVL": f"/tvl/{args.get('protocol', '')}",
+        "getProtocols": "/protocols",
+        # Solana RPC
+        "getHealth": "",
+        # General fallback
+    }
+    
+    endpoint = tool_endpoints.get(tool, f"/{tool}")
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            url = f"{base_url}{endpoint}"
+            headers = {"Accept": "application/json"}
+            
+            # Add API keys for services that need them
+            if svc == "coingecko":
+                headers["x-cg-pro-api-key"] = os.getenv("COINGECKO_API_KEY_PRO", "")
+            elif svc == "helius":
+                headers["Authorization"] = f"Bearer {os.getenv('HELIUS_API_KEY', '')}"
+            elif svc == "moralis":
+                headers["X-API-Key"] = os.getenv("MORALIS_API_KEY", "")
+            elif svc == "birdeye":
+                headers["X-API-KEY"] = os.getenv("BIRDEYE_API_KEY", "")
+            
+            async with session.get(url, params=args, headers=headers, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                data = await resp.json()
+                return {"service": svc, "tool": tool, "status": "success" if resp.status < 400 else "error", "data": data}
+    except Exception as e:
+        logger.error(f"MCP proxy failed for {svc}/{tool}: {e}")
+        return {"service": svc, "tool": tool, "status": "error", "error": str(e), "note": "Direct external API calls failed — try REST endpoint for cached/fallback data"}
