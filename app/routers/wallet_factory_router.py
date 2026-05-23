@@ -26,7 +26,7 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger("wallet_api")
 
-router = APIRouter(prefix="/api/v1/wallets", tags=["Wallet Factory"])
+router = APIRouter(prefix="/api/v1/chain-vault", tags=["Chain Vault"])
 
 # ── Import wallet factory ───────────────────────────────────────
 from app.wallet_factory import (
