@@ -84,9 +84,17 @@ app.include_router(x402_forensic_router)
 app.include_router(x402_tools_router)
 app.include_router(x402_dashboard_router)
 
-# ── App startup: ensure x402_payments Supabase table ──
+# ── App startup: facilitators, x402_payments Supabase, gateways ──
 @app.on_event("startup")
 async def _startup():
+    # Register all x402 facilitators
+    try:
+        from app.facilitators.startup import register_all_facilitators
+        await register_all_facilitators()
+    except Exception as e:
+        print(f"[WARN] x402 facilitator registration failed: {e}")
+
+    # Ensure x402_payments Supabase table
     try:
         await x402_dashboard_startup()
     except Exception as e:
@@ -2397,12 +2405,73 @@ async def helius_syndicate_scan(request: Request, address: str = "", chain: str 
 
 @app.get("/api/v1/x402/stats")
 async def x402_stats(request: Request):
-    """Get x402 payment statistics."""
+    """Get x402 payment statistics — live data from facilitator registry + Redis."""
+    from app.facilitators.base import get_registry
+    from app.facilitators.router import get_facilitator_router
+
+    registry = get_registry()
+    router = get_facilitator_router()
+
+    # Trial stats from Redis
+    trial_tools = 0
+    trial_requests = 0
+    try:
+        from app.auth import get_redis
+        r = await get_redis()
+        if r:
+            trial_tools = await r.zcard("x402:trials_by_tool") or 0
+            # Count total trial requests
+            cursor = 0
+            while True:
+                cursor, keys = await r.scan(cursor, match="x402:trial:*", count=100)
+                for k in keys:
+                    val = await r.get(k)
+                    if val:
+                        try:
+                            trial_requests += int(val)
+                        except (ValueError, TypeError):
+                            pass
+                if cursor == 0:
+                    break
+    except Exception:
+        pass
+
+    registry_stats = registry.stats
+
     return {
         "status": "active",
-        "total_payments": 1250,
-        "revenue_usd": "$3,450.00",
-        "payment_methods": ["lightning", "onchain", "fiat"],
+        "facilitators": {
+            "total": registry_stats["total_facilitators"],
+            "hosted": registry_stats["hosted"],
+            "self_hosted": registry_stats["self_hosted"],
+            "fee_free": registry_stats["fee_free"],
+            "chains_covered": registry_stats["chains_covered"],
+            "facilitators": registry_stats["facilitators"],
+        },
+        "router": router.get_stats(),
+        "trials": {
+            "tools_with_trials": trial_tools,
+            "total_trial_requests": trial_requests,
+        },
+        "payment_chains": [
+            # Hosted
+            {"chain": "base", "facilitators": ["coinbase_cdp", "payai"], "tokens": ["USDC"], "settlement": "instant/deferred"},
+            {"chain": "ethereum", "facilitators": ["primev", "payai", "cloudflare_x402", "eip7702"], "tokens": ["USDC", "USDT", "DAI", "ETH"], "settlement": "fee_free/instant/deferred"},
+            {"chain": "solana", "facilitators": ["payai"], "tokens": ["USDC"], "settlement": "deferred"},
+            {"chain": "bsc", "facilitators": ["pieverse", "eip7702"], "tokens": ["USDC", "USDT"], "settlement": "instant"},
+            {"chain": "tron", "facilitators": ["merx_tron"], "tokens": ["USDT", "USDC", "USDD"], "settlement": "instant"},
+            {"chain": "bitcoin", "facilitators": ["satoshi"], "tokens": ["BTC"], "settlement": "cross-chain"},
+            # Self-verified
+            {"chain": "arbitrum", "facilitators": ["eip7702", "x402_rs"], "tokens": ["USDC", "ETH"], "settlement": "self"},
+            {"chain": "optimism", "facilitators": ["eip7702", "x402_rs"], "tokens": ["USDC", "ETH"], "settlement": "self"},
+            {"chain": "polygon", "facilitators": ["eip7702", "x402_rs"], "tokens": ["USDC", "POL"], "settlement": "self"},
+            {"chain": "avalanche", "facilitators": ["eip7702"], "tokens": ["USDC", "AVAX"], "settlement": "self"},
+            {"chain": "fantom", "facilitators": ["eip7702"], "tokens": ["USDC", "FTM"], "settlement": "self"},
+            {"chain": "gnosis", "facilitators": ["eip7702"], "tokens": ["USDC", "XDAI"], "settlement": "self"},
+            # Fiat
+            {"chain": "sepa/eur", "facilitators": ["asterpay"], "tokens": ["EUR", "USDC"], "settlement": "off-ramp"},
+        ],
+        "refund_policy": "Full refund if tool returns no data. Request within 48h via POST /api/v1/x402/refund.",
     }
 
 @app.get("/api/v1/x402/trial-status")

@@ -4,17 +4,17 @@ RMI x402 Payment Enforcement Middleware
 Intercepts /api/v1/x402-tools/* requests, verifies x402 payment headers.
 Returns 402 Payment Required when no valid payment is provided.
 
-Uses the existing PaymentVerifier from x402_middleware.py for verification.
-Adds multi-chain payment: Base + Solana via facilitator, ETH/BSC/ARB/OPT/POL via self-verification (Etherscan on-chain check).
-
-OPTIMIZATIONS (May 6, 2026):
-- Discovery endpoint response caching with TTL (avoids rebuilding 7-chain requirements per request)
-- Security headers on all 402 responses
-- Input validation for tool requests (reject empty bodies, oversized payloads)
-- Fail-closed Redis (deny trials when Redis unavailable)
+ARCHITECTURE (May 23, 2026 — Multi-Facilitator):
+- Smart router auto-picks best facilitator per chain/token
+- 10 facilitators: Coinbase CDP, PayAI, Cloudflare x402, Pieverse (BNB),
+  AsterPay (EUR/SEPA), MERX (TRON), Primev (fee-free ETH), Satoshi (BTC),
+  x402-rs (self-hosted), EIP-7702 (universal EVM)
+- 13 payment chains: Base, Solana, Ethereum, BSC, TRON, Bitcoin,
+  Arbitrum, Optimism, Polygon, Avalanche, Fantom, Gnosis, SEPA/EUR
+- Fallback: old PaymentVerifier if router unavailable
 
 Author: RMI Development
-Date: 2026-05-06
+Date: 2026-05-23
 """
 import os
 import json
@@ -56,13 +56,27 @@ except ImportError as e:
 # Same EVM wallet works across all chains — user pays on whichever has USDC.
 # This is a competitive advantage: most x402 gateways only take Base.
 CHAIN_USDC = {
-    "base": {"network": "eip155:8453", "chain_id": 8453, "usdc": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913", "name": "USD Coin", "version": "2", "method": "local_eip712", "verify": "facilitator"},
-    "solana": {"network": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp", "chain_id": None, "usdc": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "name": "USD Coin", "version": "2", "method": "payai", "verify": "facilitator"},
-    "ethereum": {"network": "eip155:1", "chain_id": 1, "usdc": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "name": "USD Coin", "version": "2", "method": "local_eip712", "verify": "self"},
-    "bsc": {"network": "eip155:56", "chain_id": 56, "usdc": "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", "name": "USD Coin", "version": "2", "method": "local_eip712", "verify": "self"},
-    "arbitrum": {"network": "eip155:42161", "chain_id": 42161, "usdc": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", "name": "USD Coin", "version": "2", "method": "local_eip712", "verify": "self"},
-    "optimism": {"network": "eip155:10", "chain_id": 10, "usdc": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85", "name": "USD Coin", "version": "2", "method": "local_eip712", "verify": "self"},
-    "polygon": {"network": "eip155:137", "chain_id": 137, "usdc": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", "name": "USD Coin", "version": "2", "method": "local_eip712", "verify": "self"},
+    # ── Facilitator-verified chains (instant/direct) ──
+    "base": {"network": "eip155:8453", "chain_id": 8453, "usdc": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913", "name": "USD Coin", "version": "2", "method": "local_eip712", "verify": "facilitator", "facilitators": ["coinbase_cdp", "payai"]},
+    "solana": {"network": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp", "chain_id": None, "usdc": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "name": "USD Coin", "version": "2", "method": "payai", "verify": "facilitator", "facilitators": ["payai"]},
+    "bsc": {"network": "eip155:56", "chain_id": 56, "usdc": "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", "name": "USD Coin", "version": "2", "method": "local_eip712", "verify": "facilitator", "facilitators": ["pieverse", "eip7702"]},
+    "ethereum": {"network": "eip155:1", "chain_id": 1, "usdc": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "name": "USD Coin", "version": "2", "method": "local_eip712", "verify": "facilitator", "facilitators": ["primev", "payai", "eip7702"]},
+    # ── TRON (MERX x402) ──
+    "tron": {"network": "tron:mainnet", "chain_id": None, "usdc": "TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8", "name": "USD Coin (TRC20)", "version": "1", "method": "merx_tron", "verify": "facilitator", "facilitators": ["merx_tron"],
+             "tokens": {"USDT": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", "USDD": "TPYmHEhy5n8TCEfZGqW2rPbmgh1fGqNBPa"}},
+    # ── Bitcoin (Satoshi Facilitator) ──
+    "bitcoin": {"network": "bitcoin:mainnet", "chain_id": None, "usdc": "", "name": "Bitcoin", "version": "1", "method": "satoshi", "verify": "facilitator", "facilitators": ["satoshi"],
+                "tokens": {"BTC": "native"}},
+    # ── Self-verified EVM chains (EIP-7702 universal) ──
+    "arbitrum": {"network": "eip155:42161", "chain_id": 42161, "usdc": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", "name": "USD Coin", "version": "2", "method": "local_eip712", "verify": "self", "facilitators": ["eip7702"]},
+    "optimism": {"network": "eip155:10", "chain_id": 10, "usdc": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85", "name": "USD Coin", "version": "2", "method": "local_eip712", "verify": "self", "facilitators": ["eip7702"]},
+    "polygon": {"network": "eip155:137", "chain_id": 137, "usdc": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", "name": "USD Coin", "version": "2", "method": "local_eip712", "verify": "self", "facilitators": ["eip7702"]},
+    "avalanche": {"network": "eip155:43114", "chain_id": 43114, "usdc": "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E", "name": "USD Coin", "version": "2", "method": "local_eip712", "verify": "self", "facilitators": ["eip7702"]},
+    "fantom": {"network": "eip155:250", "chain_id": 250, "usdc": "0x04068DA6C83AFCFA0e13ba15A6696662335D5B75", "name": "USD Coin", "version": "2", "method": "local_eip712", "verify": "self", "facilitators": ["eip7702"]},
+    "gnosis": {"network": "eip155:100", "chain_id": 100, "usdc": "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83", "name": "USD Coin", "version": "2", "method": "local_eip712", "verify": "self", "facilitators": ["eip7702"]},
+    # ── SEPA/EUR (AsterPay fiat off-ramp) ──
+    "sepa": {"network": "sepa:eur", "chain_id": None, "usdc": "", "name": "Euro", "version": "1", "method": "asterpay", "verify": "facilitator", "facilitators": ["asterpay"],
+             "tokens": {"EUR": "fiat"}},
 }
 
 # Pay-to addresses
@@ -219,34 +233,79 @@ def build_402_response(tool_id: str, client_id: str = "") -> JSONResponse:
     
     requirements = []
     for chain_key, cfg in CHAIN_USDC.items():
-        pay_to = SOL_PAY_TO if cfg["method"] == "payai" else EVM_PAY_TO
+        method = cfg["method"]
+
+        # Determine pay-to address based on chain
+        if method == "payai":
+            pay_to = SOL_PAY_TO
+        elif method == "satoshi":
+            pay_to = os.getenv("X402_BTC_PAY_TO", "")
+        elif method == "merx_tron":
+            pay_to = os.getenv("X402_TRON_PAY_TO", "")
+        elif method == "asterpay":
+            pay_to = os.getenv("ASTERPAY_SEPA_IBAN", "")
+        else:
+            pay_to = EVM_PAY_TO
+
+        # Determine asset (primary token for the chain)
+        asset = cfg.get("usdc", "")
+        if not asset and "tokens" in cfg:
+            # For chains without USDC, use first available token
+            first_token = next(iter(cfg["tokens"].values()), "")
+            asset = first_token if first_token != "native" else ""
+
         extra = {
             "name": cfg["name"],
             "version": cfg["version"],
             "tool": tool_id,
             "chain": chain_key,
         }
-        # Add EIP-712 domain for EVM chains — required by x402 SDK for signing
-        if cfg["method"] == "local_eip712" and cfg.get("chain_id"):
+
+        if method == "local_eip712" and cfg.get("chain_id"):
             extra["domain"] = {
                 "name": cfg["name"],
                 "version": cfg["version"],
                 "chainId": cfg["chain_id"],
                 "verifyingContract": pay_to,
             }
-        # Solana: PayAI managed fee payer
-        if cfg["method"] == "payai":
+        elif method == "payai":
             extra["feePayer"] = "2wKupLR9q6wXYppw8Gr2NvWxKBUqm4PPJKkQfoxHDBg4"
-        requirements.append({
+        elif method == "merx_tron":
+            extra["tronNetwork"] = "mainnet"
+            extra["trc20Tokens"] = cfg.get("tokens", {})
+        elif method == "satoshi":
+            extra["paymentNetwork"] = "bitcoin"
+            extra["settlementChains"] = ["base", "solana"]
+        elif method == "asterpay":
+            extra["currency"] = "EUR"
+            extra["sepa"] = True
+
+        requirement = {
             "scheme": "exact",
             "network": cfg["network"],
-            "asset": cfg["usdc"],
+            "asset": asset,
             "amount": pricing["price_atoms"],
             "payTo": pay_to,
             "maxTimeoutSeconds": 180,
             "extra": extra,
-        })
-    
+        }
+
+        # Add supported tokens for multi-token chains
+        if "tokens" in cfg:
+            requirement["supportedTokens"] = list(cfg["tokens"].keys())
+
+        requirements.append(requirement)
+
+    # Build comprehensive payment message
+    chain_names = {
+        "base": "Base", "solana": "Solana", "ethereum": "Ethereum",
+        "bsc": "BNB Chain", "tron": "TRON", "bitcoin": "Bitcoin",
+        "arbitrum": "Arbitrum", "optimism": "Optimism", "polygon": "Polygon",
+        "avalanche": "Avalanche", "fantom": "Fantom", "gnosis": "Gnosis",
+        "sepa": "SEPA (EUR)"
+    }
+    chain_list = ", ".join(chain_names.get(c, c) for c in CHAIN_USDC.keys())
+
     content = {
         "error": "Payment Required",
         "tool": tool_id,
@@ -254,12 +313,21 @@ def build_402_response(tool_id: str, client_id: str = "") -> JSONResponse:
         "trial_free": trial_free,
         "trial_remaining": remaining,
         "trial_used": remaining <= 0,
-        "wallet_required": remaining == -1,  # True when fingerprint trials exhausted, need wallet
+        "wallet_required": remaining == -1,
         "message": (
             f"Connect a wallet to continue. Your 1 free trial is used — link MetaMask or Phantom to get {trial_free} free calls per tool. From ${pricing['price_usd']:.2f}/call after that."
             if remaining == -1
-            else f"All {trial_free} free trial{'s' if trial_free != 1 else ''} used. Pay {pricing['price_atoms']} atoms USDC to use {tool_id}. Pay on Base, Solana, Ethereum, BSC, Arbitrum, Optimism, or Polygon."
+            else f"All {trial_free} free trial{'s' if trial_free != 1 else ''} used. Pay {pricing['price_atoms']} atoms to use {tool_id}. Pay on {chain_list}."
         ),
+        "accepted_chains": list(CHAIN_USDC.keys()),
+        "chain_details": {
+            k: {
+                "network": v["network"],
+                "facilitators": v.get("facilitators", []),
+                "tokens": list(v.get("tokens", {"USDC": v.get("usdc", "")}).keys()),
+            }
+            for k, v in CHAIN_USDC.items()
+        },
         "x402": {
             "version": "2",
             "requirements": requirements,
@@ -299,7 +367,133 @@ def parse_x_pay_header(header_value: str) -> Optional[dict]:
         logger.warning(f"Failed to parse x-pay header: {e}")
         return None
 
-# ── Verification logic ──
+# ── Verification via Facilitator Router ──
+async def verify_payment_via_router(payload: dict) -> dict:
+    """Verify x402 payment payload through the multi-facilitator smart router.
+    
+    Flow:
+    1. Parse payload → extract network (chain) and asset (token)
+    2. Map network to chain_key (e.g. 'eip155:8453' → 'base', 'tron:mainnet' → 'tron')
+    3. Determine token symbol from asset address
+    4. Route to best facilitator via FacilitatorRouter.verify()
+    5. Fall back to old verify_payment() if router not available
+    """
+    accepted = payload.get("accepted", {})
+    network = accepted.get("network", "")
+    asset_address = accepted.get("asset", "")
+
+    # Map network → chain_key
+    chain_key = None
+    token_symbol = "USDC"
+
+    for ck, cfg in CHAIN_USDC.items():
+        if cfg["network"] == network:
+            chain_key = ck
+            # Detect token from asset address
+            if asset_address:
+                token_symbol = _detect_token_from_asset(asset_address, cfg)
+            break
+
+    if not chain_key:
+        # Unknown network — fall back to old verifier
+        from app.routers.x402_middleware import PaymentVerifier, FACILITATOR_CONFIGS
+        verifier = PaymentVerifier()
+        return await verifier.verify_payment(
+            json.dumps(payload),
+            network_key="base",
+        )
+
+    # Try the smart router first
+    try:
+        from app.facilitators.router import get_facilitator_router
+        router = get_facilitator_router()
+
+        # Build requirements from payload
+        requirements = {
+            "x402Version": payload.get("x402Version", 2),
+            "resource": payload.get("resource", {}),
+            "accepts": [{
+                "scheme": accepted.get("scheme", "exact"),
+                "network": network,
+                "asset": asset_address,
+                "amount": accepted.get("amount", ""),
+                "payTo": accepted.get("payTo", ""),
+                "maxTimeoutSeconds": accepted.get("maxTimeoutSeconds", 180),
+                "extra": accepted.get("extra", {}),
+            }],
+        }
+
+        result = await router.verify(
+            payload=payload,
+            chain_key=chain_key,
+            token_symbol=token_symbol,
+            requirements=requirements,
+        )
+
+        if result.verified:
+            logger.info(
+                f"Router verified payment via {result.facilitator}: "
+                f"chain={chain_key} token={token_symbol} amount={result.amount}"
+            )
+            return {
+                "verified": True,
+                "reason": result.reason,
+                "tx_hash": result.tx_hash,
+                "payer": result.payer,
+                "amount": result.amount,
+                "chain": chain_key,
+                "token": token_symbol,
+                "facilitator": result.facilitator,
+                "method": f"router:{result.facilitator}",
+            }
+        else:
+            logger.warning(
+                f"Router rejected payment for {chain_key}/{token_symbol}: {result.reason}"
+            )
+            return {
+                "verified": False,
+                "reason": result.reason,
+                "chain": chain_key,
+                "token": token_symbol,
+            }
+
+    except ImportError:
+        logger.debug("Facilitator router not available — falling back to old verifier")
+    except Exception as e:
+        logger.error(f"Router verification error: {e} — falling back to old verifier")
+
+    # Fallback: old verification logic
+    return await verify_payment(payload)
+
+
+def _detect_token_from_asset(asset_address: str, chain_cfg: dict) -> str:
+    """Detect token symbol from asset address using chain config."""
+    asset_lower = asset_address.lower()
+
+    # Check USDC
+    if chain_cfg.get("usdc", "").lower() == asset_lower:
+        return "USDC"
+
+    # Check additional tokens
+    tokens = chain_cfg.get("tokens", {})
+    for symbol, addr in tokens.items():
+        if isinstance(addr, str) and addr.lower() == asset_lower:
+            return symbol
+
+    # Heuristic detection
+    if "TR7NH" in asset_lower:
+        return "USDT"  # USDT on TRC20
+    if "TEkxi" in asset_lower:
+        return "USDC"  # USDC on TRC20
+    if "TPYm" in asset_lower:
+        return "USDD"  # USDD on TRC20
+    if asset_lower == "native" or asset_address == "BTC":
+        return "BTC"
+
+    return "USDC"  # Default
+
+
+# ── Original verification logic (fallback) ──
 async def verify_payment(payload: dict) -> dict:
     """Verify x402 payment payload against all supported chains"""
     if not VERIFIER:
@@ -925,7 +1119,7 @@ async def x402_enforcement_middleware(request: Request, call_next) -> Response:
                     content={"error": "Invalid accepted payment structure"},
                     headers=SECURITY_HEADERS,
                 )
-            result = await verify_payment(payload)
+            result = await verify_payment_via_router(payload)
             if result.get("verified"):
                 # Payment OK — attach info and proceed
                 request.state.x402_verified = True
@@ -1037,7 +1231,7 @@ router = APIRouter(prefix="/api/v1/x402", tags=["x402 Enforcement"])
 
 
 def _build_discovery_response():
-    """Build the full discovery response (expensive — cached with TTL)."""
+    """Build the full discovery response with all 13 chains and 10 facilitators."""
     tools = {}
     for tool_id, pricing in TOOL_PRICES.items():
         try:
@@ -1050,32 +1244,25 @@ def _build_discovery_response():
 
         requirements = []
         for chain_key, cfg in CHAIN_USDC.items():
-            pay_to = SOL_PAY_TO if cfg["method"] == "payai" else EVM_PAY_TO
-            extra = {
-                "name": cfg["name"],
-                "version": cfg["version"],
-                "tool": tool_id,
-                "chain": chain_key,
-            }
-            if cfg["method"] == "local_eip712" and cfg.get("chain_id"):
-                extra["domain"] = {
-                    "name": cfg["name"],
-                    "version": cfg["version"],
-                    "chainId": cfg["chain_id"],
-                    "verifyingContract": pay_to,
-                }
-            if cfg["method"] == "payai":
-                extra["feePayer"] = "2wKupLR9q6wXYppw8Gr2NvWxKBUqm4PPJKkQfoxHDBg4"
-            requirements.append({
+            method = cfg["method"]
+            pay_to = _resolve_pay_to(method)
+            asset = _resolve_asset(cfg)
+            extra = _build_extra(cfg, tool_id, chain_key, pay_to, method)
+            
+            req = {
                 "scheme": "exact",
                 "network": cfg["network"],
-                "asset": cfg["usdc"],
+                "asset": asset,
                 "amount": price_atoms,
                 "payTo": pay_to,
                 "maxTimeoutSeconds": 180,
                 "extra": extra,
-            })
-        # Build description — outside the chain loop
+                "facilitators": cfg.get("facilitators", []),
+            }
+            if "tokens" in cfg:
+                req["supportedTokens"] = list(cfg["tokens"].keys())
+            requirements.append(req)
+
         desc = pricing.get("description", "")
         if not desc:
             _TOOL_DESCRIPTIONS = {
@@ -1093,22 +1280,81 @@ def _build_discovery_response():
             "trial_description": f"{trial_free} free calls before payment required",
             "requirements": requirements,
         }
-    
+
     return {
         "x402": {
             "version": "2",
             "protocol": "x402",
-            "description": "Rug Munch Intelligence — 100+ crypto security and analytics tools via x402 micropayments. Pay per call on 7 chains.",
-            "trial_policy": "1 free trial per tool without wallet. Connect MetaMask or Phantom for 3 free calls per standard tool, 1 per premium tool. No resets. One identity per wallet.",
-            "refund_policy": "Full refund if tool returns no data. Request within 48h of payment via POST /api/v1/x402/refund with your tx hash.",
-            "identity_hierarchy": "wallet > device_id > turnstile > fingerprint. Device fingerprinting survives VPN/incognito — connect wallet for full trial access.",
+            "description": "Rug Munch Intelligence (RMI) — Multi-chain x402 payment system with 10 facilitators across 13 chains. Crypto scam detection, market analysis, and security intelligence via micropayments.",
+            "trial_policy": "1 free trial per tool without wallet. Connect wallet for 3 free calls per standard tool, 1 per premium tool.",
+            "refund_policy": "Full refund if tool returns no data. Request within 48h via POST /api/v1/x402/refund with tx hash.",
+            "facilitator_summary": {
+                "coinbase_cdp": "Fee-free USDC on Base/Polygon/Arbitrum/Solana (1K free tx/mo)",
+                "payai": "Base + Solana USDC, deferred settlement",
+                "cloudflare_x402": "Base Sepolia + Ethereum fallback",
+                "pieverse": "BNB Chain USDC/USDT, instant settlement",
+                "asterpay": "European EUR/SEPA off-ramp, MiCA compliant",
+                "merx_tron": "TRON USDT/USDC/USDD, sub-3s confirmation",
+                "primev": "Fee-free Ethereum via mev-commit preconfirmations",
+                "satoshi": "Bitcoin → Base/Solana cross-chain settlement",
+                "x402_rs": "Self-hosted Rust facilitator, multi-chain",
+                "eip7702": "Universal EVM — all chains, all tokens, all native coins",
+            },
         },
         "gateway_url": "https://rugmunch.io",
         "payment_endpoint": "https://rugmunch.io/api/v1/x402-tools",
         "supported_chains": list(CHAIN_USDC.keys()),
+        "chain_count": len(CHAIN_USDC),
+        "facilitator_count": 10,
         "total_tools": len(tools),
         "tools": tools,
     }
+
+
+def _resolve_pay_to(method: str) -> str:
+    if method == "payai":
+        return SOL_PAY_TO
+    elif method == "satoshi":
+        return os.getenv("X402_BTC_PAY_TO", "")
+    elif method == "merx_tron":
+        return os.getenv("X402_TRON_PAY_TO", "")
+    elif method == "asterpay":
+        return os.getenv("ASTERPAY_SEPA_IBAN", "")
+    return EVM_PAY_TO
+
+
+def _resolve_asset(cfg: dict) -> str:
+    asset = cfg.get("usdc", "")
+    if not asset and "tokens" in cfg:
+        first = next(iter(cfg["tokens"].values()), "")
+        return first if first != "native" else "BTC"
+    return asset
+
+
+def _build_extra(cfg: dict, tool_id: str, chain_key: str, pay_to: str, method: str) -> dict:
+    extra = {
+        "name": cfg["name"],
+        "version": cfg["version"],
+        "tool": tool_id,
+        "chain": chain_key,
+    }
+    if method == "local_eip712" and cfg.get("chain_id"):
+        extra["domain"] = {
+            "name": cfg["name"], "version": cfg["version"],
+            "chainId": cfg["chain_id"], "verifyingContract": pay_to,
+        }
+    elif method == "payai":
+        extra["feePayer"] = "2wKupLR9q6wXYppw8Gr2NvWxKBUqm4PPJKkQfoxHDBg4"
+    elif method == "merx_tron":
+        extra["tronNetwork"] = "mainnet"
+        extra["trc20Tokens"] = cfg.get("tokens", {})
+    elif method == "satoshi":
+        extra["paymentNetwork"] = "bitcoin"
+        extra["settlementChains"] = ["base", "solana"]
+    elif method == "asterpay":
+        extra["currency"] = "EUR"
+        extra["sepa"] = True
+    return extra
 
 @discovery_router.get("/.well-known/x402")
 async def x402_discovery():
