@@ -56,11 +56,14 @@
 
 ### Key Facts
 - **2 Cloudflare Workers** — sol.rugmunch.io (Solana) + base.rugmunch.io (Base)
-- **64 RMI tools** per gateway — security, intelligence, market, social, analysis, launch
-- **154 MCP tools** from 28 data providers — DexScreener, Jupiter, Helius, Birdeye, CoinGecko, Nansen, Arkham, GMGN, Moralis, PumpFun, Raydium, DeFiLlama + 16 more
+- **64 RMI tools** per gateway — security, intelligence, market, social, analysis, launch, investigation
+- **154 MCP tools** from 28 data providers
+- **10 payment facilitators** — Coinbase CDP, PayAI, Cloudflare, Pieverse (BNB), AsterPay (EUR/SEPA), MERX (TRON), Primev (fee-free ETH), Satoshi (BTC), x402-rs (self-hosted), EIP-7702 (universal EVM)
+- **13 payment chains** — Base, Solana, Ethereum, BSC, Polygon, Arbitrum, Optimism, TRON, Bitcoin, Avalanche, Fantom, Gnosis, SEPA/EUR
 - **1 Docker backend** — FastAPI at /root/backend/, mounted to rmi-backend container
+- **Smart router** — Auto-picks best facilitator per chain/token with automatic fallback
 - **Cloudflare Tunnel** — rugmunch.io → rmi-backend:8000
-- **Source code** — github.com/Rug-Munch-Media-LLC/x402-gateway-solana (backend) + x402-gateway-solana + x402-gateway-base (workers)
+- **Source code** — github.com/Rug-Munch-Media-LLC/rugmuncher-backend
 
 ### WORKER CODE LOCATION
 ```
@@ -79,7 +82,10 @@ Each has:
 /root/backend/                        → Docker context
 /root/backend/main.py                 → FastAPI entry point
 /root/backend/app/routers/x402_tools.py      → x402 tools + human payment
-/root/backend/app/routers/x402_enforcement.py → Payment middleware
+/root/backend/app/routers/x402_enforcement.py → Payment middleware + smart router
+/root/backend/app/facilitators/       → 10 facilitator modules (pluggable registry)
+/root/backend/app/facilitators/router.py     → Smart router (auto-picks best facilitator)
+/root/backend/docker/x402-rs/         → Self-hosted Rust facilitator Docker config
 ```
 
 ---
@@ -204,32 +210,36 @@ Services: dexscreener, jupiter, pumpfun, raydium, defillama, dexpaprika, coincap
 
 ## 5. PAYMENT FLOW — HOW MONEY WORKS
 
-### Bot Payment (x402 Protocol)
-1. Client calls tool with `PAYMENT-SIGNATURE` header
-2. Gateway verifies payment via PayAI facilitator
-3. If valid → execute tool → return result
-4. If no payment → return 402 Payment Required with pricing
-5. Trial mode: first 1-5 calls per tool are FREE
+### Bot Payment (x402 Protocol — Multi-Chain)
+1. Client calls tool → receives 402 Payment Required
+2. 402 response lists ALL 13 chains + 10 facilitators + accepted tokens
+3. Client pays on ANY supported chain (USDC, USDT, BTC, EUR, etc.)
+4. Client includes `X-Pay` header with payment proof (tx hash + signature)
+5. **Smart router** detects chain/token from payload
+6. Router picks best facilitator for that chain (auto-fallback if primary fails)
+7. Payment verified → tool executes → result returned
+8. Trial mode: first 1-5 calls per tool are FREE
 
 ### Human Payment (Wallet Connect)
 1. User connects wallet (MetaMask/WalletConnect/Coinbase/Phantom)
-2. Selects tool + payment token (USDC-SOL, USDC-Base, SOL, ETH, USDT)
+2. Selects tool + payment token (USDC-SOL, USDC-Base, SOL, ETH, USDT, BTC, TRX, EUR)
 3. Signs transaction in wallet
 4. Frontend sends tx_hash to `/api/v1/x402-tools/human-execute`
-5. Backend verifies tx on-chain (Solana RPC or Etherscan/Basescan)
+5. Backend verifies tx via appropriate facilitator (auto-routed)
 6. If confirmed → executes tool via gateway → returns result
-7. Payment logged in Supabase `payments` table
+7. Payment logged in Supabase `x402_payments` table
 
-### Payment Addresses
-| Chain | Address | Asset |
-|-------|---------|-------|
-| Solana | `Gix4P9AmwcZRGzr2hCEME5m2QAvY86dBfm8c7e7MpFzv` | USDC |
-| Base/EVM | `0x1E3AC01d0fdb976179790BDD02823196A92705C9` | USDC, ETH |
+### Payment Addresses (ALL YOUR WALLETS)
+| Chain | Address | Assets |
+|-------|---------|--------|
+| Base/EVM | `0x1E3AC01d0fdb976179790BDD02823196A92705C9` | USDC, ETH, USDT |
+| Solana | `Gix4P9AmwcZRGzr2hCEME5m2QAvY86dBfm8c7e7MpFzv` | USDC, SOL |
+| TRON | (set X402_TRON_PAY_TO) | USDT, USDC, USDD |
+| Bitcoin | (set X402_BTC_PAY_TO) | BTC |
+| SEPA/EUR | (set ASTERPAY_SEPA_IBAN) | EUR |
 
 ### Refund Policy
-Auto-refund if tool execution fails. Verified on-chain.
-100% of revenue funds server costs + more anti-scam tools.
-Solo dev operation. No VC. No middlemen.
+Auto-refund if tool returns no data. Request within 48h via POST /api/v1/x402/refund.
 
 ---
 
@@ -311,13 +321,15 @@ DNS CNAME records point to the workers.dev subdomains with proxy enabled.
 | **Glama** | Active | glama.ai/mcp/servers/rugmunch |
 | **mcp.so** | Submitted | Sol UUID: 2102ac31 | Base UUID: 53a79a21 |
 | **GitHub** | Public | github.com/Rug-Munch-Media-LLC |
+| **Coinbase CDP** | Register at | portal.cdp.coinbase.com (set CDP_API_KEY_ID + CDP_API_KEY_SECRET) |
 
 ### Discovery Files
 | File | Location | Purpose |
 |------|----------|---------|
 | `smithery.json` | Gateway root | Smithery listing |
 | `glama.json` | Gateway root | Glama listing |
-| `X402-SYSTEM.md` | /root/backend/x402-gateway/ | This documentation |
+| `X402-SYSTEM.md` | /root/backend/x402-gateway/ | Multi-facilitator system documentation |
+| `BUILDERS-GUIDE.md` | /root/backend/x402-gateway/ | This guide |
 | README.md | Gateway root | Quick start |
 
 ### Bot Discovery Endpoints
