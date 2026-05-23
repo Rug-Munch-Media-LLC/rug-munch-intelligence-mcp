@@ -1,22 +1,22 @@
 {
   "name": "io.github.Rug-Munch-Media-LLC/rug-munch-intelligence-mcp",
   "display_name": "Rug Munch Intelligence",
-  "description": "Rug Munch Intelligence MCP: 97 tools for crypto scam detection, rug pull prevention, and intelligence across 7 chains.",
+  "description": "Rug Munch Intelligence MCP: 59 tools for crypto scam detection, rug pull prevention, and intelligence across 7 chains.",
   "version": "2.0.0",
   "homepage": "https://rugmunch.io",
-  "repository": "https://github.com/Rug-Munch-Media-LLC/rug-munch-mcp",
+  "repository": "https://github.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp",
   "author": {
     "name": "CryptoRugMunch",
     "url": "https://github.com/cryptorugmuncher"
   },
-  "license": "MIT",
+  "license": "Proprietary",
   "categories": [
     "security",
     "finance",
     "blockchain",
     "analytics"
   ],
-  "tools": 97,
+  "tools": 59,
   "chains": [
     "base",
     "solana",
@@ -36,9 +36,9 @@
     "payment_token": "USDC"
   },
   "install": {
-    "pip": "pip install rug-munch-mcp",
-    "uvx": "uvx rug-munch-mcp",
-    "smithery": "npx @smithery/cli install rug-munch-mcp"
+    "pip": "pip install rug-munch-intelligence-mcp",
+    "uvx": "uvx rug-munch-intelligence-mcp",
+    "smithery": "npx @smithery/cli install rug-munch-intelligence-mcp"
   },
   "env": {
     "RUG_MUNCH_API_BASE": {

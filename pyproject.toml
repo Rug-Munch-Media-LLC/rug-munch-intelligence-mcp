@@ -5,9 +5,9 @@ build-backend = "hatchling.build"
 [project]
 name = "rug-munch-intelligence-mcp"
 version = "2.0.0"
-description = "Rug Munch Intelligence MCP Server — 97 tools for scam detection, rug pull prevention, and crypto intelligence across 7 chains"
+description = "Rug Munch Intelligence MCP Server — 59 tools for scam detection, rug pull prevention, and crypto intelligence across 7 chains"
 readme = "README.md"
-license = "MIT"
+license = "Proprietary"
 requires-python = ">=3.10"
 authors = [
     { name = "CryptoRugMunch" },
@@ -17,7 +17,7 @@ classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Intended Audience :: Financial and Insurance Industry",
-    "License :: OSI Approved :: MIT License",
+    "License :: Other/Proprietary License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",

@@ -1,6 +1,6 @@
 name: rug-munch-intelligence-mcp
 display_name: Rug Munch Intelligence
-description: "97 tools for scam detection, rug pull prevention, and crypto intelligence across 7 chains. The Bloomberg of Shitcoins Terminal Ultimate Edition."
+description: "59 tools for scam detection, rug pull prevention, and crypto intelligence across 7 chains. The Bloomberg of Shitcoins Terminal Ultimate Edition."
 version: 2.0.0
 author: CryptoRugMunch
 homepage: https://rugmunch.io
@@ -29,7 +29,7 @@ environment:
     description: API key for premium access (optional)
     required: false
 
-tools_count: 97
+tools_count: 59
 chains:
   - base
   - solana
