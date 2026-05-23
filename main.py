@@ -107,6 +107,10 @@ app.include_router(email_router)
 from app.mail_dashboard import router as mail_router
 app.include_router(mail_router)
 
+# Wallet Factory API — multi-chain wallet generation (25+ chains)
+from app.routers.wallet_factory_router import router as wallet_factory_router
+app.include_router(wallet_factory_router)
+
 # ── Wallet Intelligence Routers ──────────────────────────────
 from app.routers import bubble_maps_router  # RugMaps engine
 from app.routers import wallet_clustering_router
