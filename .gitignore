@@ -1,44 +1,17 @@
-# Secrets
-.env
-*.env.local
-*.env.production
-
-# Python
 __pycache__/
-*.py[cod]
-*.egg-info/
+*.pyc
+*.pyo
+.env
+*.key
+*.pem
+*.sock
+/logs/
+/tmp/
+/cache/
+n8n-data/
 venv/
 .venv/
-
-# Junk files
-=2.0.0
-PORT_MAP.md
-EMAIL_SETUP.md
-SECURITY_STACK.md
-RMI_SYSTEM_MAP.md
-.trivyignore
-
-# IDE
-.vscode/
-.idea/
-.DS_Store
-
-# Sessions
-sessions/
-*.jsonl
-*.tmp
-
-# Databases
-*.sqlite
-*.sqlite-*
-*.sqlite-shm
-*.sqlite-wal
-
-# Logs
-*.log
-
-# Node
-node_modules/
-
-# Docker
-docker-compose.override.yml
+*.json
+!actor.json
+!*.example.json
+!package*.json
