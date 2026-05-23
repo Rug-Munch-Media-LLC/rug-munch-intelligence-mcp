@@ -56,7 +56,7 @@
 
 ### Key Facts
 - **2 Cloudflare Workers** — sol.rugmunch.io (Solana) + base.rugmunch.io (Base)
-- **64 RMI tools** per gateway — security, intelligence, market, social, analysis, launch, investigation
+- **71 RMI tools** per gateway — security, intelligence, market, social, analysis, launch, investigation
 - **154 MCP tools** from 28 data providers
 - **10 payment facilitators** — Coinbase CDP, PayAI, Cloudflare, Pieverse (BNB), AsterPay (EUR/SEPA), MERX (TRON), Primev (fee-free ETH), Satoshi (BTC), x402-rs (self-hosted), EIP-7702 (universal EVM)
 - **13 payment chains** — Base, Solana, Ethereum, BSC, Polygon, Arbitrum, Optimism, TRON, Bitcoin, Avalanche, Fantom, Gnosis, SEPA/EUR
