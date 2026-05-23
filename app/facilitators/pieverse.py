@@ -1,0 +1,154 @@
+"""
+BNB Chain Pieverse Facilitator
+===============================
+BNB Chain x402 facilitator with instant settlement.
+Supports USDC and USDT on BSC mainnet.
+"""
+import json
+import asyncio
+import logging
+import aiohttp
+from typing import Optional, Dict, Any
+
+from app.facilitators.base import (
+    Facilitator, FacilitatorType, SettlementType,
+    NetworkSupport, VerificationResult, SettlementResult,
+)
+from app.facilitators.config import FacilitatorConfig, get_config
+
+logger = logging.getLogger("facilitator.pieverse")
+
+
+class PieverseFacilitator(Facilitator):
+    """BNB Chain Pieverse facilitator — instant settlement for BSC."""
+
+    def __init__(self, config: Optional[FacilitatorConfig] = None):
+        self._config = config or get_config()
+
+    @property
+    def name(self) -> str:
+        return "pieverse"
+
+    @property
+    def facilitator_type(self) -> FacilitatorType:
+        return FacilitatorType.HOSTED
+
+    @property
+    def settlement_type(self) -> SettlementType:
+        return SettlementType.INSTANT
+
+    @property
+    def priority(self) -> int:
+        return 15  # High priority for BNB Chain
+
+    @property
+    def verify_url(self) -> Optional[str]:
+        return self._config.pieverse_verify_url
+
+    @property
+    def supported_networks(self) -> NetworkSupport:
+        return NetworkSupport(
+            chains=["bsc", "bnbchain"],
+            chain_ids=[56],
+            networks=["eip155:56"],
+            tokens=["USDC", "USDT"],
+            token_addresses={
+                "bsc:USDC": "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
+                "bsc:USDT": "0x55d398326f99059fF775485246999027B3197955",
+            },
+        )
+
+    async def verify(
+        self, payload: Dict[str, Any],
+        requirements: Optional[Dict[str, Any]] = None,
+    ) -> VerificationResult:
+        if not self._config.pieverse_api_key:
+            return self._format_error("Pieverse API key not configured")
+
+        accepted = payload.get("accepted", {})
+        body = {
+            "x402Version": payload.get("x402Version", 2),
+            "paymentPayload": payload,
+            "chain": "bsc",
+        }
+        if requirements:
+            body["paymentRequirements"] = requirements
+
+        headers = {
+            "Content-Type": "application/json",
+            "X-API-Key": self._config.pieverse_api_key,
+        }
+
+        try:
+            timeout = aiohttp.ClientTimeout(total=self._config.facilitator_verify_timeout)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.post(
+                    self._config.pieverse_verify_url, json=body, headers=headers,
+                ) as resp:
+                    data = await resp.json()
+
+                    if resp.status != 200:
+                        reason = data.get("error", f"HTTP {resp.status}")
+                        return self._format_error(f"Pieverse: {reason}")
+
+                    if data.get("isValid") or data.get("verified"):
+                        return self._format_success(
+                            tx_hash=data.get("txHash"),
+                            payer=data.get("payer"),
+                            amount=accepted.get("amount"),
+                            chain="bsc",
+                            token=data.get("token", accepted.get("asset", "USDC")),
+                            settlement_id=data.get("settlementId"),
+                        )
+
+                    reason = data.get("invalidReason") or data.get("reason") or "Unknown"
+                    return self._format_error(f"Pieverse: {reason}")
+
+        except asyncio.TimeoutError:
+            return self._format_error("Pieverse verification timed out")
+        except aiohttp.ClientError as e:
+            return self._format_error(f"Pieverse connection error: {e}")
+        except Exception as e:
+            logger.exception(f"Pieverse verify error: {e}")
+            return self._format_error(f"Pieverse internal error: {e}")
+
+    async def health(self) -> bool:
+        try:
+            timeout = aiohttp.ClientTimeout(total=10)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                headers = {"X-API-Key": self._config.pieverse_api_key} if self._config.pieverse_api_key else {}
+                async with session.get(self._config.pieverse_verify_url.replace("/verify", "/health"), headers=headers) as resp:
+                    return resp.status < 500
+        except Exception as e:
+            logger.warning(f"Pieverse health check failed: {e}")
+            return False
+
+    async def settle(self, payment_data: Dict[str, Any]) -> SettlementResult:
+        try:
+            timeout = aiohttp.ClientTimeout(total=30)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.post(
+                    self._config.pieverse_settle_url,
+                    json={"paymentData": payment_data},
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-API-Key": self._config.pieverse_api_key,
+                    },
+                ) as resp:
+                    data = await resp.json()
+                    if resp.status == 200:
+                        return SettlementResult(
+                            settled=True,
+                            settlement_id=data.get("settlementId"),
+                            tx_hash=data.get("txHash"),
+                            chain="bsc",
+                            facilitator=self.name,
+                            reason="Settled via Pieverse",
+                        )
+                    return SettlementResult(
+                        settled=False,
+                        reason=f"Pieverse settle failed: {data.get('error', 'HTTP ' + str(resp.status))}",
+                        facilitator=self.name,
+                    )
+        except Exception as e:
+            return SettlementResult(settled=False, reason=f"Pieverse settlement error: {e}", facilitator=self.name)
