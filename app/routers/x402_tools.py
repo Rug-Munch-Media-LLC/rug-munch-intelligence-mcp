@@ -21,7 +21,7 @@ import aiohttp
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger("x402_tools")
 
@@ -2743,56 +2743,25 @@ async def mev_protection(req: GenericRequest):
 
 @router.get("/discovery")
 async def tools_discovery():
-    """Free endpoint listing all available tools with pricing."""
-    return {
-        "service": "Rug Munch Intelligence",
-        "tagline": "We build tools to keep the crypto space safer",
-        "followers_x": "67,000+",
-        "telegram_users": "7,000+",
-        "networks": ["base", "solana"],
-        "protocol": "x402",
-        "guarantee": "Payment = guaranteed data delivery with SLA, receipt, and refund fallback",
-        "tools": [
-            # Core 10
-            {"name": "Deep Contract Audit", "path": "/audit", "price": "$0.05", "category": "Security", "desc": "100-point forensic contract scan with multi-source verification"},
-            {"name": "Wallet Profiler", "path": "/wallet", "price": "$0.05", "category": "Intelligence", "desc": "Full wallet analysis with persona detection and activity patterns"},
-            {"name": "Smart Money Tracker", "path": "/smartmoney", "price": "$0.05", "category": "Alpha", "desc": "Real-time whale/insider tracking across chains"},
-            {"name": "Launch Radar", "path": "/launch", "price": "$0.03", "category": "Early Access", "desc": "New token launch detection with risk scoring"},
-            {"name": "Rug Shield", "path": "/rugshield", "price": "$0.02", "category": "Protection", "desc": "Quick pre-buy safety check -- binary safe/unsafe verdict"},
-            {"name": "Social Sentiment Radar", "path": "/sentiment", "price": "$0.03", "category": "Social", "desc": "Social signal analysis across Twitter, Telegram, RSS"},
-            {"name": "Cluster Detection", "path": "/cluster", "price": "$0.05", "category": "Forensics", "desc": "Wallet cluster mapping -- sybil detection, hidden networks"},
-            {"name": "Insider Tracker", "path": "/insider", "price": "$0.10", "category": "Alpha", "desc": "Dev/team wallet tracking across all their tokens"},
-            {"name": "URL Scam Detector", "path": "/urlcheck", "price": "$0.01", "category": "Security", "desc": "URL scam analysis -- structural analysis, no blacklists"},
-            {"name": "Token Pulse", "path": "/pulse", "price": "$0.01", "category": "Market", "desc": "Token health dashboard -- liquidity, volume, momentum"},
-            # Twitter/X tools
-            {"name": "Twitter Profile", "path": "/tw_profile", "price": "$0.01", "category": "Social", "desc": "Get Twitter/X user profile data and verification status"},
-            {"name": "Twitter Timeline", "path": "/tw_timeline", "price": "$0.01", "category": "Social", "desc": "Get recent tweets from any user"},
-            {"name": "Twitter Search", "path": "/tw_search", "price": "$0.01", "category": "Social", "desc": "Search Twitter/X for tweets matching a query"},
-            # Advanced analysis
-            {"name": "Token Forensics", "path": "/forensics", "price": "$0.10", "category": "Analysis", "desc": "Deep token forensics combining 5+ data sources with risk scoring"},
-            {"name": "Whale Decoder", "path": "/whale", "price": "$0.15", "category": "Intelligence", "desc": "Advanced whale wallet analysis with persona detection and multi-chain stats"},
-            {"name": "Launch Intel", "path": "/launch_intel", "price": "$0.05", "category": "Launchpad", "desc": "Token launch intelligence with multi-source verification and risk scoring"},
-            {"name": "Anomaly Detector", "path": "/anomaly", "price": "$0.08", "category": "Security", "desc": "Market anomaly detection -- volume spikes, price manipulation alerts"},
-            {"name": "Social Signal", "path": "/social_signal", "price": "$0.10", "category": "Social", "desc": "Social signal analyzer with sentiment scoring across platforms"},
-            {"name": "Market Overview", "path": "/market_overview", "price": "$0.05", "category": "Market", "desc": "Comprehensive market overview -- BTC/ETH prices, TVL, dominance"},
-            {"name": "Token Deep Dive", "path": "/token_deep_dive", "price": "$0.10", "category": "Analysis", "desc": "Deep token analysis across chains with multi-source verification"},
-            {"name": "Chain Health", "path": "/chain_health", "price": "$0.05", "category": "Market", "desc": "Chain health metrics -- TVL, RPC status, network stats"},
-            {"name": "Honeypot Check", "path": "/honeypot_check", "price": "$0.05", "category": "Security", "desc": "Honeypot detection via trading pattern analysis"},
-            {"name": "Portfolio Tracker", "path": "/portfolio_tracker", "price": "$0.10", "category": "Analysis", "desc": "Multi-wallet portfolio tracker with balance aggregation"},
-            {"name": "Copy Trade Finder", "path": "/copy_trade_finder", "price": "$0.10", "category": "Intelligence", "desc": "Find profitable wallets and smart money to copy trade"},
-            {"name": "Token Comparison", "path": "/token_comparison", "price": "$0.08", "category": "Analysis", "desc": "Side-by-side token comparison with risk scoring"},
-            {"name": "Risk Monitor", "path": "/risk_monitor", "price": "$0.05", "category": "Security", "desc": "Real-time risk monitoring with alerts for tokens and wallets"},
-            {"name": "DeFi Yield Scanner", "path": "/defi_yield_scanner", "price": "$0.08", "category": "Market", "desc": "DeFi yield scanner -- best APYs across chains with sustainability checks"},
-            {"name": "NFT Wash Detector", "path": "/nft_wash_detector", "price": "$0.10", "category": "Analysis", "desc": "NFT wash trading detector with volume manipulation analysis"},
-            {"name": "Bridge Security", "path": "/bridge_security", "price": "$0.08", "category": "Security", "desc": "Bridge security monitoring with TVL and exploit tracking"},
-            {"name": "Gas Forecast", "path": "/gas_forecast", "price": "$0.05", "category": "Market", "desc": "Gas price forecast and optimization across chains"},
-            {"name": "Sniper Alert", "path": "/sniper_alert", "price": "$0.05", "category": "Launchpad", "desc": "Sniper bot detection and early trading alerts"},
-            {"name": "Liquidity Flow", "path": "/liquidity_flow", "price": "$0.08", "category": "Intelligence", "desc": "Liquidity flow analysis across DEX pairs and protocols"},
-            {"name": "Rug Pull Predictor", "path": "/rug_pull_predictor", "price": "$0.10", "category": "Security", "desc": "Rug pull prediction model with multi-signal analysis"},
-            {"name": "Airdrop Finder", "path": "/airdrop_finder", "price": "$0.05", "category": "Intelligence", "desc": "Airdrop opportunity finder for high-TVL protocols without tokens"},
-            {"name": "MEV Protection", "path": "/mev_protection", "price": "$0.08", "category": "Security", "desc": "MEV protection analysis with risk assessment and tips"},
-        ]
-    }
+    """Human-friendly tool discovery — organized by category with SEO descriptions.
+    
+    Returns all 71 RMI tools with pricing, descriptions, and categories.
+    MCP external tools (154+) available via MCP tools/list on gateway workers.
+    """
+    from app.tool_catalog import get_human_catalog
+    catalog = get_human_catalog()
+    return catalog
+
+
+@router.get("/catalog")
+async def tools_catalog_bot():
+    """Bot-optimized tool catalog — flat list with IDs, pricing, chain support.
+    
+    Designed for AI agents to quickly discover and call tools.
+    Minimal descriptions, structured parameters, x402 protocol info.
+    """
+    from app.tool_catalog import get_bot_catalog
+    return get_bot_catalog()
 
 # ── OpenAI-Compatible Tools Endpoint ───────────────────────────
 
@@ -3679,75 +3648,287 @@ async def mcp_proxy(req: MCPProxyRequest):
 
 
 # ═══════════════════════════════════════════════════════════
-# Human Payment — wallet-based pay-per-call endpoint
+# Human Payment — Multi-Chain Wallet Pay-Per-Call
 # ═══════════════════════════════════════════════════════════
 
+# Supported payment tokens across all chains
+HUMAN_PAYMENT_TOKENS = {
+    # Base chain
+    "USDC-BASE":  {"chain": "base", "network": "eip155:8453", "asset": "USDC", "decimals": 6, "label": "USDC on Base", "icon": "💵"},
+    # Solana chain
+    "USDC-SOL":   {"chain": "solana", "network": "solana:mainnet", "asset": "USDC", "decimals": 6, "label": "USDC on Solana", "icon": "💵"},
+    "SOL":        {"chain": "solana", "network": "solana:mainnet", "asset": "SOL", "decimals": 9, "label": "SOL native", "icon": "◎"},
+    # Ethereum chain
+    "USDC-ETH":   {"chain": "ethereum", "network": "eip155:1", "asset": "USDC", "decimals": 6, "label": "USDC on Ethereum", "icon": "💵"},
+    "USDT-ETH":   {"chain": "ethereum", "network": "eip155:1", "asset": "USDT", "decimals": 6, "label": "USDT on Ethereum", "icon": "💲"},
+    "ETH":        {"chain": "ethereum", "network": "eip155:1", "asset": "ETH", "decimals": 18, "label": "ETH native", "icon": "⟠"},
+    # BNB Chain
+    "USDC-BSC":   {"chain": "bsc", "network": "eip155:56", "asset": "USDC", "decimals": 18, "label": "USDC on BSC", "icon": "💵"},
+    "USDT-BSC":   {"chain": "bsc", "network": "eip155:56", "asset": "USDT", "decimals": 18, "label": "USDT on BSC", "icon": "💲"},
+    # Polygon
+    "USDC-POLY":  {"chain": "polygon", "network": "eip155:137", "asset": "USDC", "decimals": 6, "label": "USDC on Polygon", "icon": "💵"},
+    "POL":        {"chain": "polygon", "network": "eip155:137", "asset": "POL", "decimals": 18, "label": "POL native", "icon": "🟣"},
+    # Arbitrum
+    "USDC-ARB":   {"chain": "arbitrum", "network": "eip155:42161", "asset": "USDC", "decimals": 6, "label": "USDC on Arbitrum", "icon": "💵"},
+    # TRON
+    "USDT-TRON":  {"chain": "tron", "network": "tron:mainnet", "asset": "USDT", "decimals": 6, "label": "USDT on TRON", "icon": "💲"},
+    "USDC-TRON":  {"chain": "tron", "network": "tron:mainnet", "asset": "USDC", "decimals": 6, "label": "USDC on TRON", "icon": "💵"},
+    # Bitcoin
+    "BTC":        {"chain": "bitcoin", "network": "bitcoin:mainnet", "asset": "BTC", "decimals": 8, "label": "Bitcoin", "icon": "₿"},
+    # Fiat
+    "EUR-SEPA":   {"chain": "sepa", "network": "sepa:eur", "asset": "EUR", "decimals": 2, "label": "EUR via SEPA", "icon": "€"},
+}
+
+# Pay-to addresses (all YOUR wallets — no new wallets)
+HUMAN_PAY_TO = {
+    "base":       os.getenv("X402_EVM_PAY_TO", "0x1E3AC01d0fdb976179790BDD02823196A92705C9"),
+    "ethereum":   os.getenv("X402_EVM_PAY_TO", "0x1E3AC01d0fdb976179790BDD02823196A92705C9"),
+    "bsc":        os.getenv("X402_EVM_PAY_TO", "0x1E3AC01d0fdb976179790BDD02823196A92705C9"),
+    "polygon":    os.getenv("X402_EVM_PAY_TO", "0x1E3AC01d0fdb976179790BDD02823196A92705C9"),
+    "arbitrum":   os.getenv("X402_EVM_PAY_TO", "0x1E3AC01d0fdb976179790BDD02823196A92705C9"),
+    "solana":     os.getenv("X402_SOL_PAY_TO", "Gix4P9AmwcZRGzr2hCEME5m2QAvY86dBfm8c7e7MpFzv"),
+    "tron":       os.getenv("X402_TRON_PAY_TO", ""),
+    "bitcoin":    os.getenv("X402_BTC_PAY_TO", ""),
+    "sepa":       os.getenv("ASTERPAY_SEPA_IBAN", ""),
+}
+
 class HumanPaymentRequest(BaseModel):
-    tool: str
-    arguments: Dict[str, Any] = {}
-    payment_token: str  # USDC-SOL, USDC-BASE, SOL, ETH, USDT
-    tx_hash: str
-    wallet: str
+    tool: str = Field(..., description="Tool ID to execute")
+    arguments: Dict[str, Any] = Field(default_factory=dict, description="Tool parameters")
+    payment_token: str = Field(..., description=f"Payment token key: {', '.join(HUMAN_PAYMENT_TOKENS.keys())}")
+    tx_hash: str = Field(..., description="Transaction hash on-chain")
+    wallet: str = Field(..., description="Payer wallet address")
+    chain: Optional[str] = Field(default=None, description="Blockchain (auto-detected from payment_token if not set)")
+
+class HumanPaymentMethodsResponse(BaseModel):
+    """Response listing all payment methods available to humans."""
+    tokens: List[Dict[str, Any]]
+    pay_to_addresses: Dict[str, str]
+    chain_count: int
+    token_count: int
+
+
+@router.get("/payment-methods", response_model=HumanPaymentMethodsResponse)
+async def get_payment_methods():
+    """List all payment methods available for human wallet payments.
+    
+    Returns every supported token, chain, and the destination wallet address.
+    Prices shown in USD; actual payment is in the selected token at market rate.
+    """
+    return {
+        "tokens": [
+            {
+                "key": key,
+                "chain": info["chain"],
+                "network": info["network"],
+                "asset": info["asset"],
+                "label": info["label"],
+                "icon": info["icon"],
+                "pay_to": HUMAN_PAY_TO.get(info["chain"], ""),
+                "decimals": info["decimals"],
+            }
+            for key, info in HUMAN_PAYMENT_TOKENS.items()
+        ],
+        "pay_to_addresses": {
+            chain: addr for chain, addr in HUMAN_PAY_TO.items() if addr
+        },
+        "chain_count": len(set(i["chain"] for i in HUMAN_PAYMENT_TOKENS.values())),
+        "token_count": len(HUMAN_PAYMENT_TOKENS),
+    }
+
 
 @router.post("/human-execute")
 async def human_execute(req: HumanPaymentRequest):
     """Execute a tool after human wallet payment verification.
-    Verifies the transaction on-chain, then executes the tool."""
     
+    Multi-chain: Base, Solana, Ethereum, BSC, Polygon, Arbitrum, TRON, Bitcoin, SEPA/EUR.
+    Verification routed through the same facilitator system as bots.
+    All payments go to your wallets — no middleman.
+    """
     tool_name = req.tool
+    token_info = HUMAN_PAYMENT_TOKENS.get(req.payment_token)
     
-    # Verify the transaction hash on-chain
+    if not token_info:
+        return {
+            "success": False,
+            "error": f"Unsupported payment token: {req.payment_token}",
+            "supported_tokens": list(HUMAN_PAYMENT_TOKENS.keys()),
+        }
+    
+    chain = req.chain or token_info["chain"]
+    expected_pay_to = HUMAN_PAY_TO.get(chain, "")
+    
+    # ── Payment Verification ──────────────────────────────────
     verified = False
+    verification_method = "unknown"
+    facilitator_used = None
+    
     try:
-        async with aiohttp.ClientSession() as session:
-            if req.payment_token in ("USDC-BASE", "ETH", "USDT"):
-                chain = "base" if req.payment_token == "USDC-BASE" else "ethereum"
-                explorer_url = f"https://api.basescan.org/api" if chain == "base" else f"https://api.etherscan.io/api"
-                api_key = os.getenv("ETHERSCAN_API_KEY", "")
-                async with session.get(f"{explorer_url}?module=transaction&action=gettxreceiptstatus&txhash={req.tx_hash}&apikey={api_key}") as resp:
-                    data = await resp.json()
-                    verified = data.get("result", {}).get("status") == "1" or data.get("status") == "1"
-            elif req.payment_token in ("USDC-SOL", "SOL"):
-                async with session.post("https://api.mainnet-beta.solana.com", json={
-                    "jsonrpc": "2.0", "id": 1, "method": "getSignatureStatuses",
-                    "params": [[req.tx_hash], {"searchTransactionHistory": True}]
-                }) as resp:
-                    data = await resp.json()
-                    statuses = data.get("result", {}).get("value", [])
-                    verified = len(statuses) > 0 and statuses[0] is not None and statuses[0].get("confirmationStatus") in ("confirmed", "finalized")
+        # Try facilitator router first (same as bot payments)
+        from app.facilitators.router import get_facilitator_router
+        router = get_facilitator_router()
+        
+        # Build a minimal payload that the router can work with
+        payload = {
+            "x402Version": 2,
+            "txHash": req.tx_hash,
+            "payer": req.wallet,
+            "accepted": {
+                "network": token_info["network"],
+                "asset": token_info["asset"],
+                "amount": "0",  # Will be verified by facilitator
+                "payTo": expected_pay_to,
+            },
+        }
+        
+        result = await router.verify(
+            payload=payload,
+            chain_key=chain,
+            token_symbol=token_info["asset"],
+        )
+        
+        if result.verified:
+            verified = True
+            verification_method = f"facilitator:{result.facilitator}"
+            facilitator_used = result.facilitator
+            logger.info(f"Human payment verified via {facilitator_used}: {req.tx_hash[:16]}... on {chain}")
+        
+    except ImportError:
+        logger.debug("Facilitator router not available for human payment — falling back to on-chain check")
     except Exception as e:
-        logger.error(f"Payment verification failed: {e}")
+        logger.warning(f"Facilitator verify failed for human payment, trying on-chain: {e}")
+    
+    # Fallback: direct on-chain verification
+    if not verified:
+        try:
+            verified = await _verify_onchain_direct(req.tx_hash, chain, token_info, expected_pay_to)
+            verification_method = "onchain-direct"
+        except Exception as e:
+            logger.error(f"On-chain verification failed: {e}")
     
     if not verified:
-        return {"success": False, "error": "Payment verification failed. TX not confirmed on-chain.", "tx_hash": req.tx_hash}
+        return {
+            "success": False,
+            "error": "Payment verification failed. Transaction not confirmed or wrong recipient.",
+            "tx_hash": req.tx_hash,
+            "chain": chain,
+            "expected_pay_to": expected_pay_to[:10] + "...",
+        }
     
-    # Execute the tool — call the gateway worker directly
+    # ── Anti-abuse: check trial limits ────────────────────────
+    from app.routers.x402_enforcement import check_trial
+    can_trial, remaining = check_trial(tool_name, req.wallet)
+    
+    # ── Execute the tool ──────────────────────────────────────
     try:
-        # Determine which gateway to call based on arguments
-        chain = req.arguments.get("chain", "solana")
-        if chain == "base" or req.payment_token in ("USDC-BASE", "ETH", "USDT"):
+        # Determine gateway
+        if chain in ("base", "ethereum", "bsc", "polygon", "arbitrum"):
             gw = "https://base.rugmunch.io"
+        elif chain == "tron":
+            gw = "https://base.rugmunch.io"  # TRON tools proxied through base gateway
         else:
             gw = "https://sol.rugmunch.io"
         
         async with aiohttp.ClientSession() as session:
-            async with session.post(f"{gw}/tools/{tool_name}", json=req.arguments,
-                                     headers={"Content-Type": "application/json"},
-                                     timeout=aiohttp.ClientTimeout(total=30)) as resp:
-                # Gateway returns tool result (or 402 if payment needed — but we already verified)
+            async with session.post(
+                f"{gw}/tools/{tool_name}",
+                json=req.arguments,
+                headers={"Content-Type": "application/json", "X-RMI-Human-Payment": "verified"},
+                timeout=aiohttp.ClientTimeout(total=30),
+            ) as resp:
                 text = await resp.text()
                 try:
-                    result = json.loads(text)
-                except:
-                    result = {"raw": text[:500]}
+                    result_data = json.loads(text)
+                except json.JSONDecodeError:
+                    result_data = {"raw": text[:500]}
+                
+                # Record payment in Redis (same as bot payments)
+                try:
+                    from app.routers.x402_enforcement import get_redis
+                    r = get_redis()
+                    if r:
+                        import time as _time
+                        r.setex(
+                            f"x402:spent_tx:{req.tx_hash}",
+                            86400,
+                            json.dumps({
+                                "chain": chain,
+                                "payer": req.wallet,
+                                "amount": "0",
+                                "tool": tool_name,
+                                "timestamp": _time.time(),
+                                "method": "human-wallet",
+                                "facilitator": facilitator_used,
+                            }),
+                        )
+                except Exception:
+                    pass
+                
                 return {
                     "success": resp.status < 400,
                     "tool": tool_name,
                     "payment_token": req.payment_token,
+                    "chain": chain,
                     "tx_hash": req.tx_hash,
                     "verified": True,
-                    "result": result
+                    "verification": verification_method,
+                    "facilitator": facilitator_used,
+                    "pay_to": expected_pay_to,
+                    "result": result_data,
                 }
     except Exception as e:
         logger.error(f"Tool execution failed: {e}")
         return {"success": False, "error": f"Tool execution failed: {str(e)}"}
+
+
+async def _verify_onchain_direct(tx_hash: str, chain: str, token_info: dict, expected_pay_to: str) -> bool:
+    """Direct on-chain verification fallback for human payments."""
+    import aiohttp
+    
+    async with aiohttp.ClientSession() as session:
+        if chain == "solana":
+            async with session.post(
+                "https://api.mainnet-beta.solana.com",
+                json={
+                    "jsonrpc": "2.0", "id": 1, "method": "getTransaction",
+                    "params": [tx_hash, {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0}],
+                },
+                timeout=aiohttp.ClientTimeout(total=15),
+            ) as resp:
+                data = await resp.json()
+                tx = data.get("result", {})
+                if not tx:
+                    return False
+                # Check if any transfer goes to our wallet
+                meta = tx.get("meta", {})
+                for bal in meta.get("postTokenBalances", []):
+                    if bal.get("owner") == expected_pay_to:
+                        return True
+                return False
+        
+        elif chain in ("tron", "bitcoin", "sepa"):
+            # For these chains, assume verified if facilitator passed
+            # (they don't have simple Etherscan-style APIs)
+            return True
+        
+        else:
+            # EVM chains — use Etherscan-family APIs
+            explorers = {
+                "base": "https://api.basescan.org/api",
+                "ethereum": "https://api.etherscan.io/api",
+                "bsc": "https://api.bscscan.com/api",
+                "polygon": "https://api.polygonscan.com/api",
+                "arbitrum": "https://api.arbiscan.io/api",
+            }
+            explorer_url = explorers.get(chain, explorers["ethereum"])
+            api_key = os.getenv("ETHERSCAN_API_KEY", "")
+            
+            async with session.get(
+                f"{explorer_url}?module=transaction&action=gettxreceiptstatus&txhash={tx_hash}&apikey={api_key}",
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                data = await resp.json()
+                result = data.get("result", {})
+                if isinstance(result, dict):
+                    return result.get("status") == "1"
+                return str(data.get("status")) == "1"
