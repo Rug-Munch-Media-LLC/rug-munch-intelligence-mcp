@@ -59,7 +59,9 @@ _catalog_cache: Dict = {}
 
 
 def parse_gateway_tools(gateway_dir: str) -> List[Dict]:
-    """Parse RMI_TOOLS definitions from a gateway index.ts file"""
+    """Parse RMI_TOOLS definitions from a gateway index.ts file.
+    
+    Handles nested braces by tracking brace depth."""
     index_path = os.path.join(gateway_dir, "index.ts")
     if not os.path.exists(index_path):
         return []
@@ -68,21 +70,63 @@ def parse_gateway_tools(gateway_dir: str) -> List[Dict]:
         content = f.read()
     
     tools = []
-    # Find each tool definition block: word: { ... }
-    # Match the tool ID and capture everything between { and the matching }
-    tool_blocks = re.finditer(r'(\w+):\s*(\{[^}]+\})', content)
     
-    for match in tool_blocks:
-        tool_id = match.group(1)
-        block = match.group(2)
+    # Find the RMI_TOOLS block
+    rmi_start = content.find("const RMI_TOOLS")
+    if rmi_start == -1:
+        return []
+    
+    # Find opening brace of RMI_TOOLS
+    brace_start = content.find("{", rmi_start)
+    if brace_start == -1:
+        return []
+    
+    # Find matching closing brace by tracking depth
+    depth = 0
+    pos = brace_start
+    while pos < len(content):
+        if content[pos] == '{':
+            depth += 1
+        elif content[pos] == '}':
+            depth -= 1
+            if depth == 0:
+                break
+        pos += 1
+    
+    rmi_block = content[brace_start:pos+1]
+    
+    # Now parse individual tool definitions within the block
+    # Tools look like:  tool_name: { name: "...", description: "...", ... }
+    # We need to handle nested braces in extras
+    
+    # Split into tool entries by finding top-level 'word:' patterns
+    tool_pattern = re.compile(r'(\w+):\s*\{', re.MULTILINE)
+    
+    for tm in tool_pattern.finditer(rmi_block):
+        tool_id = tm.group(1)
         
-        # Skip non-tool blocks (interface, type, etc.)
+        # Skip non-tool entries
         if tool_id in ('interface', 'type', 'export', 'import', 'const', 'let', 'var'):
             continue
         if tool_id.startswith('//') or tool_id.startswith('RMI_TOOLS'):
             continue
         
-        # Extract individual fields
+        # Find the matching closing brace for this tool
+        tool_start = tm.end() - 1  # position of opening {
+        depth = 0
+        tool_end = tool_start
+        for i in range(tool_start, len(rmi_block)):
+            if rmi_block[i] == '{':
+                depth += 1
+            elif rmi_block[i] == '}':
+                depth -= 1
+                if depth == 0:
+                    tool_end = i + 1
+                    break
+        
+        block = rmi_block[tool_start:tool_end]
+        
+        # Extract fields
         name = re.search(r'name:\s*"([^"]*)"', block)
         desc = re.search(r'description:\s*"([^"]*)"', block)
         price = re.search(r'price:\s*"\$?([^"]*)"', block)
@@ -98,6 +142,7 @@ def parse_gateway_tools(gateway_dir: str) -> List[Dict]:
                 "description": desc.group(1) if desc else "",
                 "price": f"${price.group(1)}" if price else "$0",
                 "priceUsd": float(price.group(1)) if price else 0,
+                "priceAtomic": atomic.group(1) if atomic else "0",
                 "category": category.group(1).lower(),
                 "trialFree": int(trial.group(1)) if trial else 0,
                 "method": method.group(1) if method else "POST",
@@ -109,22 +154,88 @@ def parse_gateway_tools(gateway_dir: str) -> List[Dict]:
 
 
 def load_external_mcp_tools() -> List[Dict]:
-    """Load expanded external MCP tool definitions"""
+    """Load expanded external MCP tool definitions.
+    
+    Priority:
+    1. Local expanded_mcp_catalog.py file (fast, offline)
+    2. mcp-router.rugmunch.io/tools (live, always current)
+    3. Returns empty list if both unavailable
+    """
     base_dir = os.path.dirname(os.path.dirname(__file__))
     catalog_path = os.path.join(base_dir, "services", "expanded_mcp_catalog.py")
-    if not os.path.exists(catalog_path):
-        return []
     
+    # Try local file first
+    if os.path.exists(catalog_path):
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("expanded_mcp_catalog", catalog_path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            tools = getattr(module, "EXTERNAL_MCP_TOOLS", [])
+            if tools:
+                logger.info(f"Loaded {len(tools)} tools from expanded_mcp_catalog.py")
+                return tools
+        except Exception as e:
+            logger.warning(f"Failed to load expanded_mcp_catalog.py: {e}")
+    
+    # Fallback: fetch from mcp-router dynamically
     try:
-        # Read and exec to get EXTERNAL_MCP_TOOLS
-        import importlib.util
-        spec = importlib.util.spec_from_file_location("expanded_mcp_catalog", catalog_path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        return getattr(module, "EXTERNAL_MCP_TOOLS", [])
+        import urllib.request, json as _json
+        url = "https://mcp-router.rugmunch.io/tools"
+        req = urllib.request.Request(url, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = _json.loads(resp.read())
+        
+        tools = []
+        # mcp-router returns service groups, each with tools
+        if isinstance(data, dict):
+            services = data.get("services", data.get("tools", data))
+            if isinstance(services, list):
+                for service in services:
+                    service_name = service.get("name", service.get("service", "unknown"))
+                    service_tools = service.get("tools", [])
+                    if isinstance(service_tools, list):
+                        for t in service_tools:
+                            tool_id = t.get("name", t.get("id", ""))
+                            if tool_id:
+                                tools.append({
+                                    "id": tool_id,
+                                    "name": t.get("description", tool_id),
+                                    "description": t.get("description", f"MCP tool: {tool_id}"),
+                                    "price": "$0.01",
+                                    "priceUsd": 0.01,
+                                    "category": "mcp-external",
+                                    "trialFree": 3,
+                                    "method": "MCP",
+                                    "service": service_name,
+                                    "source": "mcp-router",
+                                    "chains": ["SOLANA", "BASE"],
+                                })
+                    else:
+                        # Flat tool list
+                        for key, val in service.items():
+                            if isinstance(val, dict) and "name" in val:
+                                tools.append({
+                                    "id": key,
+                                    "name": val.get("name", key),
+                                    "description": val.get("description", ""),
+                                    "price": "$0.01",
+                                    "priceUsd": 0.01,
+                                    "category": "mcp-external",
+                                    "trialFree": 3,
+                                    "method": "MCP",
+                                    "service": service_name,
+                                    "source": "mcp-router",
+                                    "chains": ["SOLANA", "BASE"],
+                                })
+        
+        if tools:
+            logger.info(f"Loaded {len(tools)} tools from mcp-router dynamically")
+            return tools
     except Exception as e:
-        logger.error(f"Failed to load external MCP catalog: {e}")
-        return []
+        logger.warning(f"Failed to fetch from mcp-router: {e}")
+    
+    return []
 
 
 def discover_route_tools() -> List[Dict]:
@@ -164,7 +275,24 @@ def discover_route_tools() -> List[Dict]:
 def get_catalog():
     """Build full tool catalog from all gateways + external MCP servers"""
     # Always rebuild (no stale caching)
-    gateway_base = "/app/x402-gateway"
+    base_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+    
+    # Auto-detect gateway path (Docker: /app/x402-gateway, Local: /root/backend/x402-gateway)
+    candidates = [
+        "/app/x402-gateway",                                    # Docker
+        os.path.join(base_dir, "x402-gateway"),                 # sibling of app/
+        os.path.join(os.path.dirname(base_dir), "x402-gateway"),# parent of app/
+        "/root/backend/x402-gateway",                           # canonical local
+    ]
+    gateway_base = None
+    for c in candidates:
+        if os.path.isdir(c):
+            gateway_base = c
+            break
+    
+    if not gateway_base:
+        logger.warning("No x402-gateway directory found")
+        gateway_base = "/app/x402-gateway"  # fallback for Docker
     chains = {}
     all_tools = {}  # Dedup by tool id
     services = set()
