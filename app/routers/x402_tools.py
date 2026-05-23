@@ -3676,3 +3676,77 @@ async def mcp_proxy(req: MCPProxyRequest):
     except Exception as e:
         logger.error(f"MCP proxy failed for {svc}/{tool}: {e}")
         return {"service": svc, "tool": tool, "status": "error", "error": str(e), "note": "Direct external API calls failed — try REST endpoint for cached/fallback data"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Human Payment — wallet-based pay-per-call endpoint
+# ═══════════════════════════════════════════════════════════
+
+class HumanPaymentRequest(BaseModel):
+    tool: str
+    arguments: Dict[str, Any] = {}
+    payment_token: str  # USDC-SOL, USDC-BASE, SOL, ETH, USDT
+    tx_hash: str
+    wallet: str
+
+@router.post("/human-execute")
+async def human_execute(req: HumanPaymentRequest):
+    """Execute a tool after human wallet payment verification.
+    Verifies the transaction on-chain, deducts from trial balance or checks payment."""
+    
+    tool_name = req.tool
+    tool = RMI_TOOLS.get(tool_name)
+    if not tool:
+        return {"success": False, "error": f"Unknown tool: {tool_name}"}
+    
+    # Verify the transaction hash on-chain
+    verified = False
+    try:
+        # Simple verification — check if tx exists and has confirmations
+        async with aiohttp.ClientSession() as session:
+            if req.payment_token in ("USDC-BASE", "ETH", "USDT"):
+                # Check Base/Ethereum tx
+                chain = "base" if req.payment_token == "USDC-BASE" else "ethereum"
+                explorer_url = f"https://api.basescan.org/api" if chain == "base" else f"https://api.etherscan.io/api"
+                api_key = os.getenv("ETHERSCAN_API_KEY", "")
+                async with session.get(f"{explorer_url}?module=transaction&action=gettxreceiptstatus&txhash={req.tx_hash}&apikey={api_key}") as resp:
+                    data = await resp.json()
+                    verified = data.get("result", {}).get("status") == "1" or data.get("status") == "1"
+            elif req.payment_token in ("USDC-SOL", "SOL"):
+                # Check Solana tx via Helius or public RPC
+                async with session.post("https://api.mainnet-beta.solana.com", json={
+                    "jsonrpc": "2.0", "id": 1, "method": "getSignatureStatuses",
+                    "params": [[req.tx_hash], {"searchTransactionHistory": True}]
+                }) as resp:
+                    data = await resp.json()
+                    statuses = data.get("result", {}).get("value", [])
+                    verified = len(statuses) > 0 and statuses[0] is not None and statuses[0].get("confirmationStatus") in ("confirmed", "finalized")
+    except Exception as e:
+        logger.error(f"Payment verification failed: {e}")
+    
+    if not verified:
+        return {"success": False, "error": "Transaction verification failed. Please check the tx hash and try again.", "cost": tool.get("price", "$0.01")}
+    
+    # Execute the tool via the REST endpoint
+    try:
+        args = req.arguments
+        base_url = os.getenv("BACKEND_API", "https://rugmunch.io")
+        
+        # Route to appropriate tool execution endpoint
+        tool_endpoint = f"{base_url}/api/v1/x402-tools/{tool_name}"
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(tool_endpoint, json=args, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                result = await resp.json()
+                return {
+                    "success": True,
+                    "tool": tool_name,
+                    "cost": tool.get("price", "$0.01"),
+                    "payment_token": req.payment_token,
+                    "tx_hash": req.tx_hash,
+                    "verified": True,
+                    "result": result
+                }
+    except Exception as e:
+        logger.error(f"Tool execution failed: {e}")
+        return {"success": False, "error": f"Tool execution failed: {str(e)}", "cost": tool.get("price", "$0.01")}
