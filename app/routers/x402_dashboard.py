@@ -139,6 +139,8 @@ def _aggregate_payment_stats(r) -> Dict[str, Any]:
     total_earnings_atoms = 0
     earnings_by_chain: Dict[str, int] = defaultdict(int)
     earnings_by_tool: Dict[str, int] = defaultdict(int)
+    tool_usage: Dict[str, int] = defaultdict(int)
+    tool_revenue: Dict[str, int] = defaultdict(int)
     unique_payers = set()
     all_payments = []  # For daily breakdown
     
@@ -151,17 +153,21 @@ def _aggregate_payment_stats(r) -> Dict[str, Any]:
                 amount = int(data.get("amount", "0") or "0")
                 chain = data.get("chain", "unknown")
                 payer = data.get("payer", "unknown")
+                tool = data.get("tool", "unknown")
                 timestamp = data.get("timestamp", 0)
                 
                 total_earnings_atoms += amount
                 earnings_by_chain[chain] += amount
-                # Tool info not in spent_tx; we track usage separately
+                if tool and tool != "unknown":
+                    tool_usage[tool] += 1
+                    tool_revenue[tool] += amount
                 if payer and payer != "unknown":
                     unique_payers.add(payer)
                 
                 all_payments.append({
                     "amount": amount,
                     "chain": chain,
+                    "tool": tool,
                     "payer": payer,
                     "timestamp": timestamp,
                 })
@@ -170,10 +176,8 @@ def _aggregate_payment_stats(r) -> Dict[str, Any]:
         if cursor == 0:
             break
     
-    # Also check x402-tool:* keys (from record_x402_payment in x402_tools.py)
+    # Also check x402-tool:* keys (from old record_x402_payment) — tool stats only, no double-count
     cursor = 0
-    tool_usage: Dict[str, int] = defaultdict(int)
-    tool_revenue: Dict[str, int] = defaultdict(int)
     while True:
         cursor, keys = r.scan(cursor, match="x402-tool:*", count=500)
         for key in keys:
@@ -194,7 +198,7 @@ def _aggregate_payment_stats(r) -> Dict[str, Any]:
                 
                 tool_usage[tool] += 1
                 tool_revenue[tool] += amt_atoms
-                total_earnings_atoms += amt_atoms
+                # Don't add to total_earnings_atoms — already counted from spent_tx
                 
                 customer = data.get("customer", "")
                 if customer:
@@ -230,10 +234,10 @@ def _aggregate_payment_stats(r) -> Dict[str, Any]:
                     amt_atoms = 0
                 
                 tool_usage[tool] += 1
-                total_earnings_atoms += amt_atoms
+                # Don't double-count totals from receipt keys — spent_tx is canonical
                 tool_revenue[tool] += amt_atoms
                 if chain:
-                    earnings_by_chain[chain] += amt_atoms
+                    pass  # Don't double-count chain earnings
                 if customer:
                     unique_payers.add(customer)
             except Exception:
