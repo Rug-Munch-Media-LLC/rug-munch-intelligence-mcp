@@ -503,18 +503,35 @@ async def self_verify_evm_usdc(payload: dict, chain_key: str, chain_cfg: dict) -
             }
         
         # Mark as spent in Redis with 86400s (24h) TTL — prevents double-use within 24h window
+        tool_name = tool_id or "unknown"
         if r:
             spent_key = f"x402:spent_tx:{tx_hash}"
-            r.setex(spent_key, 86400, json.dumps({
+            payment_data = {
                 "chain": chain_key,
                 "payer": payer or "unknown",
                 "amount": actual_amount or amount_atoms or "0",
+                "tool": tool_name,
                 "timestamp": time.time(),
-            }))
+            }
+            r.setex(spent_key, 86400, json.dumps(payment_data))
+        
+        # Persist to Supabase (non-blocking)
+        try:
+            from app.routers.x402_dashboard import _persist_payment_to_supabase
+            asyncio.create_task(_persist_payment_to_supabase(
+                tool=tool_name,
+                amount_atoms=str(actual_amount or amount_atoms or "0"),
+                chain=chain_key,
+                payer=payer or "unknown",
+                tx_hash=tx_hash,
+                status="fulfilled",
+            ))
+        except Exception:
+            pass
         
         logger.info(
             f"Self-verified USDC payment: {tx_hash[:16]}... on {chain_key} "
-            f"from {payer[:10] if payer else 'unknown'}... amount={actual_amount or 'unknown'}"
+            f"from {payer[:10] if payer else 'unknown'}... amount={actual_amount or 'unknown'} tool={tool_name}"
         )
         return {
             "verified": True,

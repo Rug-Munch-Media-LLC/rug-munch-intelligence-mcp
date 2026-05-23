@@ -60,7 +60,7 @@
 - **154 MCP tools** from 28 data providers — DexScreener, Jupiter, Helius, Birdeye, CoinGecko, Nansen, Arkham, GMGN, Moralis, PumpFun, Raydium, DeFiLlama + 16 more
 - **1 Docker backend** — FastAPI at /root/backend/, mounted to rmi-backend container
 - **Cloudflare Tunnel** — rugmunch.io → rmi-backend:8000
-- **Source code** — github.com/Rug-Munch-Media-LLC/rugmuncher-backend (backend) + x402-gateway-solana + x402-gateway-base (workers)
+- **Source code** — github.com/Rug-Munch-Media-LLC/x402-gateway-solana (backend) + x402-gateway-solana + x402-gateway-base (workers)
 
 ### WORKER CODE LOCATION
 ```
@@ -420,7 +420,7 @@ curl -X POST https://sol.rugmunch.io/mcp -H 'Content-Type: application/json' \
 | **Telegram** | [t.me/cryptorugmunch](https://t.me/cryptorugmunch) | Main channel |
 | **Telegram Alerts** | [t.me/cryptorugmuncher](https://t.me/cryptorugmuncher) | Scam alerts + updates |
 | **GitHub Org** | [Rug-Munch-Media-LLC](https://github.com/Rug-Munch-Media-LLC) | All repos |
-| **GitHub Backend** | [rugmuncher-backend](https://github.com/Rug-Munch-Media-LLC/rugmuncher-backend) | Main repo |
+| **GitHub Backend** | [rugmuncher-backend](https://github.com/Rug-Munch-Media-LLC/x402-gateway-solana) | Main repo |
 | **Website** | [rugmunch.io](https://rugmunch.io) | Web app |
 | **Email** | biz@rugmunch.io | Business inquiries |
 
