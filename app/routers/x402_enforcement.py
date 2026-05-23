@@ -811,7 +811,9 @@ async def x402_enforcement_middleware(request: Request, call_next) -> Response:
     ]
     if any(bot in user_agent for bot in BLOCKED_AGENTS):
         # Allow curl/wget/etc for legitimate API use with x-pay header
-        if not (request.headers.get("x-pay") or request.headers.get("X-Pay")):
+        # Also allow human-execute endpoint (wallet-based payment, not x402)
+        is_human_execute = path.rstrip("/").endswith("/human-execute")
+        if not (request.headers.get("x-pay") or request.headers.get("X-Pay") or is_human_execute):
             return JSONResponse(
                 status_code=403,
                 content={"error": "Automated access requires x402 payment. Use x-pay header or a proper API client.", "docs": "https://rugmunch.io/docs"},
@@ -856,6 +858,7 @@ async def x402_enforcement_middleware(request: Request, call_next) -> Response:
     FREE_PATHS = {
         "/api/v1/x402-tools/discovery",
         "/api/v1/x402-tools/frameworks",
+        "/api/v1/x402-tools/human-execute",
         "/api/v1/x402/stats",
         "/api/v1/x402/trial-status",
         "/api/v1/x402/dashboard",

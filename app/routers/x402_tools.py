@@ -3692,20 +3692,15 @@ class HumanPaymentRequest(BaseModel):
 @router.post("/human-execute")
 async def human_execute(req: HumanPaymentRequest):
     """Execute a tool after human wallet payment verification.
-    Verifies the transaction on-chain, deducts from trial balance or checks payment."""
+    Verifies the transaction on-chain, then executes the tool."""
     
     tool_name = req.tool
-    tool = RMI_TOOLS.get(tool_name)
-    if not tool:
-        return {"success": False, "error": f"Unknown tool: {tool_name}"}
     
     # Verify the transaction hash on-chain
     verified = False
     try:
-        # Simple verification — check if tx exists and has confirmations
         async with aiohttp.ClientSession() as session:
             if req.payment_token in ("USDC-BASE", "ETH", "USDT"):
-                # Check Base/Ethereum tx
                 chain = "base" if req.payment_token == "USDC-BASE" else "ethereum"
                 explorer_url = f"https://api.basescan.org/api" if chain == "base" else f"https://api.etherscan.io/api"
                 api_key = os.getenv("ETHERSCAN_API_KEY", "")
@@ -3713,7 +3708,6 @@ async def human_execute(req: HumanPaymentRequest):
                     data = await resp.json()
                     verified = data.get("result", {}).get("status") == "1" or data.get("status") == "1"
             elif req.payment_token in ("USDC-SOL", "SOL"):
-                # Check Solana tx via Helius or public RPC
                 async with session.post("https://api.mainnet-beta.solana.com", json={
                     "jsonrpc": "2.0", "id": 1, "method": "getSignatureStatuses",
                     "params": [[req.tx_hash], {"searchTransactionHistory": True}]
@@ -3725,23 +3719,30 @@ async def human_execute(req: HumanPaymentRequest):
         logger.error(f"Payment verification failed: {e}")
     
     if not verified:
-        return {"success": False, "error": "Transaction verification failed. Please check the tx hash and try again.", "cost": tool.get("price", "$0.01")}
+        return {"success": False, "error": "Payment verification failed. TX not confirmed on-chain.", "tx_hash": req.tx_hash}
     
-    # Execute the tool via the REST endpoint
+    # Execute the tool — call the gateway worker directly
     try:
-        args = req.arguments
-        base_url = os.getenv("BACKEND_API", "https://rugmunch.io")
-        
-        # Route to appropriate tool execution endpoint
-        tool_endpoint = f"{base_url}/api/v1/x402-tools/{tool_name}"
+        # Determine which gateway to call based on arguments
+        chain = req.arguments.get("chain", "solana")
+        if chain == "base" or req.payment_token in ("USDC-BASE", "ETH", "USDT"):
+            gw = "https://base.rugmunch.io"
+        else:
+            gw = "https://sol.rugmunch.io"
         
         async with aiohttp.ClientSession() as session:
-            async with session.post(tool_endpoint, json=args, timeout=aiohttp.ClientTimeout(total=30)) as resp:
-                result = await resp.json()
+            async with session.post(f"{gw}/tools/{tool_name}", json=req.arguments,
+                                     headers={"Content-Type": "application/json"},
+                                     timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                # Gateway returns tool result (or 402 if payment needed — but we already verified)
+                text = await resp.text()
+                try:
+                    result = json.loads(text)
+                except:
+                    result = {"raw": text[:500]}
                 return {
-                    "success": True,
+                    "success": resp.status < 400,
                     "tool": tool_name,
-                    "cost": tool.get("price", "$0.01"),
                     "payment_token": req.payment_token,
                     "tx_hash": req.tx_hash,
                     "verified": True,
@@ -3749,4 +3750,4 @@ async def human_execute(req: HumanPaymentRequest):
                 }
     except Exception as e:
         logger.error(f"Tool execution failed: {e}")
-        return {"success": False, "error": f"Tool execution failed: {str(e)}", "cost": tool.get("price", "$0.01")}
+        return {"success": False, "error": f"Tool execution failed: {str(e)}"}
