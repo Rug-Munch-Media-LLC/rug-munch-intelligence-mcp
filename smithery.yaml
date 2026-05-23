@@ -1,7 +1,7 @@
 name: rug-munch-intelligence-mcp
 display_name: Rug Munch Intelligence
-description: "59 tools for scam detection, rug pull prevention, and crypto intelligence across 7 chains. The Bloomberg of Shitcoins Terminal Ultimate Edition."
-version: 2.0.0
+description: "69 tools for crypto security: scam detection, rug pull prevention, wallet forensics, market intelligence. Built for AI agents via MCP + x402 payments. 7 chains. Free trials."
+version: 3.0.0
 author: CryptoRugMunch
 homepage: https://rugmunch.io
 repository: https://github.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp
@@ -12,6 +12,9 @@ categories:
   - finance
   - blockchain
   - analytics
+  - crypto
+  - intelligence
+  - ai-tools
 
 commands:
   start:
@@ -29,10 +32,10 @@ environment:
     description: API key for premium access (optional)
     required: false
 
-tools_count: 59
+tools_count: 69
 chains:
-  - base
   - solana
+  - base
   - ethereum
   - bsc
   - arbitrum
@@ -44,3 +47,15 @@ x402:
   discovery_url: https://rugmunch.io/.well-known/x402
   network: base
   token: USDC
+
+seo_keywords:
+  - crypto security mcp server
+  - scam detection ai tools
+  - rug pull prevention api
+  - blockchain forensics mcp
+  - wallet analysis claude
+  - defi security tools
+  - smart money tracking
+  - whale alert mcp
+  - token audit api
+  - x402 payment protocol

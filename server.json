@@ -1,8 +1,8 @@
 {
   "name": "io.github.Rug-Munch-Media-LLC/rug-munch-intelligence-mcp",
-  "display_name": "Rug Munch Intelligence",
-  "description": "Rug Munch Intelligence MCP: 59 tools for crypto scam detection, rug pull prevention, and intelligence across 7 chains.",
-  "version": "2.0.0",
+  "display_name": "Rug Munch Intelligence \u2014 69 Crypto Security Tools",
+  "description": "69 tools for crypto scam detection, rug pull prevention, wallet forensics, and market intelligence across 7 chains. Built for AI agents via MCP + x402 micropayments. Free trials available.",
+  "version": "3.0.0",
   "homepage": "https://rugmunch.io",
   "repository": "https://github.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp",
   "author": {
@@ -14,9 +14,11 @@
     "security",
     "finance",
     "blockchain",
-    "analytics"
+    "analytics",
+    "crypto",
+    "ai-tools"
   ],
-  "tools": 59,
+  "tools": 69,
   "chains": [
     "base",
     "solana",
@@ -26,29 +28,16 @@
     "optimism",
     "polygon"
   ],
-  "mcp": {
-    "protocol": "2024-11-05",
-    "transport": "stdio"
-  },
-  "x402": {
-    "discovery_url": "https://rugmunch.io/.well-known/x402",
-    "payment_network": "base",
-    "payment_token": "USDC"
-  },
-  "install": {
-    "pip": "pip install rug-munch-intelligence-mcp",
-    "uvx": "uvx rug-munch-intelligence-mcp",
-    "smithery": "npx @smithery/cli install rug-munch-intelligence-mcp"
-  },
-  "env": {
-    "RUG_MUNCH_API_BASE": {
-      "description": "API base URL",
-      "default": "https://rugmunch.io/api/v1",
-      "required": false
-    },
-    "RUG_MUNCH_API_KEY": {
-      "description": "API key for premium access (optional)",
-      "required": false
-    }
-  }
+  "keywords": [
+    "crypto-security",
+    "scam-detection",
+    "rug-pull",
+    "blockchain-forensics",
+    "wallet-analysis",
+    "defi-security",
+    "smart-money",
+    "mcp-server",
+    "x402",
+    "ai-agents"
+  ]
 }

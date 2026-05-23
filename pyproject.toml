@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "rug-munch-intelligence-mcp"
-version = "2.0.0"
+version = "3.0.0"
 description = "Rug Munch Intelligence MCP Server — 59 tools for scam detection, rug pull prevention, and crypto intelligence across 7 chains"
 readme = "README.md"
 license = "Proprietary"
