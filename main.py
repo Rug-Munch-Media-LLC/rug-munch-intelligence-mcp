@@ -2407,6 +2407,47 @@ async def helius_syndicate_scan(request: Request, address: str = "", chain: str 
 # x402 PAYMENT GATEWAY
 # ═══════════════════════════════════════════════════════════
 
+# ── Public File Server (on/off via FILESERVER_ENABLED env var) ──
+from fastapi.responses import HTMLResponse, FileResponse
+
+FILESERVER_DIR = os.path.join(os.path.dirname(__file__), "public")
+os.makedirs(FILESERVER_DIR, exist_ok=True)
+
+
+@app.get("/files/{path:path}")
+async def serve_file(path: str):
+    """Serve any file from the public fileserver directory.
+    
+    Drop files in /root/fileserver/ and access at:
+        https://rugmunch.io/files/filename
+    
+    On/Off: Set FILESERVER_ENABLED=true/false in .env
+    """
+    if os.getenv("FILESERVER_ENABLED", "true").lower() != "true":
+        raise HTTPException(status_code=403, detail="File server is disabled")
+    
+    safe_path = os.path.normpath(os.path.join(FILESERVER_DIR, path))
+    if not safe_path.startswith(FILESERVER_DIR):
+        raise HTTPException(status_code=403, detail="Path traversal denied")
+    if not os.path.exists(safe_path):
+        raise HTTPException(status_code=404, detail=f"File not found: {path}")
+    
+    return FileResponse(safe_path)
+
+
+@app.get("/files")
+async def list_files():
+    """List available files in the public fileserver."""
+    if os.getenv("FILESERVER_ENABLED", "true").lower() != "true":
+        raise HTTPException(status_code=403, detail="File server is disabled")
+    
+    files = []
+    for f in sorted(os.listdir(FILESERVER_DIR)):
+        fp = os.path.join(FILESERVER_DIR, f)
+        if os.path.isfile(fp):
+            files.append({"name": f, "size": os.path.getsize(fp), "url": f"/files/{f}"})
+    return {"enabled": True, "directory": FILESERVER_DIR, "files": files, "count": len(files)}
+
 @app.get("/api/v1/x402/stats")
 async def x402_stats(request: Request):
     """Get x402 payment statistics — live data from facilitator registry + Redis."""
