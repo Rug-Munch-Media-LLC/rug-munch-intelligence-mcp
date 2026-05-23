@@ -91,17 +91,18 @@ TOOL_CATEGORIES = {
 # ── Human-readable tool guide ──────────────────────────────────
 
 def get_human_catalog() -> Dict[str, Any]:
-    """Build a human-friendly tool catalog organized by use case.
+    """Build a human-friendly tool catalog organized by use case and tier.
     
     Returns structured data suitable for frontend display — categories,
-    tools, descriptions, pricing, and SEO metadata.
+    tools, descriptions, pricing tiers, and SEO metadata.
     """
     from app.routers.x402_enforcement import TOOL_PRICES
+    from app.tool_tiers import TOOL_TIERS, TIER_PRICING
     
     catalog = {
         "meta": {
             "name": "Rug Munch Intelligence — Crypto Security & Analysis Tools",
-            "description": "225+ crypto security, intelligence, and market analysis tools accessible via API, MCP, and web interface. AI-powered scam detection, whale tracking, contract auditing, and forensics across 13 blockchains.",
+            "description": "225+ crypto security, intelligence, and market analysis tools accessible via API, MCP, and web interface. AI-powered scam detection, whale tracking, contract auditing, and forensics across 13 blockchains. Basic, Premium, and Elite tiers for every need.",
             "seo_keywords": [
                 "crypto scam detection", "rug pull checker", "honeypot detector",
                 "smart contract audit", "whale tracker", "wallet intelligence",
@@ -109,13 +110,15 @@ def get_human_catalog() -> Dict[str, Any]:
                 "DeFi security", "NFT scam detection", "MEV protection",
                 "crypto market data", "DEX analytics", "crypto trading tools",
             ],
-            "total_tools": len(TOOL_PRICES) + 154,  # RMI + MCP external
+            "total_tools": len(TOOL_PRICES) + 154,
             "total_categories": len(TOOL_CATEGORIES),
             "chains_supported": 13,
             "facilitators": 10,
             "free_trials": "1-5 free calls per tool",
             "pricing": "$0.01 - $0.40 per call",
+            "tiers": TIER_PRICING,
         },
+        "tiers": TIER_PRICING,
         "categories": {},
     }
     
@@ -123,11 +126,11 @@ def get_human_catalog() -> Dict[str, Any]:
         cat_tools = []
         
         if cat_key == "mcp-external":
-            # MCP tools are gateway-level, skip individual listing
             cat_tools.append({
                 "id": "mcp-external",
                 "name": "External Data Provider Tools (150+)",
                 "description": cat_info["description"],
+                "tier": "basic",
                 "providers": [
                     "DexScreener", "Jupiter", "Helius", "Birdeye", "CoinGecko",
                     "Nansen", "Arkham", "GMGN", "Moralis", "PumpFun", "Raydium",
@@ -141,12 +144,14 @@ def get_human_catalog() -> Dict[str, Any]:
         else:
             for tool_id, pricing in TOOL_PRICES.items():
                 if pricing.get("category") == cat_key:
+                    tier_info = TOOL_TIERS.get(tool_id, {})
                     cat_tools.append({
                         "id": tool_id,
-                        "name": tool_id.replace("_", " ").title(),
-                        "description": pricing.get("description", ""),
-                        "price_usd": pricing.get("price_usd", 0.01),
-                        "trial_free": pricing.get("trial_free", 1),
+                        "name": tier_info.get("name", tool_id.replace("_", " ").title()),
+                        "description": tier_info.get("description", pricing.get("description", "")),
+                        "price_usd": tier_info.get("price_usd", pricing.get("price_usd", 0.01)),
+                        "trial_free": tier_info.get("trial_free", pricing.get("trial_free", 1)),
+                        "tier": tier_info.get("tier", pricing.get("category", "basic")),
                         "category": cat_key,
                     })
         
