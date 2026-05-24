@@ -1,0 +1,15 @@
+{
+    "name": "Rug Munch Intelligence MCP",
+    "description": "225 crypto intelligence tools across 13 blockchains. Scam detection, wallet forensics, whale tracking, contract auditing, market analysis. Free trials + x402 micropayments. 10 payment facilitators. AI-native MCP server for crypto security.",
+    "repository": {
+        "type": "github",
+        "url": "https://github.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp"
+    },
+    "mcpServers": {
+        "rug-munch-intelligence": {
+            "command": "npx",
+            "args": ["-y", "mcp-remote@latest", "https://rugmunch.io/mcp"],
+            "env": {}
+        }
+    }
+}
