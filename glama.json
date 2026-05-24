@@ -1,0 +1,15 @@
+{
+  "$schema": "https://glama.ai/mcp/schemas/server.json",
+  "maintainers": ["cryptorugmuncher"],
+  "name": "Rug Munch Intelligence",
+  "description": "225 crypto security & intelligence MCP tools across 13 blockchains. Real-time scam detection, wallet forensics, whale tracking, contract auditing, market analysis, sentiment tracking, arbitrage scanning, MEV protection, insider detection, syndicate mapping, and more. Free trials (1-5 calls/tool) + x402 micropayments ($0.01-$0.40/call). 10 payment facilitators: Coinbase CDP, PayAI, Cloudflare x402, Pieverse, AsterPay, MERX, Primev, Satoshi, x402-rs, EIP-7702. Pay with USDC, USDT, BTC, EUR. Full refund guarantee. Clean URL: rugmunch.io/mcp",
+  "server": {
+    "url": "https://rugmunch.io/mcp",
+    "transport": "http",
+    "capabilities": { "tools": { "listChanged": true } }
+  },
+  "logo": "https://rugmunch.io/logo.png",
+  "homepage": "https://rugmunch.io",
+  "documentation": "https://rugmunch.io/docs/mcp",
+  "tags": ["crypto", "blockchain", "security", "defi", "scam-detection", "intelligence", "mcp", "x402", "analytics", "whale-tracking", "rug-pull", "contract-audit", "solana", "ethereum", "base", "forensics", "ai-agents"]
+}
