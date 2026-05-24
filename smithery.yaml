@@ -1,0 +1,61 @@
+name: rug-munch-intelligence-mcp
+display_name: Rug Munch Intelligence
+description: "69 tools for crypto security: scam detection, rug pull prevention, wallet forensics, market intelligence. Built for AI agents via MCP + x402 payments. 7 chains. Free trials."
+version: 3.0.0
+author: CryptoRugMunch
+homepage: https://rugmunch.io
+repository: https://github.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp
+license: Proprietary
+
+categories:
+  - security
+  - finance
+  - blockchain
+  - analytics
+  - crypto
+  - intelligence
+  - ai-tools
+
+commands:
+  start:
+    type: stdio
+    command: uvx
+    args:
+      - rug-munch-intelligence-mcp
+
+environment:
+  RUG_MUNCH_API_BASE:
+    description: API base URL
+    default: https://rugmunch.io/api/v1
+    required: false
+  RUG_MUNCH_API_KEY:
+    description: API key for premium access (optional)
+    required: false
+
+tools_count: 69
+chains:
+  - solana
+  - base
+  - ethereum
+  - bsc
+  - arbitrum
+  - optimism
+  - polygon
+
+x402:
+  enabled: true
+  discovery_url: https://rugmunch.io/.well-known/x402
+  network: base
+  token: USDC
+
+seo_keywords:
+  - crypto security mcp server
+  - scam detection ai tools
+  - rug pull prevention api
+  - blockchain forensics mcp
+  - wallet analysis claude
+  - defi security tools
+  - smart money tracking
+  - whale alert mcp
+  - token audit api
+  - x402 payment protocol

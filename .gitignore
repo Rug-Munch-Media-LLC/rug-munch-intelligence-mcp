@@ -1,17 +1,27 @@
-__pycache__/
-*.pyc
-*.pyo
-.env
+!*.example.json
+!actor.json
+!package*.json
+*.egg
+*.egg-info/
+*.json
 *.key
 *.pem
+*.pyc
+*.pyo
 *.sock
+.env
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv/
+/cache/
 /logs/
 /tmp/
-/cache/
+<<<<<<< HEAD
+=======
+>>>>>>> mcp/main
+__pycache__/
+build/
+dist/
 n8n-data/
 venv/
-.venv/
-*.json
-!actor.json
-!*.example.json
-!package*.json
