@@ -96,8 +96,15 @@ def _load_tool_prices():
     import os, re, urllib.request, json
     
     # ─── 1. Parse from gateway configs ────────────────────────────────────────
-    gateway_base = "/srv/rmi/backend/x402-gateway"
-    if os.path.exists(gateway_base):
+    # Try multiple paths: Docker mount, host path, OpenClaw backup
+    gateway_base = None
+    for candidate in ["/app/x402-gateway", "/root/backend/x402-gateway", "/srv/rmi/backend/x402-gateway", "/root/.openclaw/backend/x402-gateway"]:
+        if os.path.isdir(candidate):
+            gateway_base = candidate
+            break
+    
+    if gateway_base and os.path.exists(gateway_base):
+        logger.info(f"Loading tool prices from gateway configs at {gateway_base}")
         for chain_dir in os.listdir(gateway_base):
             index_path = os.path.join(gateway_base, chain_dir, "index.ts")
             if not os.path.exists(index_path):
@@ -566,61 +573,55 @@ async def self_verify_evm_usdc(payload: dict, chain_key: str, chain_cfg: dict) -
         if not amount_atoms and tool_id and tool_id in TOOL_PRICES:
             amount_atoms = TOOL_PRICES[tool_id].get("price_atoms")
         
-        # Query Etherscan-family API for the transaction receipt
+        # ── Blockscout API v2 (free, no API key needed) ──
+        # Maps chain_id → Blockscout base URL
         chain_id = chain_cfg.get("chain_id")
-        etherscan_urls = {
-            1: "https://api.etherscan.io/api",
-            56: "https://api.bscscan.com/api",
-            42161: "https://api.arbiscan.io/api",
-            10: "https://api-optimistic.etherscan.io/api",
-            137: "https://api.polygonscan.com/api",
-            8453: "https://api.basescan.org/api",
+        blockscout_urls = {
+            1: "https://eth.blockscout.com",
+            42161: "https://arbitrum.blockscout.com",
+            10: "https://optimism.blockscout.com",
+            137: "https://polygon.blockscout.com",
+            8453: "https://base.blockscout.com",
+            100: "https://gnosis.blockscout.com",
+            43114: "https://avalanche.blockscout.com",
+            250: "https://fantom.blockscout.com",
+            56: "https://bsc.blockscout.com",
         }
         
-        base_url = etherscan_urls.get(chain_id)
-        if not base_url:
-            return {"verified": False, "reason": f"No Etherscan URL for chain {chain_id}"}
+        blockscout_base = blockscout_urls.get(chain_id)
+        if not blockscout_base:
+            return {"verified": False, "reason": f"No Blockscout URL for chain_id {chain_id}"}
         
-        api_key = os.getenv("ETHERSCAN_API_KEY", "")
-        
-        # Get transaction receipt via Etherscan eth_getTransactionReceipt proxy
         import httpx
-        params = {
-            "module": "proxy",
-            "action": "eth_getTransactionReceipt",
-            "txhash": tx_hash,
-        }
-        if api_key:
-            params["apikey"] = api_key
+        # Blockscout v2 API: /api/v2/transactions/{tx_hash}
+        tx_url = f"{blockscout_base}/api/v2/transactions/{tx_hash}"
         
         async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(base_url, params=params)
-            data = resp.json()
+            resp = await client.get(tx_url)
+            if resp.status_code != 200:
+                return {"verified": False, "reason": f"TX {tx_hash[:16]}... not found on {chain_key} (HTTP {resp.status_code})"}
+            tx_data = resp.json()
         
-        receipt = data.get("result")
-        if not receipt or isinstance(receipt, str):
-            return {"verified": False, "reason": f"TX {tx_hash[:16]}... not found on {chain_key}"}
-        
-        # Check status (1 = success, 0 = revert)
-        status_hex = receipt.get("status", "0x0")
-        try:
-            status_val = int(status_hex, 16) if isinstance(status_hex, str) else status_hex
-        except (ValueError, TypeError):
-            status_val = 0
-        if status_val != 1:
-            return {"verified": False, "reason": f"TX {tx_hash[:16]}... failed on-chain (status={status_val})"}
+        # Check transaction status
+        tx_status = tx_data.get("status") or tx_data.get("result")
+        if tx_status != "ok" and tx_status != "1":
+            return {"verified": False, "reason": f"TX {tx_hash[:16]}... failed on-chain (status={tx_status})"}
         
         # Decode ERC-20 Transfer events from receipt logs
-        # Transfer(address indexed from, address indexed to, uint256 value)
-        # topic0 = 0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef
-        # topic1 = from address (padded to 32 bytes)
-        # topic2 = to address (padded to 32 bytes)
-        # data   = value (uint256, 32 bytes)
         our_address = EVM_PAY_TO.lower()
         usdc_address = chain_cfg["usdc"].lower()
         expected_amount = str(amount_atoms) if amount_atoms else None
         
-        logs = receipt.get("logs", [])
+        logs = tx_data.get("decoded_input", {}).get("logs") or tx_data.get("logs") or []
+        if not logs:
+            # Try alternate: fetch receipt directly
+            receipt_url = f"{blockscout_base}/api?module=transaction&action=gettxreceiptstatus&txhash={tx_hash}"
+            async with httpx.AsyncClient(timeout=10) as client2:
+                r2 = await client2.get(receipt_url)
+                if r2.status_code == 200:
+                    receipt_data = r2.json()
+                    logs = receipt_data.get("result", {}).get("logs", []) or receipt_data.get("logs", [])
+        
         transfer_found = False
         amount_match = False
         actual_amount = None
@@ -628,7 +629,6 @@ async def self_verify_evm_usdc(payload: dict, chain_key: str, chain_cfg: dict) -
         for log in logs:
             topics = log.get("topics", [])
             
-            # Must have at least 3 topics (sig + from + to) and match USDC contract
             if len(topics) < 3:
                 continue
             if topics[0].lower() != TRANSFER_EVENT_TOPIC0:
@@ -636,8 +636,7 @@ async def self_verify_evm_usdc(payload: dict, chain_key: str, chain_cfg: dict) -
             if log.get("address", "").lower() != usdc_address:
                 continue
             
-            # Decode 'to' address from topic2 (last 20 bytes of 32-byte padded address)
-            # topic2 format: 0x{24 zero bytes}{20-byte address}
+            # Decode 'to' address from topic2
             try:
                 to_address = "0x" + topics[2][-40:].lower()
             except (IndexError, ValueError):
@@ -646,57 +645,45 @@ async def self_verify_evm_usdc(payload: dict, chain_key: str, chain_cfg: dict) -
             if to_address != our_address:
                 continue
             
-            # Decode amount from data field (uint256, big-endian 32 bytes)
+            # Decode amount from data field
             transfer_found = True
             log_data = log.get("data", "0x")
             try:
-                if log_data and log_data.startswith("0x") and len(log_data) == 66:
-                    # Standard ERC-20 Transfer: data is single uint256
-                    actual_amount = str(int(log_data, 16))
-                elif log_data and log_data.startswith("0x") and len(log_data) > 2:
-                    # Some implementations may have additional data; take first 32 bytes
+                if log_data and log_data.startswith("0x") and len(log_data) >= 66:
                     actual_amount = str(int(log_data[:66], 16))
+                elif log_data:
+                    actual_amount = str(int(log_data, 16))
             except (ValueError, TypeError):
-                logger.warning(f"Could not decode Transfer data for {tx_hash[:16]}...: {log_data[:20]}")
+                logger.warning(f"Could not decode Transfer data for {tx_hash[:16]}...: {str(log_data)[:20]}")
             
-            # Verify amount matches expected price in atoms
+            # Verify amount matches
             if expected_amount and actual_amount:
                 if actual_amount == expected_amount:
                     amount_match = True
                 else:
-                    # Amount mismatch — strict rejection (user must send exact price)
                     logger.warning(
                         f"Amount mismatch for {tx_hash[:16]}...: "
                         f"expected {expected_amount} atoms, got {actual_amount} atoms on {chain_key}"
                     )
             elif actual_amount:
-                # No expected amount from payload — try to validate against known tool prices
-                # Check if the actual amount matches any tool price in our catalog
-                valid_price = False
+                # Check if amount matches any tool price
                 for tid, pricing in TOOL_PRICES.items():
                     if str(pricing.get("price_atoms")) == actual_amount:
-                        valid_price = True
+                        amount_match = True
                         break
-                if valid_price:
-                    amount_match = True
-                else:
-                    logger.warning(
-                        f"Amount {actual_amount} does not match any known tool price for {tx_hash[:16]}..."
-                    )
             
-            break  # Found Transfer to our address, stop searching logs
+            break  # Found Transfer to our address
         
         if not transfer_found:
             return {"verified": False, "reason": f"No USDC Transfer to {our_address[:10]}... found in {tx_hash[:16]}..."}
         
-        # Amount verification: reject if amounts don't match
         if not amount_match and expected_amount and actual_amount:
             return {
                 "verified": False,
                 "reason": f"Amount mismatch: expected {expected_amount} atoms, got {actual_amount} atoms",
             }
         
-        # Mark as spent in Redis with 86400s (24h) TTL — prevents double-use within 24h window
+        # Mark as spent in Redis with 86400s (24h) TTL
         tool_name = tool_id or "unknown"
         if r:
             spent_key = f"x402:spent_tx:{tx_hash}"
@@ -712,6 +699,7 @@ async def self_verify_evm_usdc(payload: dict, chain_key: str, chain_cfg: dict) -
         # Persist to Supabase (non-blocking)
         try:
             from app.routers.x402_dashboard import _persist_payment_to_supabase
+            import asyncio
             asyncio.create_task(_persist_payment_to_supabase(
                 tool=tool_name,
                 amount_atoms=str(actual_amount or amount_atoms or "0"),
@@ -724,7 +712,7 @@ async def self_verify_evm_usdc(payload: dict, chain_key: str, chain_cfg: dict) -
             pass
         
         logger.info(
-            f"Self-verified USDC payment: {tx_hash[:16]}... on {chain_key} "
+            f"Verified USDC payment: {tx_hash[:16]}... on {chain_key} "
             f"from {payer[:10] if payer else 'unknown'}... amount={actual_amount or 'unknown'} tool={tool_name}"
         )
         return {
@@ -733,7 +721,7 @@ async def self_verify_evm_usdc(payload: dict, chain_key: str, chain_cfg: dict) -
             "tx_hash": tx_hash,
             "payer": payer,
             "amount": actual_amount or amount_atoms,
-            "method": "self-verify",
+            "method": "blockscout-verify",
         }
     
     except Exception as e:
