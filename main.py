@@ -29,6 +29,24 @@ import urllib.request
 import feedparser
 import email.utils as email_utils
 from app.routers import bulletin
+
+# ── Error tracking (GlitchTip / Sentry compatible) ──
+GLITCHTIP_DSN = os.getenv("GLITCHTIP_DSN", "")
+if GLITCHTIP_DSN:
+    try:
+        import sentry_sdk
+        sentry_sdk.init(
+            dsn=GLITCHTIP_DSN,
+            environment=os.getenv("ENVIRONMENT", "production"),
+            traces_sample_rate=float(os.getenv("SENTRY_TRACES_RATE", "0.1")),
+            send_default_pii=False,
+        )
+        print(f"[OK] GlitchTip/Sentry error tracking enabled")
+    except ImportError:
+        pass
+    except Exception as e:
+        print(f"[WARN] GlitchTip init failed: {e}")
+
 from app.routers import supabase_router
 from app.helius_tools.helius_whale_watcher import WhaleWatcher
 from app.helius_tools.helius_sniper_detector import SniperDetector
