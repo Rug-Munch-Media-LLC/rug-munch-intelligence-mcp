@@ -1,136 +1,142 @@
-# Rug Munch Intelligence — Backend
+<p align="center">
+  <img src="https://img.shields.io/badge/MCP-Compatible-6E40C9?logo=modelcontextprotocol&logoColor=white" alt="MCP Compatible" />
+  <img src="https://img.shields.io/badge/Tools-69-00D4AA" alt="69 Tools" />
+  <img src="https://img.shields.io/badge/Chains-7-F7931A" alt="7 Chains" />
+  <img src="https://img.shields.io/badge/x402-Payments-FF6900" alt="x402 Payments" />
+  <img src="https://img.shields.io/badge/Price-Free_Trials-22C55E" alt="Free Trials" />
+  <img src="https://img.shields.io/badge/Python-3.10+-blue" alt="Python 3.10+" />
+  <img src="https://img.shields.io/badge/License-Proprietary-red" alt="Proprietary" />
+</p>
 
-> **⚠️ PROPRIETARY SOFTWARE — ALL RIGHTS RESERVED**
->
-> (c) 2026 Rug Munch Media LLC. Confidential and proprietary.
-> Unauthorized access, distribution, or use is strictly prohibited.
-> See [LICENSE](LICENSE) for full terms.
+<h1 align="center">🛡️ Rug Munch Intelligence — MCP Server</h1>
+<h3 align="center">AI-Powered Crypto Security. 69 Tools. Don't Get Rugged.</h3>
 
----
-
-## What This Is
-
-Rug Munch Intelligence (RMI) is the proprietary crypto scam detection platform. This repository contains the core backend — the detection engine, data pipeline, and API infrastructure powering the entire RMI ecosystem.
-
-**This is NOT open-source.**
-
-📡 **Telegram**: [@CryptoRugMunch](https://t.me/CryptoRugMunch) • [@cryptorugmuncher](https://t.me/cryptorugmuncher)
-🐦 **X/Twitter**: [@cryptorugmunch](https://x.com/cryptorugmunch)
-🌐 **Website**: [rugmunch.io](https://rugmunch.io)
-
----
- Maintained exclusively by Rug Munch Media LLC.
-
-### Capabilities
-- Real-time rug-pull detection across 7 chains
-- On-chain behavioral analysis engines
-- x402 Protocol v2 — pay-per-tool API access via crypto micropayments
-- 51 (auto-discovered) intelligence tools via MCP (Model Context Protocol) catalog
-- Multi-source news aggregation (15+ feeds: RSS, Reddit, API)
-- Wallet clustering, Sybil detection, scam pattern databases
-- Gamification, payments, content syndication
-- Telegram bot integration
+<p align="center">
+  <strong>Crypto scam detection • Rug pull prevention • Wallet forensics • Market intelligence • Social sentiment</strong><br/>
+  Built for AI agents (Claude, Cursor, Windsurf, ChatGPT). Accessible via <code>pip install</code> or direct HTTP.
+</p>
 
 ---
 
-## Products Under RMI
+## 🚀 Quick Start
 
-| Product | Repo | Description |
-|---------|------|-------------|
-| **RMI Backend** | `rugmuncher-backend` | Core API, detection, data pipeline |
-| **RMI Frontend** | `rmi-frontend` | React/TypeScript web application |
-| **RugCharts** | `rugcharts` | Real-time token charting, TA analysis |
-| **RugMaps** | `rugmaps` | Visual blockchain threat mapping |
-| **Telegram Bot** | `rugmuncher-telegram` | Community interface, scans, alerts |
-
----
-
-## x402 Payment Protocol
-
-The platform exposes 51 (auto-discovered) tools via x402 HTTP 402 Payment Required protocol:
-
-| Chain | Verification | Status |
-|-------|-------------|--------|
-| Solana | Facilitator (Cloudflare Worker) | Live |
-| Base | Facilitator (Cloudflare Worker) | Live |
-| ETH, BSC, ARB, OPT, POL | Self-verify (on-chain) | Live |
-
-**Discovery:** `/.well-known/x402`  
-**MCP Catalog:** `/api/v1/x402/tools-catalog`  
-**OpenAPI:** `/openapi.json`
-
----
-
-## Architecture
-
-```
-RMI Frontend (rmi-frontend)
-    |
-    v
-RMI Backend (this repo) --- Redis (rmi-redis)
-    |                           |
-    +-- API Layer (FastAPI)     +-- RAG Vector Store
-    +-- Detection Engine        +-- Session Cache
-    +-- x402 Payment Gate       +-- Job Queue
-    +-- News Aggregator (15+)
-    +-- Content Syndicate
-    |
-    +-- Orchestrator (rmi-orchestrator) — 9 AI agents
-    +-- Telegram Bot (rmi-telegram-bot) — Community interface
-    +-- n8n (rmi-n8n) — Workflow automation
-    +-- Supabase — Database, Auth, Storage
-```
-
----
-
-## Development
-
-### Canonical Paths (READ BEFORE WORKING):
-- Backend code: `/root/backend/` (this repo)
-- Docker compose: `/srv/rugmuncher-backend/docker-compose.yml`
-- Frontend source: `/srv/rugmuncher-backend/rmi-frontend/`
-- Dev guide: `/root/DEVELOPERS.md`
-- Standards: `/root/backend/STANDARDS.md`
-- Pre-commit check: `bash /root/backend/scripts/pre-commit.sh`
-
-### Quick Start:
 ```bash
-# Live dev (volume mount, instant):
-docker restart rmi-backend
-
-# Full rebuild:
-cd /srv/rugmuncher-backend
-docker compose build backend --no-cache
-docker compose up -d backend
-
-# Setup env:
-python3 /root/backend/generate_env.py --force
+pip install rug-munch-intelligence-mcp
 ```
 
-### API Reference:
-- Swagger: http://localhost:8000/docs
-- Health: http://localhost:8000/health
-- News: http://localhost:8000/api/v1/news/headlines
-- Tools catalog: http://localhost:8000/api/v1/x402/tools-catalog
+Add to Claude Desktop / Cursor / Windsurf:
+
+```json
+{
+  "mcpServers": {
+    "rug-munch-intelligence": {
+      "command": "python3",
+      "args": ["-m", "rug_munch_mcp"],
+      "env": { "RUG_MUNCH_API_BASE": "https://rugmunch.io/api/v1" }
+    }
+  }
+}
+```
+
+No API key needed. Free trials on every tool.
 
 ---
 
-## Licensing & Enterprise Access
+## 📊 69 Tools Across 7 Chains
 
-### Institutional Clients:
-Full API access, bulk historical data, custom model training, white-label embedding, SLA.  
-Contact: **biz@rugmunch.io**
+### Security (20 tools)
+`audit` `rugshield` `honeypot_check` `urlcheck` `clone_detect` `fresh_pair` `profile_flip` `sniper_detect` `deployer_history` `token_age` `protocol_risk` `scam_database` `mev_alert` `wash_trading` `bundler_detect` `liquidity_migration` `bridge_security` `rug_pull_predictor` `anomaly` `risk_monitor`
 
-### Developers:
-This is proprietary software. No public contribution model. Authorized developers only.
+### Intelligence (20 tools)
+`smartmoney` `whale` `whale_scan` `whale_profile` `cluster` `insider` `insider_network` `syndicate_scan` `syndicate_track` `wallet_graph` `copy_trade_finder` `kol_performance` `whale_accumulation` `alpha_digest` `listing_predictor` `social_signal` `smart_money_alpha` `gas_forecast` `mev_protection` `sniper_alert`
+
+### Market (15 tools)
+`pulse` `market_price` `market_sectors` `trending_tokens` `market_overview` `chain_health` `token_deep_dive` `liquidity_depth` `unlock_calendar` `airdrop_check` `arbitrage_scan` `protocol_research` `yield_scanner` `defi_yield_scanner` `dex_activity`
+
+### Analysis (7 tools)
+`wallet` `wallet_pnl` `portfolio_aggregate` `portfolio_tracker` `token_comparison` `forensics` `tx_decoder`
+
+### Social (6 tools)
+`sentiment` `sentiment_spike` `tw_profile` `tw_timeline` `tw_search` `meme_vibe_score`
+
+### Launchpad (3 tools)
+`launch` `launch_intel` `airdrop_finder`
+
+### Forensic Bundles (3 tools)
+`forensic_valuation` `osint_identity_hunt` `investigation_report`
 
 ---
 
-## Security
+## 🔗 Direct API Access (No Install)
 
-Vulnerability disclosure: **security@cryptorugmunch.com**  
-90-day remediation window before any public disclosure.
+Call any tool directly via HTTP — all formats supported:
+
+```bash
+# OpenAI function calling
+curl https://rugmunch.io/api/v1/x402-tools/openai-tools
+
+# Anthropic Claude
+curl https://rugmunch.io/api/v1/x402-tools/anthropic-tools
+
+# Google Gemini
+curl https://rugmunch.io/api/v1/x402-tools/gemini-tools
+
+# LangChain
+curl https://rugmunch.io/api/v1/x402-tools/langchain-tools
+
+# Call any tool
+curl -X POST https://rugmunch.io/api/v1/x402-tools/deployer_history \
+  -H "Content-Type: application/json" \
+  -d '{"address":"0x...","chain":"ethereum"}'
+```
 
 ---
 
-*(c) 2026 Rug Munch Media LLC — Proprietary & Confidential*
+## 💰 Payment (x402 Protocol)
+
+| Tier | Calls | Requirement |
+|------|-------|-------------|
+| Free Trial | 1-5 per tool | Device fingerprint |
+| Wallet Connected | +3 per tool | MetaMask/Phantom |
+| Paid | Unlimited | USDC via x402 |
+
+**7 chains**: Solana, Base, Ethereum, BSC, Arbitrum, Optimism, Polygon  
+**Refund**: Full refund if tool returns no data  
+**Discovery**: `/.well-known/x402`
+
+---
+
+## 🏗️ Architecture
+
+This is a thin MCP wrapper around the Rug Munch Intelligence x402 API. All 69 tools are served from our backend — this package translates MCP protocol into HTTP calls.
+
+```
+AI Agent → this MCP server → x402 API → RMI Backend (69 tools)
+```
+
+---
+
+## 📡 Links
+
+| Resource | URL |
+|----------|-----|
+| Website | https://rugmunch.io |
+| Backend Repo | https://github.com/Rug-Munch-Media-LLC/rugmuncher-backend |
+| x402 Gateway (Base) | https://github.com/Rug-Munch-Media-LLC/x402-gateway-base |
+| x402 Gateway (Solana) | https://github.com/Rug-Munch-Media-LLC/x402-gateway-solana |
+| RugCharts | https://github.com/Rug-Munch-Media-LLC/rugcharts |
+| RugMaps | https://github.com/Rug-Munch-Media-LLC/rugmaps |
+| Twitter/X | https://x.com/cryptorugmunch |
+| Telegram | https://t.me/cryptorugmuncher |
+
+---
+
+## 🔑 Keywords
+
+`mcp-server` `crypto-security` `scam-detection` `rug-pull` `blockchain-forensics` `wallet-analysis` `smart-money` `whale-tracking` `defi-security` `token-analysis` `sentiment-analysis` `x402` `model-context-protocol` `ai-agents` `claude-tools` `web3-security` `solana` `ethereum` `base` `arbitrum` `optimism` `polygon` `bsc` `usdc-payments` `honeypot-detection` `wash-trading` `mev-protection` `portfolio-tracking` `kol-tracking` `token-launch`
+
+---
+
+<p align="center">
+  <sub>© 2026 Rug Munch Media LLC — Proprietary. All Rights Reserved. Wyoming DAO LLC transition pending. Follow the build.</sub>
+</p>

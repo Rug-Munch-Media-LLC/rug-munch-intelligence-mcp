@@ -1,0 +1,43 @@
+{
+  "name": "io.github.Rug-Munch-Media-LLC/rug-munch-intelligence-mcp",
+  "display_name": "Rug Munch Intelligence \u2014 69 Crypto Security Tools",
+  "description": "69 tools for crypto scam detection, rug pull prevention, wallet forensics, and market intelligence across 7 chains. Built for AI agents via MCP + x402 micropayments. Free trials available.",
+  "version": "3.0.0",
+  "homepage": "https://rugmunch.io",
+  "repository": "https://github.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp",
+  "author": {
+    "name": "CryptoRugMunch",
+    "url": "https://github.com/cryptorugmuncher"
+  },
+  "license": "Proprietary",
+  "categories": [
+    "security",
+    "finance",
+    "blockchain",
+    "analytics",
+    "crypto",
+    "ai-tools"
+  ],
+  "tools": 69,
+  "chains": [
+    "base",
+    "solana",
+    "ethereum",
+    "bsc",
+    "arbitrum",
+    "optimism",
+    "polygon"
+  ],
+  "keywords": [
+    "crypto-security",
+    "scam-detection",
+    "rug-pull",
+    "blockchain-forensics",
+    "wallet-analysis",
+    "defi-security",
+    "smart-money",
+    "mcp-server",
+    "x402",
+    "ai-agents"
+  ]
+}
