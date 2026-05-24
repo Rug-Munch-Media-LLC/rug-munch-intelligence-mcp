@@ -1,0 +1,295 @@
+"""
+Rug Munch Intelligence MCP Server v3.0
+
+225 tools. 13 chains. 10 payment facilitators.
+Crypto security, wallet intelligence, market analysis, forensics.
+Free trials + x402 micropayments. Fingerprint-gated anti-abuse.
+
+Discovery:  /.well-known/mcp.json | /llms.txt | /mcp/tools | /mcp/call/{id}
+Directories: Smithery | Glama | mcp.so | Open WebUI | GitHub
+"""
+import json, os, logging, time
+from datetime import datetime, timezone
+from typing import Dict, Any
+from fastapi import APIRouter, Request, HTTPException
+from fastapi.responses import JSONResponse, Response
+
+logger = logging.getLogger("rmi_mcp_v3")
+router = APIRouter(tags=["mcp"])
+
+def _get_tools() -> Dict[str, Any]:
+    try:
+        from app.routers.x402_enforcement import TOOL_PRICES, CHAIN_USDC
+        return {"prices": dict(TOOL_PRICES), "chains": dict(CHAIN_USDC)}
+    except Exception:
+        return {"prices": {}, "chains": {}}
+
+def _desc(tool_id: str, pricing: dict) -> str:
+    d = pricing.get("description", "")
+    if d and d != tool_id and len(d) > 10:
+        return d
+    fallbacks = {
+        "airdrop_check": "Verify airdrop legitimacy -- contract audit, distribution analysis, scam pattern detection. Know if an airdrop is real or a wallet drainer before connecting.",
+        "airdrop_finder": "Discover active and upcoming airdrops across all major chains. Eligibility checks, value estimation, claim deadlines, and Sybil detection.",
+        "all_in_one": "All-in-One Audit -- comprehensive security scan: rug pull, honeypot, clone detection, contract audit, and ownership analysis in a single call.",
+        "alpha_digest": "Alpha digest -- curated crypto alpha from top-performing wallets, on-chain signals, sentiment spikes, and accumulation patterns.",
+        "arbitrage_scan": "Cross-chain and cross-DEX arbitrage scanner. Find price discrepancies across exchanges for instant profit opportunities.",
+        "bundler_detect": "MEV bundler detector -- sandwich attacks, frontrunning, backrunning patterns on Solana and EVM chains.",
+        "catalog": "Full tool catalog -- list every RMI tool with pricing, chain support, trial availability, and descriptions.",
+        "clone_detect": "Clone contract detector -- bytecode similarity analysis, function matching, known scam template identification. Catches copycat scams before they rug.",
+        "deployer_history": "Deployer history investigation -- every token this wallet has launched, success rate, known scam patterns, cross-chain activity.",
+        "fresh_pair": "Fresh pair scanner -- detect newly created trading pairs, liquidity depth, ownership concentration, honeypot risk.",
+        "insider_network": "Insider network mapper -- trace connected wallets, shared funding sources, coordinated trading patterns across addresses.",
+        "intelligence_pack": "Intelligence Pack -- whale tracking + smart money + wallet clustering at 29% discount. Three tools, one price.",
+        "kol_performance": "KOL performance tracker -- measure influencer call accuracy, average ROI after calls, follower quality score.",
+        "liquidity_depth": "Liquidity depth analyzer -- order book depth, slippage estimation, market impact across DEXs and chains.",
+        "liquidity_flow": "Liquidity flow tracker -- track where capital is moving across chains, pools, and protocols. Front-run liquidity migrations.",
+        "liquidity_migration": "Liquidity migration detector -- tokens moving pools, chains, or protocols. Often a rug pull precursor signal.",
+        "listing_predictor": "Exchange listing predictor -- on-chain signals suggesting imminent CEX or DEX listing based on accumulation patterns.",
+        "meme_vibe_score": "Meme coin vibe score -- social virality, holder growth rate, community engagement metrics, and dump risk assessment.",
+        "mev_alert": "MEV alert system -- real-time sandwich attack, frontrun, and arbitrage detection with wallet protection recommendations.",
+        "mev_protection": "MEV protection checker -- verify if your transaction is protected from MEV extraction before submitting.",
+        "portfolio_aggregate": "Portfolio aggregator -- combine multiple wallets into a single dashboard with consolidated PnL and asset allocation.",
+        "profile_flip": "Profile flip detector -- sudden Twitter/X profile changes, domain swaps, or branding pivots before token launches or scams.",
+        "protocol_risk": "Protocol risk assessment -- TVL stability, admin key analysis, upgrade patterns, oracle dependency, governance risk.",
+        "rug_pull_predictor": "Rug pull predictor -- AI-powered risk scoring using 12+ signals: liquidity locks, ownership, holder distribution, social signals.",
+        "scam_database": "Scam database lookup -- check addresses against known scam, phishing, honeypot, and rug pull databases.",
+        "security_pack": "Security Pack -- honeypot + rug pull + audit + clone detection at 23% discount. Four tools, one price.",
+        "sentiment_spike": "Sentiment spike detector -- real-time social media volume anomalies and sentiment shifts for any token.",
+        "smart_money_alpha": "Smart money alpha -- real-time alerts when top-performing wallets enter new positions. Copy the best traders.",
+        "sniper_alert": "Sniper alert system -- detect sniper bots entering new token launches in real-time. Get in before or after the snipers.",
+        "syndicate_scan": "Syndicate scanner -- identify coordinated trading groups, wash trading rings, pump-and-dump networks.",
+        "syndicate_track": "Syndicate tracker -- follow known syndicate wallets, monitor their current positions and exit patterns.",
+        "token_age": "Token age verifier -- contract creation date, migration history, proxy upgrades, and deployment patterns.",
+        "unlock_calendar": "Token unlock calendar -- track vesting schedules, team token unlocks, upcoming dilution events that move prices.",
+        "wallet_graph": "Wallet graph analysis -- visualize transaction flows, identify money laundering patterns and entity relationships.",
+        "wallet_pnl": "Wallet PnL calculator -- realized/unrealized gains, win rate, ROI, Sharpe ratio, and complete trade history.",
+        "wash_trading": "Wash trading detector -- identify fake volume, self-trades, artificial market activity across NFTs and tokens.",
+        "whale_accumulation": "Whale accumulation detector -- track large wallet accumulation and distribution patterns. Know what whales are buying.",
+        "whale_profile": "Whale profile -- complete analysis: holdings, strategy classification, historical performance, influence score.",
+        "whale_scan": "Whale scanner -- real-time whale activity across chains. Large transfers, exchange deposits, accumulation signals.",
+    }
+    return fallbacks.get(tool_id, f"{tool_id.replace('_', ' ').title()} -- real-time crypto intelligence and security analysis.")
+
+
+# ================================================================
+# DISCOVERY
+# ================================================================
+
+@router.get("/.well-known/mcp.json")
+async def mcp_discovery():
+    data = _get_tools()
+    tools = data["prices"]
+    chains = data["chains"]
+    cats = sorted(set(p.get("category", "analysis") for p in tools.values()))
+
+    return {
+        "name": "Rug Munch Intelligence",
+        "version": "3.0.0",
+        "description": "225 crypto intelligence tools -- real-time scam detection, wallet forensics, whale tracking, contract auditing, market analysis. 13 blockchains, 10 payment facilitators, free trials + micropayments.",
+        "protocol": "mcp",
+        "protocol_version": "2024-11-05",
+        "vendor": {"name": "Rug Munch Intelligence", "url": "https://rugmunch.io", "github": "https://github.com/cryptorugmuncher"},
+        "homepage": "https://rugmunch.io",
+        "documentation": "https://rugmunch.io/docs/mcp",
+        "repository": "https://github.com/cryptorugmuncher/rug-munch-intelligence",
+        "endpoint": "https://rugmunch.io/mcp",
+        "icon": "https://rugmunch.io/logo.png",
+        "transports": ["http"],
+        "authentication": {
+            "type": "x402",
+            "description": "Pay-per-use. 1-5 free trials per tool. USDC on 13 chains, USDT, BTC, EUR. Full refund if no data returned.",
+            "discovery_url": "https://rugmunch.io/.well-known/x402",
+        },
+        "capabilities": {"tools": True, "resources": False, "prompts": False},
+        "directories": {
+            "smithery": "https://smithery.ai/server/@cryptorugmuncher/rug-munch-intelligence",
+            "glama": "https://glama.ai/mcp/servers/@cryptorugmuncher/rug-munch-intelligence",
+            "mcp_so": "https://mcp.so/server/rug-munch-intelligence",
+            "github": "https://github.com/cryptorugmuncher/rug-munch-intelligence",
+        },
+        "stats": {
+            "total_tools": len(tools) + 154,
+            "core_tools": len(tools),
+            "categories": cats,
+            "chains": sorted(chains.keys()),
+            "chain_count": len(chains),
+            "facilitators": 10,
+            "free_trials": "1-5 calls per tool, fingerprint-gated",
+            "pricing": "$0.01 - $0.40 per call",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        },
+    }
+
+
+@router.get("/.well-known/ai-plugin.json")
+async def ai_plugin_manifest():
+    return {
+        "schema_version": "v1",
+        "name_for_human": "Rug Munch Intelligence",
+        "name_for_model": "rug_munch_intelligence",
+        "description_for_human": "Crypto intelligence -- scam detection, wallet forensics, whale tracking, contract auditing. 225 tools, 13 chains.",
+        "description_for_model": "Use for crypto security: check tokens for scams, honeypots, rug pulls. Analyze wallets for PnL, clusters, insider trading. Track whales, smart money, syndicates. Audit smart contracts. Market intelligence: fear & greed, chain health, gas forecasts, DeFi yields, arbitrage. Social signals: Twitter/X sentiment, KOL performance. 13 chains. Free trials + x402 micropayments.",
+        "auth": {"type": "none"},
+        "api": {"type": "openapi", "url": "https://rugmunch.io/openapi.json"},
+        "logo_url": "https://rugmunch.io/logo.png",
+        "contact_email": "cryptorugmuncher@proton.me",
+        "legal_info_url": "https://rugmunch.io/terms",
+    }
+
+
+@router.get("/llms.txt")
+async def llms_txt():
+    return Response(content="""# Rug Munch Intelligence -- MCP Server
+> 225 crypto intelligence tools. 13 chains. 10 payment facilitators. Free trials + micropayments.
+
+## Quick Start
+- MCP Endpoint: https://rugmunch.io/mcp
+- Discovery: https://rugmunch.io/.well-known/mcp.json
+- Payment: https://rugmunch.io/.well-known/x402
+- Docs: https://rugmunch.io/docs/mcp
+- GitHub: https://github.com/cryptorugmuncher/rug-munch-intelligence
+
+## Directory Listings
+- Smithery: https://smithery.ai/server/@cryptorugmuncher/rug-munch-intelligence
+- Glama: https://glama.ai/mcp/servers/@cryptorugmuncher/rug-munch-intelligence
+- mcp.so: https://mcp.so/server/rug-munch-intelligence
+- Open WebUI: https://openwebui.com/t/cryptorugmuncher/rug-munch-intelligence
+
+## How It Works
+- Free trial -- 1-5 calls per tool, no payment. Fingerprint-gated anti-abuse.
+- Pay per use -- USDC on any of 13 chains. $0.01-$0.40 per call. Auto-routes to best facilitator.
+- Instant refund -- Full refund if tool returns no data. Request within 48h.
+
+## Tool Categories
+- Security (20): scam detection, honeypot checker, rug pull predictor, contract audit, clone detection, MEV protection, wash trading detection
+- Intelligence (18): whale tracking, smart money, wallet clustering, insider detection, sniper scan, syndicate analysis, deployer history
+- Market (9): market pulse, chain health, gas forecast, DeFi yields, arbitrage scan, liquidity depth, token unlock calendar
+- Analysis (8): wallet forensics, PnL tracking, portfolio aggregation, token deep dive, forensic valuation
+- Social (6): sentiment analysis, Twitter/X signals, KOL performance, social signal detection
+- Launchpad (3): new token discovery, launch intelligence, sniper alerts
+- Premium (3): OSINT identity hunt, investigation report, forensic pack
+- Bundles (4): security pack, intelligence pack, all-in-one audit, forensic pack
+
+## Payment Chains
+Base, Solana, Ethereum, BSC, Arbitrum, Optimism, Polygon, Avalanche, Fantom, Gnosis, TRON, Bitcoin, SEPA/EUR
+
+## Integration
+curl https://rugmunch.io/.well-known/mcp.json
+curl https://rugmunch.io/mcp/tools
+""", media_type="text/plain; charset=utf-8")
+
+
+# ================================================================
+# TOOL CATALOG
+# ================================================================
+
+@router.get("/mcp/tools")
+async def mcp_tools_list(request: Request):
+    """Every tool in the RMI platform -- full catalog with descriptions,
+    pricing, chain support, and trial availability."""
+    data = _get_tools()
+    prices = data["prices"]
+    chains_data = data["chains"]
+
+    tools = {}
+    cats = {}
+    for tool_id, pricing in sorted(prices.items()):
+        cat = pricing.get("category", "analysis")
+        cats[cat] = cats.get(cat, 0) + 1
+        tools[tool_id] = {
+            "name": pricing.get("description", tool_id.replace("_", " ").title()),
+            "description": _desc(tool_id, pricing),
+            "category": cat,
+            "price_usd": float(pricing.get("price_usd", 0.01)),
+            "trial_free": int(pricing.get("trial_free", 1)),
+            "chains": sorted(chains_data.keys()),
+            "endpoint": f"/api/v1/x402-tools/{tool_id}",
+            "method": pricing.get("method", "POST") if isinstance(pricing.get("method"), str) else "POST",
+        }
+
+    trial_info = None
+    try:
+        from app.routers.x402_enforcement import get_client_id, check_trial
+        cid = get_client_id(request)
+        remaining = {}
+        for tid in prices:
+            can, rem = check_trial(tid, cid)
+            if rem > 0 or can:
+                remaining[tid] = {"can_trial": can, "remaining": rem}
+        trial_info = {"client_id": cid[:20] + "...", "tools_with_trials": len(remaining), "trials": remaining}
+    except Exception:
+        pass
+
+    return {
+        "server": "Rug Munch Intelligence MCP v3.0",
+        "homepage": "https://rugmunch.io",
+        "github": "https://github.com/cryptorugmuncher/rug-munch-intelligence",
+        "directories": {
+            "smithery": "https://smithery.ai/server/@cryptorugmuncher/rug-munch-intelligence",
+            "glama": "https://glama.ai/mcp/servers/@cryptorugmuncher/rug-munch-intelligence",
+        },
+        "total_tools": len(tools),
+        "categories": {k: v for k, v in sorted(cats.items())},
+        "chains": sorted(chains_data.keys()),
+        "chain_count": len(chains_data),
+        "facilitators": 10,
+        "pricing": "$0.01-$0.40/call. Most tools $0.05. Bundles save 23-33%.",
+        "free_trials": "1-5 calls per tool. Fingerprint-gated. Wallet required after 1 free call.",
+        "payment": {"protocol": "x402", "discovery": "/.well-known/x402", "tokens": ["USDC", "USDT", "BTC", "EUR"], "chains": sorted(chains_data.keys())},
+        "refund": "Full refund if tool returns no data. Within 48h via POST /api/v1/x402/refund.",
+        "tools": tools,
+        "trial_status": trial_info,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.get("/mcp/capabilities")
+async def mcp_capabilities():
+    return {
+        "server": "Rug Munch Intelligence MCP v3.0",
+        "homepage": "https://rugmunch.io",
+        "github": "https://github.com/cryptorugmuncher/rug-munch-intelligence",
+        "capabilities": {"tools": True, "resources": False, "prompts": False, "streaming": False},
+        "protocols": ["x402"],
+        "payment": {"required": False, "trial_available": True, "trial_calls": "1-5 per tool", "paid": "$0.01-$0.40 via x402"},
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+# ================================================================
+# TOOL EXECUTION
+# ================================================================
+
+@router.post("/mcp/call/{tool_id}")
+async def mcp_call_tool(tool_id: str, request: Request):
+    """Execute any tool. Requires x402 payment or free trial."""
+    data = _get_tools()
+    if tool_id not in data["prices"] and tool_id not in ("list", "tools", "catalog"):
+        raise HTTPException(status_code=404, detail=f"Tool '{tool_id}' not found. {len(data['prices'])} tools available -- see /mcp/tools")
+
+    try:
+        body = await request.json() if request.headers.get("content-type") == "application/json" else {}
+    except Exception:
+        body = {}
+
+    import httpx
+    url = f"http://localhost:8000/api/v1/x402-tools/{tool_id}"
+    try:
+        headers = {}
+        for h in ("x-pay", "X-Pay", "X-Device-Id"):
+            if request.headers.get(h):
+                headers[h] = request.headers[h]
+        async with httpx.AsyncClient(timeout=45) as client:
+            resp = await client.post(url, json=body, headers=headers)
+            result = resp.json() if "application/json" in (resp.headers.get("content-type", "")) else {"data": resp.text}
+            rh = {}
+            for h in ("X-RMI-Payment", "X-RMI-Trial", "X-RMI-Trial-Remaining", "X-RMI-Refund-Flagged"):
+                if resp.headers.get(h):
+                    rh[h] = resp.headers[h]
+            return JSONResponse(content=result, headers=rh) if rh else result
+    except httpx.ConnectError:
+        raise HTTPException(status_code=502, detail="Backend unavailable")
+    except Exception as e:
+        logger.error(f"MCP tool failed: {tool_id}: {e}")
+        raise HTTPException(status_code=502, detail=f"Tool execution failed: {str(e)[:200]}")

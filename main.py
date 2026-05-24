@@ -118,8 +118,6 @@ async def _startup():
     except Exception as e:
         print(f"[WARN] x402 dashboard startup failed: {e}")
 
-from app.mcp_router import router as mcp_router
-app.include_router(mcp_router)
 from app.email_router import router as email_router
 app.include_router(email_router)
 from app.mail_dashboard import router as mail_router
@@ -142,6 +140,10 @@ from app.routers import discovery_router
 from app.routers import forensics_router
 app.include_router(discovery_router.router)
 app.include_router(forensics_router.router)
+
+# MCP Server — full crypto intelligence MCP with 30+ tools, discovery, well-known endpoints
+from app.routers.mcp_server import router as mcp_server_router
+app.include_router(mcp_server_router)
 
 # ── Degen Security Scanner ───────────────────────────────────
 from app.degen_scan_endpoint import router as degen_router
@@ -2722,19 +2724,152 @@ async def health_check():
 
 @app.get("/api/v1/status")
 async def get_status(request: Request):
-    """Get platform status."""
+    """Full system status — all containers, gateways, resources, earnings.
+    Powers the terminal dashboard and web monitoring panel."""
+    import subprocess, json as _json, shutil
+
+    # Docker check via Python docker SDK (socket mounted)
+    containers = {}
+    try:
+        import docker as docker_pkg
+        client = docker_pkg.from_env()
+        for c in client.containers.list(all=False):
+            status = c.status
+            if c.attrs.get("State", {}).get("Health", {}).get("Status") == "healthy":
+                status = f"{status} (healthy)"
+            containers[c.name] = status
+    except:
+        pass
+
+    def _check_container(*names):
+        for n in names:
+            if n in containers:
+                s = containers[n]
+                return {"running": "running" in s.lower() or "up" in s.lower(), "status": s, "healthy": "(healthy)" in s}
+        return {"running": False, "status": "not found", "healthy": False}
+
+    infra = {
+        "backend": _check_container("rmi-backend"),
+        "redis": _check_container("rmi-redis"),
+        "worker": _check_container("rmi-worker"),
+        "n8n": _check_container("rmi-n8n"),
+        "orchestrator": _check_container("rmi-orchestrator"),
+        "cloudflare_tunnel": _check_container("rmi-cloudflare"),
+    }
+    management = {
+        "uptime_kuma": _check_container("rmi-uptime-kuma"),
+        "dozzle": _check_container("rmi-dozzle"),
+        "glitchtip": _check_container("rmi-glitchtip"),
+        "glitchtip_db": _check_container("rmi-glitchtip-pg"),
+        "redis_insight": _check_container("rmi-redis-insight"),
+        "vaultwarden": _check_container("rmi-vaultwarden"),
+        "webmail": _check_container("rmi-webmail"),
+        "listmonk": _check_container("rmi-listmonk"),
+        "ghost": _check_container("rmi-ghost"),
+        "mysql": _check_container("rmi-mysql"),
+        "telegram_mcp": _check_container("telegram-mcp"),
+    }
+    langfuse = {
+        "web": _check_container("langfuse-langfuse-web-1"),
+        "worker": _check_container("langfuse-langfuse-worker-1"),
+        "postgres": _check_container("langfuse-postgres-1"),
+        "redis": _check_container("langfuse-redis-1"),
+        "clickhouse": _check_container("langfuse-clickhouse-1"),
+        "minio": _check_container("langfuse-minio-1"),
+    }
+
+    disk = shutil.disk_usage("/")
+    disk_pct = disk.used / disk.total * 100
+
+    def _run(cmd, timeout=5):
+        try:
+            return subprocess.check_output(cmd, timeout=timeout).decode().strip()
+        except:
+            return ""
+
+    mem = _run(["free", "-b"]).split("\n")
+    mem_used_pct = 0
+    if len(mem) > 1:
+        parts = mem[1].split()
+        if len(parts) > 6:
+            mem_total = int(parts[1])
+            mem_avail = int(parts[6])
+            mem_used_pct = (mem_total - mem_avail) / mem_total * 100 if mem_total else 0
+
+    cpu_str = _run(["top", "-bn1", "-d0.5"], 8)
+    cpu_pct = 0
+    for line in cpu_str.split("\n"):
+        if "Cpu(s)" in line:
+            idle_part = [p for p in line.split(",") if "id" in p.lower()]
+            if idle_part:
+                cpu_pct = 100 - float(idle_part[0].split()[0])
+            break
+
+    resources = {
+        "disk": {"used_pct": round(disk_pct, 1), "free_gb": round(disk.free / (1024**3), 1), "total_gb": round(disk.total / (1024**3), 1)},
+        "memory": {"used_pct": round(mem_used_pct, 1)},
+        "cpu": {"used_pct": round(cpu_pct, 1)},
+    }
+
+    earnings = {"total_usdc": 0, "today_usdc": 0, "unique_payers": 0, "by_chain": {}, "trials_today": 0}
+    try:
+        from app.routers.x402_dashboard import _get_redis
+        r = _get_redis()
+        if r:
+            keys = r.keys("x402:spent_tx:*")
+            for k in keys:
+                try:
+                    earnings["total_usdc"] += float(r.get(k) or 0)
+                except:
+                    pass
+            earnings["unique_payers"] = len(set(
+                k.decode().split(":")[-1] for k in (r.keys("x402:spent_tx:*") or [])
+            ))
+            earnings["trials_today"] = int(r.get("x402:global:trials_today") or 0)
+    except:
+        pass
+
+    async def _check_url(url, timeout=3):
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as c:
+                r = await c.get(url)
+                return r.status_code
+        except:
+            return None
+
+    sol_code = await _check_url("https://sol.rugmunch.io/health")
+    base_code = await _check_url("https://base.rugmunch.io/health")
+    mcp_code = await _check_url("https://mcp-router.rugmunch.io/tools")
+    web_code = await _check_url("https://rugmunch.io")
+
+    gateways = {
+        "solana": {"up": sol_code == 200, "status": f"HTTP {sol_code}" if sol_code else "DOWN"},
+        "base": {"up": base_code == 200, "status": f"HTTP {base_code}" if base_code else "DOWN"},
+        "mcp_router": {"up": mcp_code == 200, "status": f"HTTP {mcp_code}" if mcp_code else "DOWN"},
+    }
+    website = {"up": web_code == 200, "status": f"HTTP {web_code}" if web_code else "DOWN"}
+
+    critical_up = all(v["running"] for v in infra.values())
+    all_items = list(infra.values()) + list(management.values()) + list(langfuse.values())
+    total = len(all_items) + 6
+    passing = sum(1 for v in all_items if v["running"])
+    passing += (1 if sol_code == 200 else 0)
+    passing += (1 if base_code == 200 else 0)
+    passing += (1 if mcp_code == 200 else 0)
+    passing += (1 if web_code == 200 else 0)
+    passing += (1 if disk_pct < 90 else 0)
+    passing += (1 if mem_used_pct < 95 else 0)
+
     return {
-        "status": "online",
-        "version": "2.0.0",
-        "services": {
-            "coingecko": "connected",
-            "dexscreener": "connected",
-            "groq": "connected",
-            "jupiter": "connected",
-            "database": "connected",
-            "redis": "connected",
-        },
-        "uptime_seconds": 86400,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "score": {"total": total, "passing": passing, "critical_ok": critical_up},
+        "infrastructure": infra,
+        "management": management,
+        "langfuse": langfuse,
+        "resources": resources,
+        "earnings": earnings,
+        "gateways": gateways,
+        "website": website,
     }
 
 # ═══════════════════════════════════════════════════════════
