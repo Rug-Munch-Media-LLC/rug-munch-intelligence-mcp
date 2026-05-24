@@ -149,6 +149,32 @@ app.include_router(mcp_server_router)
 from app.degen_scan_endpoint import router as degen_router
 app.include_router(degen_router)
 
+# ── Hermes API Proxy ──────────────────────────────────────────
+# Proxies /v1/hermes/* → hermes API on host. Uses host.docker.internal
+# added via docker-compose extra_hosts.
+HERMES_API_URL = "http://host.docker.internal:8642"
+HERMES_API_KEY = "hermes-local-8642"
+
+@app.api_route("/v1/hermes/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+@app.api_route("/v1/hermes", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+async def proxy_hermes(request: Request, path: str = ""):
+    target = f"{HERMES_API_URL}/v1/{path}" if path else f"{HERMES_API_URL}/v1"
+    headers = dict(request.headers)
+    headers.pop("host", None)
+    headers.pop("content-length", None)
+    if "authorization" not in {k.lower() for k in headers}:
+        headers["authorization"] = f"Bearer {HERMES_API_KEY}"
+    body = await request.body()
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        resp = await client.request(
+            method=request.method, url=target, headers=headers,
+            content=body, params=dict(request.query_params),
+        )
+    return Response(
+        content=resp.content, status_code=resp.status_code,
+        headers=dict(resp.headers),
+    )
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
