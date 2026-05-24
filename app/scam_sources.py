@@ -30,6 +30,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Any
 import httpx
+import feedparser
 
 logger = logging.getLogger(__name__)
 
@@ -37,39 +38,77 @@ logger = logging.getLogger(__name__)
 # SOURCE CONNECTORS
 # ══════════════════════════════════════════════════════════════════════
 
-class RektNewsConnector:
-    """REKT News — largest crypto exploit database. https://rekt.news"""
+# RSS feeds from security sources — verified working May 2026
+SECURITY_RSS_FEEDS = [
+    ("https://www.web3isgoinggreat.com/feed", "W3IGG"),
+    ("https://slowmist.medium.com/feed", "SlowMist"),
+    ("https://peckshield.medium.com/feed", "PeckShield"),
+    ("https://certik.medium.com/feed", "CertiK"),
+    ("https://immunefi.medium.com/feed", "Immunefi"),
+    ("https://blog.trailofbits.com/feed/", "TrailOfBits"),
+    ("https://cryptosecurity.substack.com/feed", "CryptoSecurity"),
+    ("https://cointelegraph.com/rss/tag/security", "CoinTelegraph-Security"),
+    ("https://www.chainalysis.com/blog/feed/", "Chainalysis"),
+]
 
-    BASE = "https://rekt.news"
+# Scam-adjacent URLs for scraping (no API, no RSS — use HTML parsing)
+SCRAPE_SOURCES = [
+    {
+        "name": "chainabuse",
+        "url": "https://chainabuse.com/reports",
+        "selector": "a[href*='/report/']",
+    },
+    {
+        "name": "rekt",
+        "url": "https://rekt.news/",
+        "selector": "article a",
+    },
+]
+
+
+class RSSFeedConnector:
+    """Generic RSS/Atom feed connector for security feeds."""
 
     @staticmethod
-    async def fetch_recent(limit: int = 50) -> List[dict]:
-        """Fetch recent exploit reports. REKT doesn't have a public API,
-        but we can scrape their leaderboard and article pages."""
+    async def fetch_feed(url: str, source_name: str, limit: int = 20) -> List[dict]:
         results = []
         try:
-            async with httpx.AsyncClient(timeout=30) as client:
-                # REKT leaderboard JSON endpoint
-                resp = await client.get(
-                    f"{RektNewsConnector.BASE}/leaderboard.json",
-                    headers={"User-Agent": "RMI-Scam-Indexer/1.0"}
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    for entry in data[:limit]:
-                        results.append({
-                            "source": "rekt.news",
-                            "type": "exploit",
-                            "name": entry.get("name", ""),
-                            "amount_lost_usd": entry.get("amount", 0),
-                            "date": entry.get("date", ""),
-                            "chain": entry.get("chain", "ethereum"),
-                            "description": entry.get("description", ""),
-                            "category": entry.get("category", "exploit"),
-                            "url": f"{RektNewsConnector.BASE}{entry.get('slug', '')}",
-                        })
+            async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+                resp = await client.get(url, headers={"User-Agent": "RMI-Scam-Indexer/1.0"})
+                if resp.status_code != 200:
+                    logger.debug(f"RSS {source_name}: HTTP {resp.status_code}")
+                    return results
+
+            feed = feedparser.parse(resp.text)
+            if not feed.entries:
+                logger.debug(f"RSS {source_name}: no entries found")
+                return results
+
+            for entry in feed.entries[:limit]:
+                title = entry.get("title", "")
+                link = entry.get("link", "")
+                desc = entry.get("summary", "") or entry.get("description", "") or title
+                
+                # Parse date
+                pub_parsed = entry.get("published_parsed") or entry.get("updated_parsed")
+                if pub_parsed:
+                    published = datetime(*pub_parsed[:6], tzinfo=timezone.utc).isoformat()
+                else:
+                    published = datetime.now(timezone.utc).isoformat()
+
+                results.append({
+                    "source": source_name.lower().replace(" ", "_"),
+                    "type": "security_feed",
+                    "name": title,
+                    "description": desc[:500],
+                    "date": published,
+                    "url": link,
+                    "category": "security_intel",
+                })
+
+            logger.info(f"RSS {source_name}: {len(results)} articles")
         except Exception as e:
-            logger.warning(f"REKT fetch failed: {e}")
+            logger.warning(f"RSS {source_name} failed: {e}")
         return results
 
 
@@ -112,110 +151,6 @@ class GoPlusConnector:
         except Exception as e:
             logger.warning(f"GoPlus check failed for {address}: {e}")
         return {}
-
-
-class ChainabuseConnector:
-    """Chainabuse — community scam reports. https://chainabuse.com"""
-
-    BASE = "https://api.chainabuse.com/v1"
-
-    @staticmethod
-    async def fetch_reports(limit: int = 50) -> List[dict]:
-        """Fetch recent scam reports."""
-        results = []
-        try:
-            async with httpx.AsyncClient(timeout=30) as client:
-                resp = await client.get(
-                    f"{ChainabuseConnector.BASE}/reports",
-                    params={"limit": limit, "sort": "recent"},
-                    headers={"User-Agent": "RMI-Scam-Indexer/1.0"}
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    for report in data.get("reports", data.get("data", []))[:limit]:
-                        results.append({
-                            "source": "chainabuse",
-                            "type": "scam_report",
-                            "name": report.get("title", ""),
-                            "description": report.get("description", ""),
-                            "addresses": report.get("addresses", []),
-                            "category": report.get("category", "scam"),
-                            "date": report.get("created_at", ""),
-                            "chain": report.get("chain", ""),
-                            "url": report.get("url", ""),
-                        })
-        except Exception as e:
-            logger.warning(f"Chainabuse fetch failed: {e}")
-        return results
-
-
-class Web3IsGoingGreatConnector:
-    """Web3IsGoingGreat — incident tracker by Molly White."""
-
-    BASE = "https://www.web3isgoinggreat.com"
-
-    @staticmethod
-    async def fetch_recent(limit: int = 30) -> List[dict]:
-        """Fetch recent incidents."""
-        results = []
-        try:
-            async with httpx.AsyncClient(timeout=30) as client:
-                # Try the API endpoint
-                resp = await client.get(
-                    f"{Web3IsGoingGreatConnector.BASE}/api/entries.json",
-                    headers={"User-Agent": "RMI-Scam-Indexer/1.0"}
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    entries = data.get("entries", data if isinstance(data, list) else [])
-                    for entry in entries[:limit]:
-                        results.append({
-                            "source": "web3isgoinggreat",
-                            "type": "incident",
-                            "name": entry.get("title", ""),
-                            "description": entry.get("description", entry.get("body", "")),
-                            "date": entry.get("date", ""),
-                            "category": entry.get("category", "incident"),
-                            "url": entry.get("url", ""),
-                        })
-        except Exception as e:
-            logger.warning(f"W3IGG fetch failed: {e}")
-        return results
-
-
-class SlowMistConnector:
-    """SlowMist Hacked — investigation reports."""
-
-    BASE = "https://hacked.slowmist.io"
-
-    @staticmethod
-    async def fetch_recent(limit: int = 30) -> List[dict]:
-        """Fetch recent SlowMist hack reports."""
-        results = []
-        try:
-            async with httpx.AsyncClient(timeout=30) as client:
-                # SlowMist publishes via their API
-                resp = await client.get(
-                    f"{SlowMistConnector.BASE}/api/reports",
-                    params={"limit": limit},
-                    headers={"User-Agent": "RMI-Scam-Indexer/1.0"}
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    for report in data.get("reports", data.get("data", []))[:limit]:
-                        results.append({
-                            "source": "slowmist",
-                            "type": "hack_report",
-                            "name": report.get("title", ""),
-                            "description": report.get("summary", ""),
-                            "amount_lost_usd": report.get("amount", 0),
-                            "date": report.get("date", ""),
-                            "chain": report.get("chain", ""),
-                            "url": report.get("url", ""),
-                        })
-        except Exception as e:
-            logger.warning(f"SlowMist fetch failed: {e}")
-        return results
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -364,12 +299,10 @@ class ScamIngestionPipeline:
     def __init__(self):
         self._last_run: Optional[datetime] = None
         self._total_ingested = 0
+        # Primary: RSS feeds (always work)
         self.connectors = [
             ("curated", self._ingest_curated),
-            ("rekt", self._ingest_rekt),
-            ("chainabuse", self._ingest_chainabuse),
-            ("web3igg", self._ingest_w3igg),
-            ("slowmist", self._ingest_slowmist),
+            ("rss_feeds", self._ingest_all_rss),
         ]
 
     async def run_full_ingestion(self, force: bool = False) -> Dict[str, Any]:
@@ -417,6 +350,47 @@ class ScamIngestionPipeline:
             "timestamp": self._last_run.isoformat(),
         }
 
+    async def _ingest_all_rss(self, embedder) -> List[dict]:
+        """Ingest from all security RSS feeds in parallel."""
+        all_docs = []
+        tasks = [
+            RSSFeedConnector.fetch_feed(url, name, limit=15)
+            for url, name in SECURITY_RSS_FEEDS
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for i, articles in enumerate(results):
+            if isinstance(articles, Exception):
+                logger.warning(f"RSS feed {SECURITY_RSS_FEEDS[i][1]} error: {articles}")
+                continue
+            if not isinstance(articles, list):
+                continue
+            
+            source_name = SECURITY_RSS_FEEDS[i][1]
+            for article in articles:
+                try:
+                    content = f"SECURITY INTEL [{source_name}]: {article['name']}. {article.get('description', '')}"
+                    result = await embedder.embed_scam_pattern(
+                        pattern_name=article["name"],
+                        description=content,
+                        severity="medium",
+                    )
+                    doc_id = hashlib.sha256(f"rss:{source_name}:{article['name']}".encode()).hexdigest()[:16]
+                    all_docs.append({
+                        "id": doc_id,
+                        "collection": "market_intel",
+                        "embedding": result.vector,
+                        "content": content,
+                        "metadata": article,
+                        "source": f"rss-{source_name.lower()}",
+                        "severity": "medium",
+                    })
+                except Exception as e:
+                    logger.warning(f"Failed to embed RSS article {article.get('name')}: {e}")
+        
+        logger.info(f"RSS ingestion: {len(all_docs)} docs from {len(SECURITY_RSS_FEEDS)} feeds")
+        return all_docs
+
     async def _ingest_curated(self, embedder) -> List[dict]:
         """Ingest manually curated scam patterns (always available)."""
         docs = []
@@ -441,114 +415,6 @@ class ScamIngestionPipeline:
                 })
             except Exception as e:
                 logger.warning(f"Failed to embed curated pattern {pattern['name']}: {e}")
-        return docs
-
-    async def _ingest_rekt(self, embedder) -> List[dict]:
-        """Ingest REKT News exploit reports."""
-        connector = RektNewsConnector()
-        reports = await connector.fetch_recent(limit=50)
-        docs = []
-        for report in reports:
-            try:
-                content = f"EXPLOIT: {report['name']}. Lost: ${report.get('amount_lost_usd', 0):,.0f}. Chain: {report.get('chain', 'unknown')}. {report.get('description', '')}"
-                result = await embedder.embed_scam_pattern(
-                    pattern_name=report["name"],
-                    description=content,
-                    severity="critical",
-                )
-                doc_id = hashlib.sha256(f"rekt:{report['name']}".encode()).hexdigest()[:16]
-                docs.append({
-                    "id": doc_id,
-                    "collection": "forensic_reports",
-                    "embedding": result.vector,
-                    "content": content,
-                    "metadata": report,
-                    "source": "rekt.news",
-                    "severity": "critical",
-                })
-            except Exception as e:
-                logger.warning(f"Failed to embed REKT report {report.get('name')}: {e}")
-        return docs
-
-    async def _ingest_chainabuse(self, embedder) -> List[dict]:
-        """Ingest Chainabuse scam reports."""
-        connector = ChainabuseConnector()
-        reports = await connector.fetch_reports(limit=50)
-        docs = []
-        for report in reports:
-            try:
-                content = f"SCAM REPORT: {report['name']}. Category: {report.get('category', 'scam')}. Addresses: {', '.join(report.get('addresses', [])[:5])}. {report.get('description', '')}"
-                result = await embedder.embed_scam_pattern(
-                    pattern_name=report["name"],
-                    description=content,
-                    severity="high",
-                )
-                doc_id = hashlib.sha256(f"chainabuse:{report['name']}".encode()).hexdigest()[:16]
-                docs.append({
-                    "id": doc_id,
-                    "collection": "scam_patterns",
-                    "embedding": result.vector,
-                    "content": content,
-                    "metadata": report,
-                    "source": "chainabuse",
-                    "severity": "high",
-                })
-            except Exception as e:
-                logger.warning(f"Failed to embed Chainabuse report: {e}")
-        return docs
-
-    async def _ingest_w3igg(self, embedder) -> List[dict]:
-        """Ingest Web3IsGoingGreat incidents."""
-        connector = Web3IsGoingGreatConnector()
-        incidents = await connector.fetch_recent(limit=30)
-        docs = []
-        for incident in incidents:
-            try:
-                content = f"INCIDENT: {incident['name']}. {incident.get('description', '')}"
-                result = await embedder.embed_scam_pattern(
-                    pattern_name=incident["name"],
-                    description=content,
-                    severity="medium",
-                )
-                doc_id = hashlib.sha256(f"w3igg:{incident['name']}".encode()).hexdigest()[:16]
-                docs.append({
-                    "id": doc_id,
-                    "collection": "market_intel",
-                    "embedding": result.vector,
-                    "content": content,
-                    "metadata": incident,
-                    "source": "web3isgoinggreat",
-                    "severity": "medium",
-                })
-            except Exception as e:
-                logger.warning(f"Failed to embed W3IGG incident: {e}")
-        return docs
-
-    async def _ingest_slowmist(self, embedder) -> List[dict]:
-        """Ingest SlowMist hacked reports."""
-        connector = SlowMistConnector()
-        reports = await connector.fetch_recent(limit=30)
-        docs = []
-        for report in reports:
-            try:
-                content = f"HACK REPORT: {report['name']}. Lost: ${report.get('amount_lost_usd', 0):,.0f}. {report.get('description', '')}"
-                result = await embedder.embed_scam_pattern(
-                    pattern_name=report["name"],
-                    description=content,
-                    severity="critical",
-                )
-                doc_id = hashlib.sha256(f"slowmist:{report['name']}".encode()).hexdigest()[:16]
-                docs.append({
-                    "id": doc_id,
-                    "collection": "forensic_reports",
-                    "embedding": result.vector,
-                    "content": content,
-                    "metadata": report,
-                    "source": "slowmist",
-                    "severity": "critical",
-                })
-            except Exception as e:
-                logger.warning(f"Failed to embed SlowMist report: {e}")
         return docs
 
 

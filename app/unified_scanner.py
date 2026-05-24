@@ -376,6 +376,8 @@ async def scan_wallet(wallet_address: str, chain: str = "solana", tier: str = "f
             "unique_tokens_held": factors.unique_tokens_held,
         },
         "scanned_at": datetime.now(timezone.utc).isoformat(),
+        # Tool fingerprinting (always runs on elite tier, optional on pro)
+        "tool_fingerprints": None,  # populated by caller if requested
     }
 
 

@@ -39,15 +39,23 @@ GHOST_CONTENT_KEY = os.getenv("GHOST_CONTENT_API_KEY", "")
 
 RSS_FEEDS = [
     ("https://cointelegraph.com/rss", "CoinTelegraph"),
-    ("https://www.coindesk.com/arc/outboundfeeds/rss/", "CoinDesk"),
     ("https://decrypt.co/feed", "Decrypt"),
     ("https://blockworks.co/feed", "Blockworks"),
+    ("https://www.theblock.co/rss.xml", "The Block"),
     ("https://thedefiant.io/feed", "The Defiant"),
+    ("https://www.bankless.com/feed", "Bankless"),
+    ("https://www.chainalysis.com/blog/feed/", "Chainalysis"),
+    ("https://blog.trailofbits.com/feed/", "Trail of Bits"),
     ("https://bitcoinmagazine.com/feed", "Bitcoin Magazine"),
-    ("https://coingeek.com/feed/", "CoinGeek"),
-    ("https://blog.chainalysis.com/feed/", "Chainalysis"),
-    ("https://blog.bitmex.com/feed/", "BitMEX Research"),
+    ("https://www.web3isgoinggreat.com/feed", "W3IGG"),
+    ("https://peckshield.medium.com/feed", "PeckShield"),
+    ("https://slowmist.medium.com/feed", "SlowMist"),
+    ("https://certik.medium.com/feed", "CertiK"),
+    ("https://immunefi.medium.com/feed", "Immunefi"),
+    ("https://cryptosecurity.substack.com/feed", "CryptoSecurity"),
 ]
+
+# Coingeek and BitMEX removed (dead feeds). Coindesk Arc removed (returns HTML not RSS).
 
 # ─── REDDIT CONFIG ────────────────────────────────────────────────
 

@@ -1753,10 +1753,33 @@ async def rag_alerts(request: Request, limit: int = 20):
 
 @app.post("/api/v1/rag/ingest-sources")
 async def rag_ingest_sources(request: Request):
-    """Trigger ingestion from external sources (REKT, Chainabuse, SlowMist, W3IGG)."""
-    from app.scam_sources import get_ingestion_pipeline
-    pipeline = await get_ingestion_pipeline()
-    return await pipeline.run_full_ingestion(force=True)
+    """Trigger full ingestion cycle: RSS feeds + on-chain scanning."""
+    from app.intel_feed_pipeline import get_pipeline
+    pipeline = await get_pipeline()
+    return await pipeline.run_cycle()
+
+@app.get("/api/v1/intel/latest")
+async def intel_latest(request: Request, limit: int = 20):
+    """Get latest threat intelligence items for frontend."""
+    from app.intel_feed_pipeline import get_pipeline
+    pipeline = await get_pipeline()
+    items = await pipeline.get_latest_intel(limit)
+    return {"items": items, "total": len(items), "pipeline_ready": True}
+
+@app.get("/api/v1/intel/feed-test")
+async def intel_feed_test(request: Request):
+    """Test RSS feeds — returns which feeds are reachable."""
+    from app.intel_feed_pipeline import FEEDS
+    results = {}
+    for feed in FEEDS:
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+                resp = await client.get(feed["url"], headers={"User-Agent": "RMI/1.0"})
+                results[feed["name"]] = {"status": resp.status_code, "size": len(resp.text)}
+        except Exception as e:
+            results[feed["name"]] = {"status": "error", "error": str(e)[:100]}
+    return {"feeds": results, "total": len(FEEDS)}
 
 @app.get("/api/v1/rag/search-stream")
 async def rag_search_stream(request: Request, q: str, collection: str = "all", limit: int = 5):
@@ -2532,6 +2555,64 @@ async def helius_whale_profile(request: Request, data: dict):
     except Exception:
         pass
     return {"wallet": wallet, "total_value_usd": 0, "top_tokens": [], "transaction_count": 0, "first_seen": ""}
+
+# ═══════════════════════════════════════════════════════════
+# TOOL FINGERPRINTING — Best-in-class scam infrastructure detection
+# Phase 3-5: Smithii, Printr, LaunchLab, Jito, volume bots, aging, cross-chain
+# ═══════════════════════════════════════════════════════════
+
+@app.post("/api/v1/scanner/fingerprint")
+async def scanner_fingerprint(request: Request, data: dict):
+    """Tool fingerprinting — detect scammer infrastructure behind a token."""
+    from app.tool_fingerprint import fingerprint_token
+    token = data.get("token_address", data.get("address", ""))
+    chain = data.get("chain", "solana")
+    try:
+        result = await fingerprint_token(token_address=token, chain=chain,
+            deployer=data.get("deployer"), holders=data.get("holders"),
+            transactions=data.get("transactions"))
+        return result
+    except Exception as e:
+        return {"error": str(e), "token_address": token, "chain": chain}
+
+@app.post("/api/v1/scanner/unified")
+async def scanner_unified(request: Request, data: dict):
+    """Unified token + wallet scan with fingerprinting."""
+    from app.unified_scanner import scan_wallet
+    from app.tool_fingerprint import fingerprint_token
+    wallet = data.get("wallet", data.get("address", ""))
+    token = data.get("token_address", "")
+    chain = data.get("chain", "solana")
+    tier = data.get("tier", "free")
+    include_fp = data.get("fingerprints", tier == "elite")
+    results = {"chain": chain, "scanned_at": datetime.now(timezone.utc).isoformat()}
+    if wallet:
+        try:
+            results["wallet"] = await scan_wallet(wallet, chain, tier)
+        except Exception as e:
+            results["wallet"] = {"error": str(e)}
+    if token and include_fp:
+        try:
+            fp = await fingerprint_token(token_address=token, chain=chain,
+                deployer=data.get("deployer"), holders=data.get("holders"),
+                transactions=data.get("transactions"))
+            results["fingerprint"] = fp
+            wallet_risk = results.get("wallet", {}).get("risk_score", 0)
+            results["combined_risk_score"] = max(wallet_risk, fp.get("aggregate_risk_score", 0))
+            results["flags"] = (results.get("wallet", {}).get("risk_flags", []) + fp.get("flags", []))
+        except Exception as e:
+            results["fingerprint"] = {"error": str(e)}
+    return results
+
+@app.get("/api/v1/scanner/tools")
+async def scanner_tools_list():
+    """List all detectable scammer tools and their signatures."""
+    from app.tool_fingerprint import TOOL_SIGNATURES, TOOL_PROGRAMS
+    return {
+        "tool_signatures": {n: {"description": s["description"], "severity": s["severity"], "patterns": s["patterns"]} for n, s in TOOL_SIGNATURES.items()},
+        "known_programs": TOOL_PROGRAMS,
+        "total_tools": len(TOOL_SIGNATURES),
+    }
 
 @app.post("/api/v1/helius/sniper-detect")
 async def helius_sniper_detect(request: Request, data: dict):

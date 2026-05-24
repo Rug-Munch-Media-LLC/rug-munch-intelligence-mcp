@@ -116,17 +116,60 @@ class SupabaseVectorStore:
             return resp.json() if resp.text else {}
 
     async def initialize(self) -> bool:
-        """Create table and indexes if not exist."""
+        """Create table and indexes if not exist. Falls back gracefully."""
+        # Try existing search_embeddings RPC first
         try:
-            await self._rpc("exec_sql", {"sql": CREATE_TABLE_SQL})
+            test = await self._rpc("search_embeddings", {
+                "query_embedding": [0.1] * 128,
+                "match_count": 1,
+            })
             self._table_ready = True
-            logger.info("pgvector table initialized")
-            return True
-        except Exception as e:
-            logger.warning(f"pgvector init via RPC failed (may need manual setup): {e}")
-            # Try direct insert — if table exists it'll work
-            self._table_ready = True
-            return False
+            logger.info("pgvector: search_embeddings RPC available")
+        except Exception:
+            logger.warning("pgvector: search_embeddings RPC not available")
+
+        # Try to create table via SQL RPC if available
+        if not self._table_ready:
+            try:
+                await self._rpc("exec_sql", {
+                    "sql": CREATE_TABLE_SQL[:200] + " -- truncated"
+                })
+                self._table_ready = True
+            except Exception:
+                pass
+
+        # Try direct insert to check if table exists
+        if not self._table_ready:
+            try:
+                test_row = {
+                    "id": "_pgvector_health_check",
+                    "collection": "_system",
+                    "embedding": [0.0] * 128,
+                    "metadata": json.dumps({"health_check": True}),
+                    "source": "system",
+                    "severity": "info",
+                }
+                url = f"{SUPABASE_URL}/rest/v1/rag_vectors"
+                params = {"on_conflict": "id"}
+                async with httpx.AsyncClient(timeout=10) as client:
+                    resp = await client.post(url, json=test_row, params=params, headers=HEADERS)
+                    if resp.status_code in (200, 201):
+                        self._table_ready = True
+                        logger.info("pgvector: rag_vectors table ready")
+                        # Cleanup test row
+                        await client.delete(
+                            f"{SUPABASE_URL}/rest/v1/rag_vectors?id=eq._pgvector_health_check",
+                            headers=HEADERS
+                        )
+            except Exception as e:
+                logger.warning(f"pgvector table not found. Run: /root/backend/supabase_pgvector_setup.sql in Supabase SQL Editor")
+                logger.warning(f"Falling back to Redis vector store. Error: {e}")
+
+        if not self._table_ready:
+            logger.warning("pgvector unavailable — using Redis fallback for vector search")
+            self._table_ready = False  # Signal to use Redis fallback
+
+        return self._table_ready
 
     async def insert(
         self,
@@ -139,7 +182,29 @@ class SupabaseVectorStore:
         severity: str = "medium",
         chain: str = "",
     ) -> bool:
-        """Insert a single vector document."""
+        """Insert a single vector document. Falls back to Redis if pgvector unavailable."""
+        if not self._table_ready:
+            # Fallback to Redis
+            try:
+                from app.rag_service import _get_redis
+                r = await _get_redis()
+                doc = {
+                    "id": doc_id,
+                    "collection": collection,
+                    "vector": embedding,
+                    "dims": len(embedding),
+                    "metadata": metadata or {},
+                    "content": content[:5000],
+                    "source": source,
+                    "severity": severity,
+                }
+                await r.setex(f"rag:{collection}:{doc_id}", 86400 * 30, json.dumps(doc))
+                await r.sadd(f"rag:idx:{collection}", doc_id)
+                return True
+            except Exception as e:
+                logger.error(f"Redis fallback insert failed: {e}")
+                return False
+
         try:
             row = {
                 "id": doc_id,
@@ -192,10 +257,48 @@ class SupabaseVectorStore:
         filters: dict = None,
     ) -> List[Dict[str, Any]]:
         """
-        ANN search using pgvector cosine distance.
-        Returns results with similarity scores.
+        ANN search using pgvector. Falls back to Redis.
         """
-        # Use the search_embeddings RPC if available, else manual SQL
+        # Fallback to Redis
+        if not self._table_ready:
+            try:
+                from app.crypto_embeddings import CryptoEmbedder
+                from app.rag_service import _get_redis
+                r = await _get_redis()
+                doc_ids = await r.smembers(f"rag:idx:{collection or 'known_scams'}")
+                if not doc_ids:
+                    return []
+                keys = [f"rag:{collection or 'known_scams'}:{did}" for did in doc_ids]
+                pipe = r.pipeline()
+                for k in keys:
+                    pipe.get(k)
+                results = await pipe.execute()
+                embedder = CryptoEmbedder()
+                scored = []
+                q_len = len(query_embedding)
+                for data in results:
+                    if not data: continue
+                    try: doc = json.loads(data)
+                    except: continue
+                    dv = doc.get("vector", [])
+                    if not dv: continue
+                    compare_len = min(q_len, len(dv))
+                    sim = embedder.cosine_similarity(query_embedding[:compare_len], dv[:compare_len])
+                    if sim >= min_similarity:
+                        scored.append({
+                            "id": doc["id"], "similarity": round(sim, 4),
+                            "content": doc.get("content", ""),
+                            "metadata": doc.get("metadata", {}),
+                            "source": doc.get("source", ""),
+                            "severity": doc.get("severity", ""),
+                        })
+                scored.sort(key=lambda x: x["similarity"], reverse=True)
+                return scored[:limit]
+            except Exception as e:
+                logger.error(f"Redis search fallback failed: {e}")
+                return []
+
+        # pgvector search (primary)
         try:
             results = await self._rpc("search_embeddings", {
                 "query_embedding": query_embedding,

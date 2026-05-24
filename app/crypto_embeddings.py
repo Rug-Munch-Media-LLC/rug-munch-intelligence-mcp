@@ -5,8 +5,9 @@ ULTIMATE CRYPTO EMBEDDER — Rug Munch Intelligence
 Multi-head embedding system purpose-built for crypto scam/rug detection.
 
 Architecture:
-  PRIMARY:   OpenRouter API (text-embedding-3-large, 3072d) — fast, paid for
-  FALLBACK:  HuggingFace Inference API (BGE-M3, 1024d) — free tier, multilingual
+  PRIMARY:   Local BGE-small-en-v1.5 (384-dim) — runs on CPU, zero API, zero cost
+  FALLBACK:  OpenRouter text-embedding-3-large (3072d) if API key set
+  FALLBACK:  HuggingFace BGE-M3 (1024d) if token has inference permissions
   SPECIALTY: Crypto-aware hashing — contract bytecode sim, tx pattern fingerprints
 
 Embedding Heads:
@@ -49,19 +50,20 @@ REDIS_PW = os.getenv("REDIS_PASSWORD", "")
 
 # Embedding dimensions by model
 DIMS = {
+    "local/bge-small-en-v1.5": 384,
     "openai/text-embedding-3-large": 3072,
     "openai/text-embedding-3-small": 1536,
     "BAAI/bge-m3": 1024,
     "BAAI/bge-large-en-v1.5": 1024,
     "BAAI/bge-small-en-v1.5": 384,
-    "crypto_behavioral": 64,  # custom fingerprint
-    "crypto_code_hash": 128,  # custom contract hash
+    "crypto_behavioral": 64,
+    "crypto_code_hash": 128,
 }
 
 # Default model per head
 HEAD_DEFAULTS = {
-    "semantic": "openai/text-embedding-3-large",
-    "code": "openai/text-embedding-3-large",
+    "semantic": "local/bge-small-en-v1.5",
+    "code": "local/bge-small-en-v1.5",
     "behavioral": "crypto_behavioral",
     "entity": "crypto_behavioral",
 }
@@ -325,8 +327,44 @@ def extract_wallet_features(wallet_data: dict) -> np.ndarray:
 
 
 # ══════════════════════════════════════════════════════════════════════
-# API EMBEDDING PROVIDERS
+# LOCAL BGE EMBEDDER (primary — always available, zero cost)
 # ══════════════════════════════════════════════════════════════════════
+
+class LocalBGEEmbedder:
+    """
+    Local BAAI BGE-small-en-v1.5 embedder.
+    Runs on CPU, ~80MB RAM, 384-dim vectors.
+    Loaded lazily — first call initializes the model.
+    This is the PRIMARY embedder. No API, no DNS, no tokens, no cost.
+    """
+
+    MODEL_NAME = "BAAI/bge-small-en-v1.5"
+    _model = None
+
+    @classmethod
+    def _get_model(cls):
+        if cls._model is None:
+            from sentence_transformers import SentenceTransformer
+            cls._model = SentenceTransformer(cls.MODEL_NAME)
+            logger.info(f"LocalBGEEmbedder loaded: {cls.MODEL_NAME} (384d)")
+        return cls._model
+
+    async def embed(self, texts: List[str]) -> List[List[float]]:
+        """Embed texts using local BGE model."""
+        model = self._get_model()
+        # Run in thread to avoid blocking event loop
+        embeddings = await asyncio.to_thread(
+            lambda: model.encode(texts, normalize_embeddings=True).tolist()
+        )
+        return embeddings
+
+    async def embed_one(self, text: str) -> List[float]:
+        results = await self.embed([text])
+        return results[0]
+
+
+# ══════════════════════════════════════════════════════════════════════
+# API EMBEDDING PROVIDERS (fallbacks for higher quality)
 
 class OpenRouterEmbedder:
     """OpenRouter embedding API — fast, production-ready."""
@@ -481,6 +519,7 @@ class CryptoEmbedder:
     """
 
     def __init__(self):
+        self._local: Optional[LocalBGEEmbedder] = None
         self._openrouter: Optional[OpenRouterEmbedder] = None
         self._huggingface: Optional[HuggingFaceEmbedder] = None
         self._redis = None
@@ -489,14 +528,17 @@ class CryptoEmbedder:
         self._cache_misses = 0
 
     async def initialize(self):
-        """Initialize embedding providers that have credentials."""
+        """Initialize embedding providers. Local BGE is always available."""
+        self._local = LocalBGEEmbedder()
+        logger.info("CryptoEmbedder: Local BGE-small ready (primary, 384d)")
+
         if OPENROUTER_KEY:
             self._openrouter = OpenRouterEmbedder()
-            logger.info("CryptoEmbedder: OpenRouter ready (primary)")
+            logger.info("CryptoEmbedder: OpenRouter ready (fallback, 3072d)")
 
         if HF_TOKEN:
             self._huggingface = HuggingFaceEmbedder()
-            logger.info("CryptoEmbedder: HuggingFace ready (fallback)")
+            logger.info("CryptoEmbedder: HuggingFace ready (fallback, 1024d)")
 
         self._initialized = True
         logger.info("CryptoEmbedder initialized")
@@ -513,27 +555,36 @@ class CryptoEmbedder:
 
     async def _semantic_embed(self, texts: List[str], head: str = "semantic") -> List[List[float]]:
         """
-        Primary semantic embedding pipeline.
-        Tries OpenRouter first, falls back to HF, then to local hash.
+        Semantic embedding pipeline.
+        Primary: Local BGE-small (384d, always available)
+        Fallback: OpenRouter text-embedding-3-large (3072d, if key set)
+        Last resort: Hash-based
         """
         if not texts:
             return []
 
-        # Try OpenRouter (fast, paid for)
+        # Primary: Local BGE (always works, zero cost)
+        if self._local:
+            try:
+                return await self._local.embed(texts)
+            except Exception as e:
+                logger.warning(f"Local BGE embedding failed: {e}")
+
+        # Fallback: OpenRouter (higher quality, if configured)
         if self._openrouter:
             try:
                 return await self._openrouter.embed(texts)
             except Exception as e:
                 logger.warning(f"OpenRouter embedding failed: {e}")
 
-        # Fallback to HuggingFace
+        # Fallback: HuggingFace (if configured)
         if self._huggingface:
             try:
                 return await self._huggingface.embed(texts)
             except Exception as e:
                 logger.warning(f"HuggingFace embedding failed: {e}")
 
-        # Last resort: hash-based embedding (deterministic but low quality)
+        # Last resort: hash-based
         logger.warning("Using hash-based fallback embeddings (low quality)")
         return [self._hash_embed(text) for text in texts]
 
@@ -906,9 +957,11 @@ Code patterns: {'; '.join(code_snippets or [])[:3000]}"""
         return {
             "initialized": self._initialized,
             "providers": {
+                "local_bge": self._local is not None,
                 "openrouter": self._openrouter is not None,
                 "huggingface": self._huggingface is not None,
             },
+            "primary": "local/bge-small-en-v1.5 (384d, $0/mo)",
             "cache": {
                 "hits": self._cache_hits,
                 "misses": self._cache_misses,
@@ -916,7 +969,6 @@ Code patterns: {'; '.join(code_snippets or [])[:3000]}"""
                     self._cache_hits / max(1, self._cache_hits + self._cache_misses), 3
                 ),
             },
-            "default_model": "openai/text-embedding-3-large",
             "dimensions": DIMS,
             "collections": COLLECTIONS,
         }
