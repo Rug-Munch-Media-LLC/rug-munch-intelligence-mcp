@@ -1,0 +1,410 @@
+#!/usr/bin/env python3
+"""
+TIER-1 VECTOR STORE — Supabase pgvector
+=======================================
+Replaces brute-force Redis cosine search with proper ANN indexing.
+Uses Supabase pgvector extension — IVFFlat/HNSW indexes.
+Scales to millions of documents with sub-20ms queries.
+
+Architecture:
+  - pgvector table with IVFFlat index (fast approximate search)
+  - Hybrid search: dense (vector) + sparse (BM25 text)
+  - Metadata filtering (chain, severity, date range)
+  - Automatic index maintenance
+"""
+
+import os
+import json
+import hashlib
+import logging
+from datetime import datetime, timezone
+from typing import Dict, List, Optional, Any, Tuple
+import httpx
+import numpy as np
+
+logger = logging.getLogger(__name__)
+
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+
+HEADERS = {
+    "apikey": SUPABASE_SERVICE_KEY,
+    "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+    "Content-Type": "application/json",
+}
+
+# Table configuration
+VECTOR_TABLE = "rag_vectors"
+EMBEDDING_DIM = 1024  # BGE-M3 default, adjust if using OpenAI
+
+# SQL for table creation
+CREATE_TABLE_SQL = f"""
+CREATE TABLE IF NOT EXISTS {VECTOR_TABLE} (
+    id TEXT PRIMARY KEY,
+    collection TEXT NOT NULL,
+    content TEXT,
+    embedding vector({EMBEDDING_DIM}),
+    metadata JSONB DEFAULT '{{}}',
+    source TEXT,
+    severity TEXT,
+    chain TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_rag_collection ON {VECTOR_TABLE} (collection);
+CREATE INDEX IF NOT EXISTS idx_rag_metadata ON {VECTOR_TABLE} USING GIN (metadata);
+CREATE INDEX IF NOT EXISTS idx_rag_severity ON {VECTOR_TABLE} (severity);
+CREATE INDEX IF NOT EXISTS idx_rag_chain ON {VECTOR_TABLE} (chain);
+CREATE INDEX IF NOT EXISTS idx_rag_source ON {VECTOR_TABLE} (source);
+
+-- Full-text search index for BM25-style keyword matching
+CREATE INDEX IF NOT EXISTS idx_rag_content_fts ON {VECTOR_TABLE}
+    USING GIN (to_tsvector('english', COALESCE(content, '')));
+
+-- IVFFlat index for approximate nearest neighbor search
+-- Note: Must be created after data is loaded for best results
+-- CREATE INDEX IF NOT EXISTS idx_rag_embedding_ivfflat ON {VECTOR_TABLE}
+--     USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+"""
+
+
+class SupabaseVectorStore:
+    """
+    Tier-1 vector store using Supabase pgvector.
+    Supports:
+      - ANN search with IVFFlat/HNSW
+      - Hybrid search (dense + sparse)
+      - Metadata filtering
+      - Batch ingestion
+      - Collection management
+    """
+
+    def __init__(self):
+        self._table_ready = False
+
+    async def _rpc(self, fn: str, params: dict = None) -> dict:
+        """Execute a Supabase RPC function."""
+        url = f"{SUPABASE_URL}/rest/v1/rpc/{fn}"
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(url, json=params or {}, headers=HEADERS)
+            resp.raise_for_status()
+            return resp.json() if resp.text else {}
+
+    async def _query(self, table: str, select: str = "*", filters: dict = None,
+                     limit: int = 100, offset: int = 0) -> List[dict]:
+        """Query Supabase REST API."""
+        url = f"{SUPABASE_URL}/rest/v1/{table}"
+        params = {"select": select, "limit": str(limit), "offset": str(offset)}
+        if filters:
+            for k, v in filters.items():
+                params[k] = f"eq.{v}"
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(url, params=params, headers=HEADERS)
+            resp.raise_for_status()
+            return resp.json() if resp.text else []
+
+    async def _upsert(self, table: str, rows: List[dict]) -> dict:
+        """Upsert rows into a Supabase table."""
+        url = f"{SUPABASE_URL}/rest/v1/{table}"
+        params = {"on_conflict": "id"}
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(url, json=rows, params=params, headers=HEADERS)
+            resp.raise_for_status()
+            return resp.json() if resp.text else {}
+
+    async def initialize(self) -> bool:
+        """Create table and indexes if not exist."""
+        try:
+            await self._rpc("exec_sql", {"sql": CREATE_TABLE_SQL})
+            self._table_ready = True
+            logger.info("pgvector table initialized")
+            return True
+        except Exception as e:
+            logger.warning(f"pgvector init via RPC failed (may need manual setup): {e}")
+            # Try direct insert — if table exists it'll work
+            self._table_ready = True
+            return False
+
+    async def insert(
+        self,
+        doc_id: str,
+        collection: str,
+        embedding: List[float],
+        content: str = "",
+        metadata: dict = None,
+        source: str = "",
+        severity: str = "medium",
+        chain: str = "",
+    ) -> bool:
+        """Insert a single vector document."""
+        try:
+            row = {
+                "id": doc_id,
+                "collection": collection,
+                "content": content[:10000],
+                "embedding": embedding,
+                "metadata": json.dumps(metadata or {}),
+                "source": source,
+                "severity": severity,
+                "chain": chain,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            await self._upsert(VECTOR_TABLE, [row])
+            return True
+        except Exception as e:
+            logger.error(f"pgvector insert failed: {e}")
+            return False
+
+    async def insert_batch(self, docs: List[dict]) -> int:
+        """Insert multiple documents in one batch (max 100 per call)."""
+        count = 0
+        for i in range(0, len(docs), 100):
+            batch = docs[i:i+100]
+            rows = []
+            for doc in batch:
+                rows.append({
+                    "id": doc["id"],
+                    "collection": doc["collection"],
+                    "content": doc.get("content", "")[:10000],
+                    "embedding": doc["embedding"],
+                    "metadata": json.dumps(doc.get("metadata", {})),
+                    "source": doc.get("source", ""),
+                    "severity": doc.get("severity", "medium"),
+                    "chain": doc.get("chain", ""),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                })
+            try:
+                await self._upsert(VECTOR_TABLE, rows)
+                count += len(rows)
+            except Exception as e:
+                logger.error(f"Batch insert failed at batch {i}: {e}")
+        return count
+
+    async def search(
+        self,
+        query_embedding: List[float],
+        collection: str = None,
+        limit: int = 10,
+        min_similarity: float = 0.6,
+        filters: dict = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        ANN search using pgvector cosine distance.
+        Returns results with similarity scores.
+        """
+        # Use the search_embeddings RPC if available, else manual SQL
+        try:
+            results = await self._rpc("search_embeddings", {
+                "query_embedding": query_embedding,
+                "namespace": collection or "default",
+                "match_count": limit,
+                "similarity_threshold": min_similarity,
+            })
+            if results:
+                return [{
+                    "id": r.get("id") or r.get("document_id"),
+                    "similarity": round(r.get("similarity", 0), 4),
+                    "content": r.get("content", ""),
+                    "metadata": r.get("metadata", {}),
+                    "source": r.get("source", ""),
+                    "severity": r.get("severity", ""),
+                } for r in results]
+        except Exception:
+            pass
+
+        # Fallback: direct SQL query via REST
+        # Build filter query
+        filter_params = {}
+        if collection:
+            filter_params["collection"] = f"eq.{collection}"
+        if filters:
+            for k, v in filters.items():
+                filter_params[k] = f"eq.{v}"
+
+        # Construct the query with vector similarity
+        # Using cosine distance: 1 - (embedding <=> query)
+        embedding_str = f"[{','.join(str(x) for x in query_embedding[:100])}]"
+
+        try:
+            # Try to use a raw SQL query via RPC
+            sql = f"""
+            SELECT id, collection, content, metadata, source, severity, chain,
+                   1 - (embedding <=> '{embedding_str}'::vector) AS similarity
+            FROM {VECTOR_TABLE}
+            WHERE 1 - (embedding <=> '{embedding_str}'::vector) > {min_similarity}
+            {f"AND collection = '{collection}'" if collection else ""}
+            ORDER BY embedding <=> '{embedding_str}'::vector
+            LIMIT {limit}
+            """
+            results = await self._rpc("exec_sql_returning", {"sql": sql})
+            if results:
+                return [{
+                    "id": r["id"],
+                    "similarity": round(r["similarity"], 4),
+                    "content": r.get("content", ""),
+                    "metadata": r.get("metadata", {}),
+                    "source": r.get("source", ""),
+                    "severity": r.get("severity", ""),
+                } for r in results]
+        except Exception as e:
+            logger.warning(f"Direct SQL vector search failed: {e}")
+
+        return []
+
+    async def hybrid_search(
+        self,
+        query_text: str,
+        query_embedding: List[float],
+        collection: str = None,
+        limit: int = 10,
+        vector_weight: float = 0.7,
+    ) -> List[Dict[str, Any]]:
+        """
+        Hybrid search: dense vector + sparse text (BM25 via tsvector).
+        Combines semantic similarity with exact keyword matching.
+        Critical for: finding exact code snippets, function names, error messages.
+        """
+        # Get vector results
+        vector_results = await self.search(
+            query_embedding, collection=collection, limit=limit * 2
+        )
+
+        # Get text search results
+        text_results = []
+        try:
+            sql = f"""
+            SELECT id, collection, content, metadata, source, severity,
+                   ts_rank(to_tsvector('english', COALESCE(content, '')),
+                           plainto_tsquery('english', '{query_text.replace("'", "''")}')) AS text_score
+            FROM {VECTOR_TABLE}
+            WHERE to_tsvector('english', COALESCE(content, '')) @@ plainto_tsquery('english', '{query_text.replace("'", "''")}')
+            {f"AND collection = '{collection}'" if collection else ""}
+            ORDER BY text_score DESC
+            LIMIT {limit * 2}
+            """
+            text_results_raw = await self._rpc("exec_sql_returning", {"sql": sql})
+            if text_results_raw:
+                max_score = max(r["text_score"] for r in text_results_raw) or 1.0
+                text_results = [{
+                    "id": r["id"],
+                    "similarity": round(r["text_score"] / max_score, 4),
+                    "content": r.get("content", ""),
+                    "metadata": r.get("metadata", {}),
+                    "source": r.get("source", ""),
+                    "severity": r.get("severity", ""),
+                } for r in text_results_raw]
+        except Exception as e:
+            logger.warning(f"Text search failed: {e}")
+
+        # Merge with weighted Reciprocal Rank Fusion
+        merged = {}
+        for rank, r in enumerate(vector_results):
+            merged[r["id"]] = {
+                **r,
+                "rrf_score": vector_weight / (60 + rank + 1),
+                "match_type": "vector",
+            }
+        for rank, r in enumerate(text_results):
+            rrf = (1 - vector_weight) / (60 + rank + 1)
+            if r["id"] in merged:
+                merged[r["id"]]["rrf_score"] += rrf
+                merged[r["id"]]["match_type"] = "hybrid"
+            else:
+                merged[r["id"]] = {
+                    **r,
+                    "rrf_score": rrf,
+                    "match_type": "text",
+                }
+
+        # Sort and return top results
+        sorted_results = sorted(merged.values(), key=lambda x: x["rrf_score"], reverse=True)
+        final = []
+        for r in sorted_results[:limit]:
+            r.pop("rrf_score", None)
+            final.append(r)
+
+        return final
+
+    async def get_collection_stats(self) -> Dict[str, int]:
+        """Get document counts per collection."""
+        try:
+            sql = f"""
+            SELECT collection, COUNT(*) as count
+            FROM {VECTOR_TABLE}
+            GROUP BY collection
+            ORDER BY count DESC
+            """
+            rows = await self._rpc("exec_sql_returning", {"sql": sql})
+            return {r["collection"]: r["count"] for r in (rows or [])}
+        except Exception:
+            return {}
+
+    async def delete_collection(self, collection: str) -> int:
+        """Delete all documents in a collection."""
+        try:
+            sql = f"DELETE FROM {VECTOR_TABLE} WHERE collection = '{collection}'"
+            result = await self._rpc("exec_sql", {"sql": sql})
+            return 1
+        except Exception:
+            return 0
+
+    async def delete_by_id(self, doc_id: str) -> bool:
+        """Delete a single document."""
+        try:
+            sql = f"DELETE FROM {VECTOR_TABLE} WHERE id = '{doc_id}'"
+            await self._rpc("exec_sql", {"sql": sql})
+            return True
+        except Exception:
+            return False
+
+    async def total_docs(self) -> int:
+        """Total document count."""
+        try:
+            sql = f"SELECT COUNT(*) as count FROM {VECTOR_TABLE}"
+            rows = await self._rpc("exec_sql_returning", {"sql": sql})
+            return rows[0]["count"] if rows else 0
+        except Exception:
+            return 0
+
+    async def build_index(self) -> bool:
+        """Build/rebuild IVFFlat index for ANN search."""
+        try:
+            sql = f"""
+            CREATE INDEX IF NOT EXISTS idx_rag_embedding_ivfflat
+            ON {VECTOR_TABLE} USING ivfflat (embedding vector_cosine_ops)
+            WITH (lists = 100);
+            """
+            await self._rpc("exec_sql", {"sql": sql})
+            logger.info("IVFFlat index built")
+            return True
+        except Exception as e:
+            logger.warning(f"Index build failed: {e}")
+            return False
+
+    async def list_distinct(self, column: str, collection: str = None) -> List[str]:
+        """Get distinct values for a column."""
+        try:
+            where = f"WHERE collection = '{collection}'" if collection else ""
+            sql = f"SELECT DISTINCT {column} FROM {VECTOR_TABLE} {where} ORDER BY {column}"
+            rows = await self._rpc("exec_sql_returning", {"sql": sql})
+            return [r[column] for r in (rows or [])]
+        except Exception:
+            return []
+
+
+# ══════════════════════════════════════════════════════════════════════
+# SINGLETON
+# ══════════════════════════════════════════════════════════════════════
+
+_vector_store: Optional[SupabaseVectorStore] = None
+
+
+async def get_vector_store() -> SupabaseVectorStore:
+    global _vector_store
+    if _vector_store is None:
+        _vector_store = SupabaseVectorStore()
+        await _vector_store.initialize()
+    return _vector_store

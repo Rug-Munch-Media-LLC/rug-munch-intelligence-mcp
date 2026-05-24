@@ -1675,23 +1675,33 @@ async def rag_ingest(request: Request, data: dict):
 
 @app.get("/api/v1/rag/search")
 async def rag_search(request: Request, q: str, collection: str = "wallet_profiles", limit: int = 10):
-    """Search the RAG knowledge base."""
-    from app.rag_service import search_documents
-    results = await search_documents(collection, q, limit=limit)
+    """Semantic search across RAG collections using CryptoEmbedder."""
+    from app.rag_service import search_similar, search_multi_collection
+    if collection == "all":
+        results = await search_multi_collection(q, limit=limit)
+    else:
+        results = await search_similar(q, collection=collection, limit=limit)
     return {"query": q, "collection": collection, "results": results, "total": len(results)}
 
 @app.get("/api/v1/rag/stats")
 async def rag_stats(request: Request):
-    """Get RAG collection statistics."""
-    from app.rag_service import get_collection_stats
-    return await get_collection_stats()
+    """Get RAG stats — embedder status, collection sizes, cache ratio."""
+    from app.rag_service import get_stats
+    return await get_stats()
 
 @app.post("/api/v1/rag/seed")
 async def rag_seed(request: Request):
-    """Seed RAG with known scam patterns."""
-    from app.rag_service import ingest_known_scams
-    await ingest_known_scams()
-    return {"status": "seeded"}
+    """Seed RAG with 10 known crypto scam patterns (honeypot, mint, fee, drain, etc.)."""
+    from app.rag_service import seed_known_scams
+    result = await seed_known_scams()
+    return result
+
+@app.post("/api/v1/rag/detect-scam")
+async def rag_detect_scam(request: Request, data: dict):
+    """Detect scam patterns in a token. Pass token_data with contract_code, name, description, chain."""
+    from app.rag_service import detect_scam_patterns
+    result = await detect_scam_patterns(data)
+    return result
 
 @app.post("/api/v1/rag/ingest-forensic")
 async def rag_ingest_forensic(request: Request, data: dict):
@@ -1701,7 +1711,113 @@ async def rag_ingest_forensic(request: Request, data: dict):
     from app.rag_service import ingest_forensic_report
     return await ingest_forensic_report(report_text, report_name)
 
-# ═══════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════
+# TIER-1 RAG — Agentic Investigation + LLM Reranking
+# ═══════════════════════════════════════════════════════════════════
+
+@app.post("/api/v1/rag/investigate")
+async def rag_investigate(request: Request, data: dict):
+    """Multi-hop agentic investigation. Plans hops, executes, synthesizes findings."""
+    query = data.get("query", "")
+    context = data.get("context", {})
+    max_hops = data.get("max_hops", 3)
+    if not query:
+        raise HTTPException(status_code=400, detail="query required")
+    from app.rag_agentic import get_agent
+    agent = get_agent()
+    return await agent.investigate(query, context, max_hops)
+
+@app.post("/api/v1/rag/rerank")
+async def rag_rerank(request: Request, data: dict):
+    """LLM cross-encode reranking. Takes query + documents, returns scored results."""
+    query = data.get("query", "")
+    documents = data.get("documents", [])
+    top_k = data.get("top_k", 5)
+    from app.rag_agentic import get_reranker
+    reranker = get_reranker()
+    return await reranker.rerank(query, documents, top_k)
+
+@app.post("/api/v1/rag/scan-token")
+async def rag_scan_token(request: Request, data: dict):
+    """Real-time new token scan against scam DB. Quick keyword → deep semantic."""
+    from app.rag_agentic import get_monitor
+    monitor = get_monitor()
+    return await monitor.scan_new_token(data)
+
+@app.get("/api/v1/rag/alerts")
+async def rag_alerts(request: Request, limit: int = 20):
+    """Recent high-risk scam alerts from the real-time monitor."""
+    from app.rag_agentic import get_monitor
+    monitor = get_monitor()
+    return {"alerts": monitor.get_recent_alerts(limit), "total": len(monitor.alerts)}
+
+@app.post("/api/v1/rag/ingest-sources")
+async def rag_ingest_sources(request: Request):
+    """Trigger ingestion from external sources (REKT, Chainabuse, SlowMist, W3IGG)."""
+    from app.scam_sources import get_ingestion_pipeline
+    pipeline = await get_ingestion_pipeline()
+    return await pipeline.run_full_ingestion(force=True)
+
+@app.get("/api/v1/rag/search-stream")
+async def rag_search_stream(request: Request, q: str, collection: str = "all", limit: int = 5):
+    """Streaming RAG search — progressive results with reranking."""
+    from app.rag_agentic import stream_rag_search
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(
+        stream_rag_search(q, collection, limit),
+        media_type="application/x-ndjson",
+    )
+
+# ═══════════════════════════════════════════════════════════════════
+# BUNDLE & CLUSTER RAG — Semantic Intelligence on Graph Detection
+# ═══════════════════════════════════════════════════════════════════
+
+@app.post("/api/v1/bundles/index")
+async def bundle_index(request: Request, data: dict):
+    """Index a bundle detection result into RAG for similarity search."""
+    from app.bundle_cluster_rag import index_bundle_detection
+    bundle_id = await index_bundle_detection(data)
+    return {"bundle_id": bundle_id, "status": "indexed"}
+
+@app.post("/api/v1/clusters/index")
+async def cluster_index(request: Request, data: dict):
+    """Index a cluster + auto-label + store for semantic search."""
+    from app.bundle_cluster_rag import index_cluster_detection
+    result = await index_cluster_detection(data)
+    return result
+
+@app.post("/api/v1/clusters/search")
+async def cluster_search(request: Request, data: dict):
+    """NL search for clusters. 'Show me wash trading clusters on Solana'."""
+    query = data.get("query", "")
+    limit = data.get("limit", 10)
+    from app.bundle_cluster_rag import search_clusters_by_description
+    results = await search_clusters_by_description(query, limit=limit)
+    return {"query": query, "results": results, "total": len(results)}
+
+@app.post("/api/v1/clusters/similar")
+async def cluster_similar(request: Request, data: dict):
+    """Find clusters similar to a target cluster (behavioral vector match)."""
+    from app.bundle_cluster_rag import find_similar_clusters
+    results = await find_similar_clusters(data, limit=data.get("limit", 10))
+    return {"results": results, "total": len(results)}
+
+@app.post("/api/v1/bundles/similar")
+async def bundle_similar(request: Request, data: dict):
+    """Find bundles similar to a target bundle."""
+    from app.bundle_cluster_rag import find_similar_bundles
+    results = await find_similar_bundles(data, limit=data.get("limit", 10))
+    return {"results": results, "total": len(results)}
+
+@app.post("/api/v1/clusters/labels/backfill")
+async def cluster_labels_backfill(request: Request):
+    """Index cluster label templates into pgvector."""
+    from app.bundle_cluster_rag import backfill_label_templates
+    count = await backfill_label_templates()
+    return {"status": "backfilled", "count": count}
+
+
+# ═══════════════════════════════════════════════════════════════
 # INTELLIGENCE PIPELINE — HF + Supabase + RAG
 # ═══════════════════════════════════════════════════════════
 
