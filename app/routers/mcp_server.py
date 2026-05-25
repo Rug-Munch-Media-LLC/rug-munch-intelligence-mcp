@@ -235,6 +235,11 @@ def _build_discovery():
             "pricing": "$0.01 - $0.40 per call",
             "updated_at": datetime.now(timezone.utc).isoformat(),
         },
+        # Top-level fields for directory scrapers (Glama, mcp.so, Smithery)
+        "categories": cats,
+        "blockchains": sorted(chains.keys()),
+        "facilitator_count": fac_count,
+        "tools_count": len(tools),
     }
 
 
