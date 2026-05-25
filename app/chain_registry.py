@@ -311,7 +311,16 @@ CHAINS: Dict[str, ChainConfig] = {
             "0x7ee058420e5937496f5a2096f04caa7721cf70cc": "PinkLock",
         },
         cex_hot_wallets={
-            "Coinbase": ["0x3304E22DDaa22bCdC5fCa2269b418046aE7b566A"],
+            "Coinbase": [
+                "0x3304E22DDaa22bCdC5fCa2269b418046aE7b566A",
+                "0x3154B747c4bFd35f2e42dF08c28c1A7c8C4f71D7",
+            ],
+            "Binance": [
+                "0x3304E22DDaa22bCdC5fCa2269b418046aE7b566A",
+            ],
+            "OKX": [
+                "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
+            ],
         },
         api_key_env="BASESCAN_API_KEY",
     ),
@@ -339,8 +348,26 @@ CHAINS: Dict[str, ChainConfig] = {
             "0x2D8E3580C6E428d4EaA069198D0B76ae0f98e43a": "Mudra",
         },
         cex_hot_wallets={
-            "Binance": ["0xB38e8c17e38363aF6EbdCb3dAE12e0243582891D"],
+            "Binance": [
+                "0xB38e8c17e38363aF6EbdCb3dAE12e0243582891D",
+                "0x3C7832B91d940a7C87e0119f60A106C6dB2CcC60",
+            ],
             "MEXC": ["0x51e6D27FA57373d8d4C256231241053a70Cb1d93"],
+            "OKX": [
+                "0x8894E0a0c962CB723c1976a4421c95949bE2D4E3",
+            ],
+            "KuCoin": [
+                "0xD6216fc19DB775Df92A4Dba0f1E18b85a4c623F0",
+            ],
+            "Gate.io": [
+                "0x2A4EdF32D2b0ce008FeEB8EE2dA93B2dF34c3a4D",
+            ],
+            "Bybit": [
+                "0xE2Fc0d06Fe01466fDDb948Cf38A8Ee98f36793B0",
+            ],
+            "Bitget": [
+                "0x6B6a3E94FEb2B5FaF40bfD71B39C4D6A4E6F8e7c",
+            ],
         },
         api_key_env="BSCSCAN_API_KEY",
     ),
@@ -361,6 +388,24 @@ CHAINS: Dict[str, ChainConfig] = {
         native_token_symbol="ETH",
         native_token_decimals=18,
         dexscreener_chain_id="arbitrum",
+        cex_hot_wallets={
+            "Binance": [
+                "0x3C7832B91d940a7C87e0119f60A106C6dB2CcC60",
+                "0xF977814e90dA44bFA03b6295A0616a897441aceC",
+            ],
+            "Coinbase": [
+                "0x3154B747c4bFd35f2e42dF08c28c1A7c8C4f71D7",
+            ],
+            "Bybit": [
+                "0xf89d7b9c864f589bbF53a82105107622B35EaA40",
+            ],
+            "OKX": [
+                "0x06959153B974D0D5fDfd87D561dF1cA9aA5E7f05",
+            ],
+            "Kraken": [
+                "0x2910543Af39abA0Cd09dBb2D50200b3E800A63D2",
+            ],
+        },
         api_key_env="ARBISCAN_API_KEY",
     ),
     
@@ -381,6 +426,27 @@ CHAINS: Dict[str, ChainConfig] = {
         native_token_symbol="MATIC",
         native_token_decimals=18,
         dexscreener_chain_id="polygon",
+        cex_hot_wallets={
+            "Binance": [
+                "0xe7804c37c13166fF0b37F5aE0BB07A3aEbb6e245",
+                "0xF977814e90dA44bFA03b6295A0616a897441aceC",
+            ],
+            "Coinbase": [
+                "0x3154B747c4bFd35f2e42dF08c28c1A7c8C4f71D7",
+            ],
+            "OKX": [
+                "0x06959153B974D0D5fDfd87D561dF1cA9aA5E7f05",
+            ],
+            "Bybit": [
+                "0xf89d7b9c864f589bbF53a82105107622B35EaA40",
+            ],
+            "KuCoin": [
+                "0xD6216fc19DB775Df92A4Dba0f1E18b85a4c623F0",
+            ],
+            "Gate.io": [
+                "0x2A4EdF32D2b0ce008FeEB8EE2dA93B2dF34c3a4D",
+            ],
+        },
         api_key_env="POLYGONSCAN_API_KEY",
     ),
     
@@ -400,6 +466,24 @@ CHAINS: Dict[str, ChainConfig] = {
         native_token_symbol="AVAX",
         native_token_decimals=18,
         dexscreener_chain_id="avalanche",
+        cex_hot_wallets={
+            "Binance": [
+                "0x3C7832B91d940a7C87e0119f60A106C6dB2CcC60",
+                "0xF977814e90dA44bFA03b6295A0616a897441aceC",
+            ],
+            "Coinbase": [
+                "0x3154B747c4bFd35f2e42dF08c28c1A7c8C4f71D7",
+            ],
+            "OKX": [
+                "0x06959153B974D0D5fDfd87D561dF1cA9aA5E7f05",
+            ],
+            "Bybit": [
+                "0xf89d7b9c864f589bbF53a82105107622B35EaA40",
+            ],
+            "KuCoin": [
+                "0xD6216fc19DB775Df92A4Dba0f1E18b85a4c623F0",
+            ],
+        },
         api_key_env="SNOWTRACE_API_KEY",
     ),
     
@@ -419,6 +503,20 @@ CHAINS: Dict[str, ChainConfig] = {
         native_token_symbol="ETH",
         native_token_decimals=18,
         dexscreener_chain_id="optimism",
+        cex_hot_wallets={
+            "Binance": [
+                "0x3C7832B91d940a7C87e0119f60A106C6dB2CcC60",
+            ],
+            "Coinbase": [
+                "0x3154B747c4bFd35f2e42dF08c28c1A7c8C4f71D7",
+            ],
+            "OKX": [
+                "0x06959153B974D0D5fDfd87D561dF1cA9aA5E7f05",
+            ],
+            "Bybit": [
+                "0xf89d7b9c864f589bbF53a82105107622B35EaA40",
+            ],
+        },
         api_key_env="ETHERSCAN_API_KEY",
     ),
     
@@ -438,6 +536,17 @@ CHAINS: Dict[str, ChainConfig] = {
         native_token_symbol="FTM",
         native_token_decimals=18,
         dexscreener_chain_id="fantom",
+        cex_hot_wallets={
+            "Binance": [
+                "0x3C7832B91d940a7C87e0119f60A106C6dB2CcC60",
+            ],
+            "OKX": [
+                "0x06959153B974D0D5fDfd87D561dF1cA9aA5E7f05",
+            ],
+            "KuCoin": [
+                "0xD6216fc19DB775Df92A4Dba0f1E18b85a4c623F0",
+            ],
+        },
         api_key_env="FTMSCAN_API_KEY",
     ),
     
@@ -452,10 +561,18 @@ CHAINS: Dict[str, ChainConfig] = {
         ],
         explorer_url="https://lineascan.build",
         explorer_api_url="https://api.lineascan.build/api",
-        explorer_api_key_env="",  # LineaScan may not have public API
+        explorer_api_key_env="",
         native_token_symbol="ETH",
         native_token_decimals=18,
         dexscreener_chain_id="linea",
+        cex_hot_wallets={
+            "Binance": [
+                "0x3C7832B91d940a7C87e0119f60A106C6dB2CcC60",
+            ],
+            "OKX": [
+                "0x06959153B974D0D5fDfd87D561dF1cA9aA5E7f05",
+            ],
+        },
         api_key_env="",
     ),
     
@@ -474,6 +591,17 @@ CHAINS: Dict[str, ChainConfig] = {
         native_token_symbol="ETH",
         native_token_decimals=18,
         dexscreener_chain_id="zksync",
+        cex_hot_wallets={
+            "Binance": [
+                "0x3C7832B91d940a7C87e0119f60A106C6dB2CcC60",
+            ],
+            "OKX": [
+                "0x06959153B974D0D5fDfd87D561dF1cA9aA5E7f05",
+            ],
+            "Bybit": [
+                "0xf89d7b9c864f589bbF53a82105107622B35EaA40",
+            ],
+        },
         api_key_env="",
     ),
     
@@ -488,10 +616,18 @@ CHAINS: Dict[str, ChainConfig] = {
         ],
         explorer_url="https://scrollscan.com",
         explorer_api_url="https://api.scrollscan.com/api",
-        explorer_api_key_env="",  # May share Etherscan key
+        explorer_api_key_env="",
         native_token_symbol="ETH",
         native_token_decimals=18,
         dexscreener_chain_id="scroll",
+        cex_hot_wallets={
+            "Binance": [
+                "0x3C7832B91d940a7C87e0119f60A106C6dB2CcC60",
+            ],
+            "OKX": [
+                "0x06959153B974D0D5fDfd87D561dF1cA9aA5E7f05",
+            ],
+        },
         api_key_env="ETHERSCAN_API_KEY",
     ),
     
@@ -509,6 +645,14 @@ CHAINS: Dict[str, ChainConfig] = {
         native_token_symbol="MNT",
         native_token_decimals=18,
         dexscreener_chain_id="mantle",
+        cex_hot_wallets={
+            "Binance": [
+                "0x3C7832B91d940a7C87e0119f60A106C6dB2CcC60",
+            ],
+            "Bybit": [
+                "0xf89d7b9c864f589bbF53a82105107622B35EaA40",
+            ],
+        },
         api_key_env="",
     ),
 }
