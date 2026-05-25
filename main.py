@@ -2746,9 +2746,9 @@ async def x402_stats(request: Request):
             {"chain": "base", "facilitators": ["coinbase_cdp", "payai"], "tokens": ["USDC"], "settlement": "instant/deferred"},
             {"chain": "ethereum", "facilitators": ["primev", "payai", "cloudflare_x402", "eip7702"], "tokens": ["USDC", "USDT", "DAI", "ETH"], "settlement": "fee_free/instant/deferred"},
             {"chain": "solana", "facilitators": ["payai"], "tokens": ["USDC"], "settlement": "deferred"},
-            {"chain": "bsc", "facilitators": ["pieverse", "eip7702"], "tokens": ["USDC", "USDT"], "settlement": "instant"},
-            {"chain": "tron", "facilitators": ["merx_tron"], "tokens": ["USDT", "USDC", "USDD"], "settlement": "instant"},
-            {"chain": "bitcoin", "facilitators": ["satoshi"], "tokens": ["BTC"], "settlement": "cross-chain"},
+            {"chain": "bsc", "facilitators": ["eip7702"], "tokens": ["USDC", "USDT"], "settlement": "self"},
+            {"chain": "tron", "facilitators": ["tron_selfverify"], "tokens": ["USDT", "USDC", "USDD"], "settlement": "instant"},  # self-verified via TronGrid
+            {"chain": "bitcoin", "facilitators": ["bitcoin_selfverify"], "tokens": ["BTC"], "settlement": "self"},  # self-verified via Mempool.space
             # Self-verified
             {"chain": "arbitrum", "facilitators": ["eip7702", "x402_rs"], "tokens": ["USDC", "ETH"], "settlement": "self"},
             {"chain": "optimism", "facilitators": ["eip7702", "x402_rs"], "tokens": ["USDC", "ETH"], "settlement": "self"},

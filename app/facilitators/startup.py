@@ -63,6 +63,18 @@ async def register_all_facilitators() -> None:
     #     logger.warning(f"Failed to register MERX TRON: {e}")
     logger.info("SKIPPED: MERX TRON — OFFLINE (api.merx.finance NXDOMAIN)")
 
+    # ── 4b. TRON Self-Verify (replaces dead MERX — uses TronGrid API) ──
+    try:
+        from app.facilitators.tron_selfverify import TronSelfVerifyFacilitator
+        tron_fac = TronSelfVerifyFacilitator()
+        if tron_fac._tron_pay_to:
+            registry.register(tron_fac)
+            logger.info("Registered: TRON Self-Verify (USDT/USDC/USDD via TronGrid, fee-free)")
+        else:
+            logger.info("TRON Self-Verify: skipped (no X402_TRON_PAY_TO wallet configured)")
+    except Exception as e:
+        logger.warning(f"Failed to register TRON Self-Verify: {e}")
+
     # ── 5. PayAI (Base + Solana, always available — no key needed) ──
     try:
         from app.facilitators.payai import PayAIFacilitator
@@ -97,6 +109,18 @@ async def register_all_facilitators() -> None:
     # except Exception as e:
     #     logger.warning(f"Failed to register Satoshi: {e}")
     logger.info("SKIPPED: Satoshi — OFFLINE (api.satoshi.dev NXDOMAIN)")
+
+    # ── 8b. Bitcoin Self-Verify (replaces dead Satoshi — uses Mempool.space API) ──
+    try:
+        from app.facilitators.bitcoin_selfverify import BitcoinSelfVerifyFacilitator
+        btc_fac = BitcoinSelfVerifyFacilitator()
+        if btc_fac._btc_pay_to:
+            registry.register(btc_fac)
+            logger.info("Registered: Bitcoin Self-Verify (BTC via Mempool.space, fee-free)")
+        else:
+            logger.info("Bitcoin Self-Verify: skipped (no X402_BTC_PAY_TO wallet configured)")
+    except Exception as e:
+        logger.warning(f"Failed to register Bitcoin Self-Verify: {e}")
 
     # ── 9. Self-hosted x402-rs (optional, check if container is running) ──
     try:

@@ -63,16 +63,10 @@ CHAIN_USDC = {
     "solana": {"network": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp", "chain_id": None, "usdc": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "name": "USD Coin", "version": "2", "method": "payai", "verify": "facilitator", "facilitators": ["payai"]},
     "bsc": {"network": "eip155:56", "chain_id": 56, "usdc": "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", "name": "USD Coin", "version": "2", "method": "local_eip712", "verify": "facilitator", "facilitators": ["eip7702"]},  # pieverse REMOVED — OFFLINE (api.pieverse.xyz NXDOMAIN)
     "ethereum": {"network": "eip155:1", "chain_id": 1, "usdc": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "name": "USD Coin", "version": "2", "method": "local_eip712", "verify": "facilitator", "facilitators": ["primev", "payai", "eip7702"]},
-    # ── TRON (MERX x402) — OFFLINE: api.merx.finance NXDOMAIN ──
-    # "tron": {"network": "tron:mainnet", "chain_id": None, "usdc": "TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8", "name": "USD Coin (TRC20)", "version": "1", "method": "merx_tron", "verify": "facilitator", "facilitators": ["merx_tron"],
-    #          "tokens": {"USDT": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", "USDD": "TPYmHEhy5n8TCEfZGqW2rPbmgh1fGqNBPa"}},
-    # NOTE: TRON chain disabled because MERX (sole facilitator) is dead.
-    # Re-enable if a TRON facilitator becomes available.
-    # ── Bitcoin (Satoshi Facilitator) — OFFLINE: api.satoshi.dev NXDOMAIN ──
-    # "bitcoin": {"network": "bitcoin:mainnet", "chain_id": None, "usdc": "", "name": "Bitcoin", "version": "1", "method": "satoshi", "verify": "facilitator", "facilitators": ["satoshi"],
-    #             "tokens": {"BTC": "native"}},
-    # NOTE: Bitcoin chain disabled because Satoshi (sole facilitator) is dead.
-    # Re-enable if a Bitcoin facilitator becomes available.
+    "tron": {"network": "tron:mainnet", "chain_id": None, "usdc": "TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8", "name": "USD Coin (TRC20)", "version": "2", "method": "tron_selfverify", "verify": "facilitator", "facilitators": ["tron_selfverify"],
+              "tokens": {"USDT": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", "USDD": "TPYmHEhy5n8TCEfZGqW2rPbmgh1fGqNBPa"}},
+    "bitcoin": {"network": "bitcoin:mainnet", "chain_id": None, "usdc": "", "name": "Bitcoin", "version": "2", "method": "bitcoin_selfverify", "verify": "facilitator", "facilitators": ["bitcoin_selfverify"],
+              "tokens": {"BTC": "native"}},
     # ── Self-verified EVM chains (EIP-7702 universal) ──
     "arbitrum": {"network": "eip155:42161", "chain_id": 42161, "usdc": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", "name": "USD Coin", "version": "2", "method": "local_eip712", "verify": "self", "facilitators": ["eip7702"]},
     "optimism": {"network": "eip155:10", "chain_id": 10, "usdc": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85", "name": "USD Coin", "version": "2", "method": "local_eip712", "verify": "self", "facilitators": ["eip7702"]},
@@ -272,9 +266,9 @@ def build_402_response(tool_id: str, client_id: str = "") -> JSONResponse:
         # Determine pay-to address based on chain
         if method == "payai":
             pay_to = SOL_PAY_TO
-        elif method == "satoshi":
+        elif method == "bitcoin_selfverify":
             pay_to = os.getenv("X402_BTC_PAY_TO", "")
-        elif method == "merx_tron":
+        elif method == "tron_selfverify":
             pay_to = os.getenv("X402_TRON_PAY_TO", "")
         elif method == "asterpay":
             pay_to = os.getenv("ASTERPAY_SEPA_IBAN", "")
@@ -304,10 +298,10 @@ def build_402_response(tool_id: str, client_id: str = "") -> JSONResponse:
             }
         elif method == "payai":
             extra["feePayer"] = "2wKupLR9q6wXYppw8Gr2NvWxKBUqm4PPJKkQfoxHDBg4"
-        elif method == "merx_tron":
+        elif method == "tron_selfverify":
             extra["tronNetwork"] = "mainnet"
             extra["trc20Tokens"] = cfg.get("tokens", {})
-        elif method == "satoshi":
+        elif method == "bitcoin_selfverify":
             extra["paymentNetwork"] = "bitcoin"
             extra["settlementChains"] = ["base", "solana"]
         elif method == "asterpay":
@@ -1309,9 +1303,8 @@ def _build_discovery_response():
                 "primev": "Fee-free Ethereum via mev-commit preconfirmations",
                 "cloudflare_x402": "Base Sepolia + Ethereum fallback",
                 "eip7702": "Universal EVM — BSC, Polygon, Avalanche, Fantom, Gnosis, Arbitrum, Optimism, Base",
-                "pieverse": "BNB Chain — instant verification",
-                "merx_tron": "TRON USDT/USDC/USDD — sub-3s settlement",
-                "satoshi": "Bitcoin → Base/Solana bridge",
+                "tron_selfverify": "TRON USDT/USDC/USDD — self-verified via TronGrid (fee-free)",
+                "bitcoin_selfverify": "Bitcoin BTC — self-verified via Mempool.space (fee-free, 1-conf)",
                 "asterpay": "EUR/SEPA European off-ramp",
                 "x402_rs": "Self-hosted x402-rs — multi-chain (requires Docker)",
             },
@@ -1320,7 +1313,7 @@ def _build_discovery_response():
         "payment_endpoint": "https://rugmunch.io/api/v1/x402-tools",
         "supported_chains": list(CHAIN_USDC.keys()),
         "chain_count": len(CHAIN_USDC),
-        "facilitator_count": 10,
+        "facilitator_count": 8,  # primev, coinbase_cdp, payai, cloudflare_x402, eip7702, asterpay, tron_selfverify, bitcoin_selfverify
         "total_tools": len(tools),
         "tools": tools,
     }
@@ -1329,9 +1322,9 @@ def _build_discovery_response():
 def _resolve_pay_to(method: str) -> str:
     if method == "payai":
         return SOL_PAY_TO
-    elif method == "satoshi":
+    elif method == "bitcoin_selfverify":
         return os.getenv("X402_BTC_PAY_TO", "")
-    elif method == "merx_tron":
+    elif method == "tron_selfverify":
         return os.getenv("X402_TRON_PAY_TO", "")
     elif method == "asterpay":
         return os.getenv("ASTERPAY_SEPA_IBAN", "")
@@ -1360,10 +1353,10 @@ def _build_extra(cfg: dict, tool_id: str, chain_key: str, pay_to: str, method: s
         }
     elif method == "payai":
         extra["feePayer"] = "2wKupLR9q6wXYppw8Gr2NvWxKBUqm4PPJKkQfoxHDBg4"
-    elif method == "merx_tron":
+    elif method == "tron_selfverify":
         extra["tronNetwork"] = "mainnet"
         extra["trc20Tokens"] = cfg.get("tokens", {})
-    elif method == "satoshi":
+    elif method == "bitcoin_selfverify":
         extra["paymentNetwork"] = "bitcoin"
         extra["settlementChains"] = ["base", "solana"]
     elif method == "asterpay":
