@@ -3984,6 +3984,300 @@ async def _verify_onchain_direct(tx_hash: str, chain: str, token_info: dict, exp
 
 
 # ═══════════════════════════════════════════════════════════════
+# SENTINEL SCANNER — Deep Multi-Module Token Security
+# ═══════════════════════════════════════════════════════════════
+
+class SentinelScanRequest(BaseModel):
+    """Full 9-module SENTINEL deep scan."""
+    address: str
+    chain: str = "solana"
+    dev_address: Optional[str] = None
+
+class SentinelModuleRequest(BaseModel):
+    """Single SENTINEL module request."""
+    address: str
+    chain: str = "solana"
+    dev_address: Optional[str] = None
+
+
+@router.post("/sentinel_scan")
+async def sentinel_full_scan(req: SentinelScanRequest):
+    """Full SENTINEL deep scan — all 9 modules in parallel with graceful degradation.
+
+    Pricing: $0.15 — the most comprehensive token security scan available.
+    Returns composite risk score (0-100), per-module breakdown, and aggregated red flags.
+    """
+    try:
+        from app.scanners.sentinel_pipeline import run_sentinel_scan, dataclass_to_dict
+
+        report = await run_sentinel_scan(
+            token_address=req.address,
+            chain=req.chain,
+            dev_address=req.dev_address,
+        )
+        result = dataclass_to_dict(report)
+
+        await record_x402_payment("sentinel_scan", "0.15", req.address)
+
+        return {
+            "tool": "SENTINEL Full Deep Scan",
+            "version": "1.0",
+            "timestamp": datetime.utcnow().isoformat(),
+            **result,
+            "guarantee": "Data delivered or auto-refund via x402 receipt",
+        }
+    except Exception as e:
+        logger.error(f"SENTINEL scan failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/holder_analysis")
+async def holder_analysis_endpoint(req: SentinelModuleRequest):
+    """SENTINEL Holder Analysis — HHI concentration, fake diversification detection.
+
+    Pricing: $0.05
+    """
+    try:
+        from app.scanners.sentinel_pipeline import run_holder_analysis
+
+        result = await run_holder_analysis(req.address, req.chain)
+        await record_x402_payment("holder_analysis", "0.05", req.address)
+
+        return {
+            "tool": "SENTINEL Holder Analysis",
+            "version": "1.0",
+            "timestamp": datetime.utcnow().isoformat(),
+            "address": req.address,
+            "chain": req.chain,
+            **result,
+            "guarantee": "Data delivered or auto-refund via x402 receipt",
+        }
+    except Exception as e:
+        logger.error(f"Holder analysis failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/bundle_detect")
+async def bundle_detect_endpoint(req: SentinelModuleRequest):
+    """SENTINEL Bundle Detection — enhanced bundle/sniper detection, funding chain analysis.
+
+    Pricing: $0.08
+    """
+    try:
+        from app.scanners.sentinel_pipeline import run_bundle_detection
+
+        result = await run_bundle_detection(req.address, req.chain)
+        await record_x402_payment("bundle_detect", "0.08", req.address)
+
+        return {
+            "tool": "SENTINEL Bundle Detection",
+            "version": "1.0",
+            "timestamp": datetime.utcnow().isoformat(),
+            "address": req.address,
+            "chain": req.chain,
+            **result,
+            "guarantee": "Data delivered or auto-refund via x402 receipt",
+        }
+    except Exception as e:
+        logger.error(f"Bundle detection failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/exchange_fund_check")
+async def exchange_fund_check_endpoint(req: SentinelModuleRequest):
+    """SENTINEL Exchange Funder Check — CEX-funded wallet detection for token buyers.
+
+    Pricing: $0.05
+    """
+    try:
+        from app.scanners.sentinel_pipeline import run_exchange_funding
+
+        result = await run_exchange_funding(req.address, req.chain)
+        await record_x402_payment("exchange_fund_check", "0.05", req.address)
+
+        return {
+            "tool": "SENTINEL Exchange Funder Check",
+            "version": "1.0",
+            "timestamp": datetime.utcnow().isoformat(),
+            "address": req.address,
+            "chain": req.chain,
+            **result,
+            "guarantee": "Data delivered or auto-refund via x402 receipt",
+        }
+    except Exception as e:
+        logger.error(f"Exchange fund check failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/liquidity_verify")
+async def liquidity_verify_endpoint(req: SentinelModuleRequest):
+    """SENTINEL Liquidity Verification — lock verification, fake locker detection, expiry monitoring.
+
+    Pricing: $0.05
+    """
+    try:
+        from app.scanners.sentinel_pipeline import run_liquidity_verification
+
+        result = await run_liquidity_verification(req.address, req.chain)
+        await record_x402_payment("liquidity_verify", "0.05", req.address)
+
+        return {
+            "tool": "SENTINEL Liquidity Verification",
+            "version": "1.0",
+            "timestamp": datetime.utcnow().isoformat(),
+            "address": req.address,
+            "chain": req.chain,
+            **result,
+            "guarantee": "Data delivered or auto-refund via x402 receipt",
+        }
+    except Exception as e:
+        logger.error(f"Liquidity verification failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/dev_reputation")
+async def dev_reputation_endpoint(req: SentinelModuleRequest):
+    """SENTINEL Dev Reputation — serial rugg detection, cross-chain dev tracking.
+
+    Pricing: $0.08
+    Requires dev_address (deployer/creator wallet). Falls back to address if dev_address not provided.
+    """
+    try:
+        from app.scanners.sentinel_pipeline import run_dev_reputation
+
+        dev_wallet = req.dev_address or req.address
+        result = await run_dev_reputation(dev_wallet, chains=[req.chain])
+        await record_x402_payment("dev_reputation", "0.08", req.address)
+
+        return {
+            "tool": "SENTINEL Dev Reputation",
+            "version": "1.0",
+            "timestamp": datetime.utcnow().isoformat(),
+            "address": dev_wallet,
+            "chain": req.chain,
+            **result,
+            "guarantee": "Data delivered or auto-refund via x402 receipt",
+        }
+    except Exception as e:
+        logger.error(f"Dev reputation failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/wash_trading")
+async def wash_trading_endpoint(req: SentinelModuleRequest):
+    """SENTINEL Wash Trading Detection — circular transfer detection, cross-DEX loop analysis.
+
+    Pricing: $0.08
+    """
+    try:
+        from app.scanners.sentinel_pipeline import run_wash_trading
+
+        result = await run_wash_trading(req.address, req.chain)
+        await record_x402_payment("wash_trading", "0.08", req.address)
+
+        return {
+            "tool": "SENTINEL Wash Trading Detection",
+            "version": "1.0",
+            "timestamp": datetime.utcnow().isoformat(),
+            "address": req.address,
+            "chain": req.chain,
+            **result,
+            "guarantee": "Data delivered or auto-refund via x402 receipt",
+        }
+    except Exception as e:
+        logger.error(f"Wash trading detection failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/metadata_fingerprint")
+async def metadata_fingerprint_endpoint(req: SentinelModuleRequest):
+    """SENTINEL Metadata Fingerprint — HTML structure hashing, description similarity, social overlap detection.
+
+    Pricing: $0.05
+    """
+    try:
+        from app.scanners.sentinel_pipeline import run_metadata_fingerprint
+
+        result = await run_metadata_fingerprint(req.address, req.chain)
+        await record_x402_payment("metadata_fingerprint", "0.05", req.address)
+
+        return {
+            "tool": "SENTINEL Metadata Fingerprint",
+            "version": "1.0",
+            "timestamp": datetime.utcnow().isoformat(),
+            "address": req.address,
+            "chain": req.chain,
+            **result,
+            "guarantee": "Data delivered or auto-refund via x402 receipt",
+        }
+    except Exception as e:
+        logger.error(f"Metadata fingerprint failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sentiment_check")
+async def sentiment_check_endpoint(req: SentinelModuleRequest):
+    """SENTINEL Sentiment Check — social sentiment scoring, bot campaign detection, pump probability.
+
+    Pricing: $0.05
+    """
+    try:
+        from app.scanners.sentinel_pipeline import run_sentiment
+
+        result = await run_sentiment(req.address, req.chain)
+        await record_x402_payment("sentiment_check", "0.05", req.address)
+
+        return {
+            "tool": "SENTINEL Sentiment Check",
+            "version": "1.0",
+            "timestamp": datetime.utcnow().isoformat(),
+            "address": req.address,
+            "chain": req.chain,
+            **result,
+            "guarantee": "Data delivered or auto-refund via x402 receipt",
+        }
+    except Exception as e:
+        logger.error(f"Sentiment check failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/pumpfun_analysis")
+async def pumpfun_analysis_endpoint(req: SentinelModuleRequest):
+    """SENTINEL PumpFun Analysis — bonding curve progress, bot detection, graduation probability (Solana only).
+
+    Pricing: $0.08
+    Only works for Solana tokens. Returns error for other chains.
+    """
+    try:
+        if req.chain.lower() != "solana":
+            raise HTTPException(
+                status_code=400,
+                detail="PumpFun analysis is only available for Solana tokens. "
+                       f"Received chain={req.chain}. Use chain='solana'.",
+            )
+
+        from app.scanners.sentinel_pipeline import run_pumpfun_analysis
+
+        result = await run_pumpfun_analysis(req.address)
+        await record_x402_payment("pumpfun_analysis", "0.08", req.address)
+
+        return {
+            "tool": "SENTINEL PumpFun Analysis",
+            "version": "1.0",
+            "timestamp": datetime.utcnow().isoformat(),
+            "address": req.address,
+            "chain": "solana",
+            **result,
+            "guarantee": "Data delivered or auto-refund via x402 receipt",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"PumpFun analysis failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ═══════════════════════════════════════════════════════════════
 # ALIAS ROUTES — Map dead tool IDs to real handler endpoints
 # These tools appear in TOOL_PRICES and x402 manifest but had no routes.
 # Each alias proxies the request to the real implementation.
