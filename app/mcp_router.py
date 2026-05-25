@@ -65,13 +65,51 @@ TOOLS = {
     "social_signal": {"name": "Social Signal Analyzer", "endpoint": "/api/v1/sentiment/token/{address}", "method": "GET", "category": "social", "price": "$0.10"},
 }
 
+def _build_tools_catalog() -> dict:
+    """Merge hardcoded TOOLS with dynamic TOOL_PRICES, preferring dynamic data."""
+    merged = dict(TOOLS)  # Start with hardcoded
+    try:
+        from app.routers.x402_enforcement import TOOL_PRICES
+        # Tool ID → internal endpoint mapping
+        _ENDPOINT_MAP = {
+            "forensic_valuation": "/api/v1/x402-tools/forensic_valuation",
+            "osint_identity_hunt": "/api/v1/x402-tools/osint_identity_hunt",
+            "investigation_report": "/api/v1/x402-tools/investigation_report",
+            "forensic_pack": "/api/v1/x402-tools/forensic_pack",
+            "catalog": "/api/v1/x402-tools/catalog",
+            "smart_money_alpha": "/api/v1/x402-tools/smart_money_alpha",
+            "meme_vibe_score": "/api/v1/x402-tools/meme_vibe_score",
+            "mcp-proxy": "/api/v1/x402-tools/mcp-proxy",
+            "human-execute": "/api/v1/x402-tools/human-execute",
+        }
+        for tool_id, pricing in TOOL_PRICES.items():
+            if tool_id not in merged:
+                endpoint = _ENDPOINT_MAP.get(tool_id, f"/api/v1/x402-tools/{tool_id}")
+                merged[tool_id] = {
+                    "name": pricing.get("description", tool_id.replace("_", " ").title()),
+                    "endpoint": endpoint,
+                    "method": "POST",
+                    "category": pricing.get("category", "analysis"),
+                    "price": f"${pricing.get('price_usd', 0.01):.2f}",
+                }
+            else:
+                # Update existing entries with latest pricing/category from TOOL_PRICES
+                if tool_id in TOOL_PRICES:
+                    merged[tool_id]["category"] = TOOL_PRICES[tool_id].get("category", merged[tool_id].get("category", "analysis"))
+                    merged[tool_id]["price"] = f"${TOOL_PRICES[tool_id].get('price_usd', 0.01):.2f}"
+    except Exception as e:
+        logger.warning(f"mcp_router: could not merge TOOL_PRICES: {e}")
+    return merged
+
+
 @router.get("/tools")
 async def mcp_tools():
     """Return tool catalog for Cloudflare Worker to cache."""
+    catalog = _build_tools_catalog()
     return {
-        "tools": TOOLS,
-        "total": len(TOOLS),
-        "categories": list(set(t["category"] for t in TOOLS.values())),
+        "tools": catalog,
+        "total": len(catalog),
+        "categories": list(set(t["category"] for t in catalog.values())),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -129,4 +167,5 @@ async def mcp_execute(tool_id: str, request: Request):
 
 @router.get("/health")
 async def mcp_health():
-    return {"status": "healthy", "tools": len(TOOLS), "timestamp": datetime.now(timezone.utc).isoformat()}
+    catalog = _build_tools_catalog()
+    return {"status": "healthy", "tools": len(catalog), "timestamp": datetime.now(timezone.utc).isoformat()}

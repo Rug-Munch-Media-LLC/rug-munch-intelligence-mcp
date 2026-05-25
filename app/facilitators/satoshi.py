@@ -1,6 +1,8 @@
 """
-Satoshi Facilitator — Bitcoin-Focused x402
-============================================
+Satoshi Facilitator — Bitcoin-Focused x402 [OFFLINE — NXDOMAIN]
+===============================================================
+STATUS: OFFLINE — api.satoshi.dev DNS is NXDOMAIN (dead domain).
+Do not route payments to this facilitator. Kept for reference only.
 Independent x402 facilitator for Bitcoin-focused pay-per-call services.
 Supports BTC payment with settlement on Base, Base Sepolia,
 Solana Mainnet, and Solana Devnet.
@@ -24,7 +26,12 @@ class SatoshiFacilitator(Facilitator):
     """
     Satoshi Facilitator — Bitcoin x402 pay-per-call.
     Users pay in BTC, settled on Base/Solana.
+
+    OFFLINE: api.satoshi.dev DNS is NXDOMAIN. This facilitator is dead.
     """
+
+    # ── DEAD facilitator flag ──
+    status = "offline"  # NXDOMAIN: api.satoshi.dev does not resolve
 
     def __init__(self, config: Optional[FacilitatorConfig] = None):
         self._config = config or get_config()
@@ -43,7 +50,7 @@ class SatoshiFacilitator(Facilitator):
 
     @property
     def priority(self) -> int:
-        return 35  # Bitcoin is niche for us
+        return 999  # Dead facilitator — lowest possible priority
 
     @property
     def verify_url(self) -> Optional[str]:
@@ -74,6 +81,13 @@ class SatoshiFacilitator(Facilitator):
         return "Satoshi Facilitator — Bitcoin pay-per-call, cross-chain settlement"
 
     async def verify(
+        self, payload: Dict[str, Any],
+        requirements: Optional[Dict[str, Any]] = None,
+    ) -> VerificationResult:
+        # OFFLINE: api.satoshi.dev is NXDOMAIN — refuse all verifications
+        return self._format_error("Satoshi facilitator is OFFLINE (api.satoshi.dev NXDOMAIN)")
+
+    async def _verify_live(
         self, payload: Dict[str, Any],
         requirements: Optional[Dict[str, Any]] = None,
     ) -> VerificationResult:
@@ -136,20 +150,14 @@ class SatoshiFacilitator(Facilitator):
             return self._format_error(f"Satoshi internal error: {e}")
 
     async def health(self) -> bool:
-        try:
-            timeout = aiohttp.ClientTimeout(total=10)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                headers = {"X-Satoshi-API-Key": self._config.satoshi_api_key} if self._config.satoshi_api_key else {}
-                async with session.get(
-                    self._config.satoshi_verify_url.replace("/verify", "/health"),
-                    headers=headers,
-                ) as resp:
-                    return resp.status < 500
-        except Exception as e:
-            logger.warning(f"Satoshi health check failed: {e}")
-            return False
+        # OFFLINE: api.satoshi.dev is NXDOMAIN — always return False
+        return False
 
     async def settle(self, payment_data: Dict[str, Any]) -> SettlementResult:
+        # OFFLINE: api.satoshi.dev is NXDOMAIN — refuse all settlements
+        return SettlementResult(settled=False, reason="Satoshi facilitator is OFFLINE (api.satoshi.dev NXDOMAIN)", facilitator=self.name)
+
+    async def _settle_live(self, payment_data: Dict[str, Any]) -> SettlementResult:
         """Settle BTC payment on target chain (Base or Solana)."""
         try:
             is_btc = payment_data.get("token", "").upper() == "BTC"

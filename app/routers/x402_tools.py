@@ -3932,3 +3932,189 @@ async def _verify_onchain_direct(tx_hash: str, chain: str, token_info: dict, exp
                 if isinstance(result, dict):
                     return result.get("status") == "1"
                 return str(data.get("status")) == "1"
+
+
+# ═══════════════════════════════════════════════════════════════
+# ALIAS ROUTES — Map dead tool IDs to real handler endpoints
+# These tools appear in TOOL_PRICES and x402 manifest but had no routes.
+# Each alias proxies the request to the real implementation.
+# ═══════════════════════════════════════════════════════════════
+
+TOOL_ALIASES: Dict[str, str] = {
+    # Security
+    "airdrop_check": "airdrop_finder",
+    "bundler_detect": "mev_protection",
+    "clone_detect": "audit",
+    "deployer_history": "insider",
+    "fresh_pair": "launch",
+    "liquidity_migration": "rugshield",
+    "mev_alert": "mev_protection",
+    "profile_flip": "social_signal",
+    "protocol_risk": "chain_health",
+    "scam_database": "urlcheck",
+    "token_age": "audit",
+    "wash_trading": "nft_wash_detector",
+    # Intelligence
+    "alpha_digest": "smart_money_alpha",
+    "insider_network": "insider",
+    "kol_performance": "social_signal",
+    "listing_predictor": "market_overview",
+    "sniper_detect": "sniper_alert",
+    "syndicate_scan": "cluster",
+    "syndicate_track": "cluster",
+    "whale_accumulation": "whale",
+    "whale_profile": "whale",
+    "whale_scan": "whale",
+    "wallet_graph": "cluster",
+    # Market
+    "arbitrage_scan": "market_overview",
+    "liquidity_depth": "market_overview",
+    "unlock_calendar": "market_overview",
+    # Social
+    "sentiment_spike": "sentiment",
+    # Analysis
+    "portfolio_aggregate": "portfolio_tracker",
+    "wallet_pnl": "wallet",
+    # Premium (mapped to closest real tool)
+    "forensic_valuation": "forensics",
+    "investigation_report": "forensics",
+    "osint_identity_hunt": "social_signal",
+    # Launchpad
+    # (fresh_pair already mapped to launch above)
+}
+
+# ── Expanded tool aliases (44 new specialized tools → real handlers) ──
+try:
+    from app.routers._expanded_aliases import EXPANDED_ALIASES
+    TOOL_ALIASES.update(EXPANDED_ALIASES)
+except Exception:
+    pass
+
+
+async def _check_rate_limit(request: Request) -> bool:
+    """Simple IP-based rate limiter: 60 req/min per IP, 300 req/5min per IP.
+    Uses the same Redis as x402 enforcement. Fail-open if Redis is down."""
+    try:
+        from app.routers.x402_enforcement import get_redis
+        r = get_redis()
+        if not r:
+            return True  # No Redis = allow
+        cf_ip = request.headers.get("CF-Connecting-IP", "") or (request.client.host if request.client else "0")
+        # Normalize IP-key
+        import hashlib as _hl
+        ip_key = _hl.sha256(cf_ip.encode()).hexdigest()[:16]
+        # 1-minute window
+        key_min = f"rl:{ip_key}:min"
+        count = r.incr(key_min)
+        if count == 1:
+            r.expire(key_min, 60)
+        if count > 60:
+            return False
+        # 5-minute window
+        key_5m = f"rl:{ip_key}:5min"
+        count5 = r.incr(key_5m)
+        if count5 == 1:
+            r.expire(key_5m, 300)
+        if count5 > 300:
+            return False
+        return True
+    except Exception:
+        return True  # Fail open
+
+
+@router.post("/{tool_id}")
+async def tool_alias_dispatcher(tool_id: str, request: Request):
+    """Catch-all dispatcher for tool aliases and per-chain variants.
+    
+    Handles three cases:
+    1. Named aliases (scam_database → urlcheck)
+    2. Per-chain variants (wallet_solana → wallet with chain=solana)
+    3. Expanded tools (flash_loan_detect → closest real handler)
+    
+    Returns 404 for truly unknown tools."""
+    # ── Rate limiting ──
+    if not await _check_rate_limit(request):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Max 60 req/min per IP.")
+    # Try exact alias first
+    target = TOOL_ALIASES.get(tool_id)
+    injected_chain = None
+
+    # If not a named alias, check if it's a per-chain variant (e.g., wallet_solana)
+    if target is None and "_" in tool_id:
+        # Try to extract chain suffix
+        _CHAIN_SUFFIXES = {"solana", "base", "ethereum", "bsc", "polygon", "arbitrum",
+                           "optimism", "avalanche", "fantom", "gnosis", "tron", "bitcoin"}
+        # Also check TOOL_PRICES for the base_tool/chain fields
+        try:
+            from app.routers.x402_enforcement import TOOL_PRICES
+            pricing = TOOL_PRICES.get(tool_id, {})
+            base_tool = pricing.get("base_tool")
+            if base_tool:
+                target = base_tool
+                injected_chain = pricing.get("chain")
+        except Exception:
+            pass
+
+        # Fallback: parse tool_chain format
+        if target is None:
+            last_underscore = tool_id.rfind("_")
+            if last_underscore > 0:
+                suffix = tool_id[last_underscore + 1:]
+                prefix = tool_id[:last_underscore]
+                if suffix in _CHAIN_SUFFIXES and prefix in TOOL_ALIASES:
+                    target = TOOL_ALIASES[prefix]
+                    injected_chain = suffix
+                elif suffix in _CHAIN_SUFFIXES:
+                    # Check if prefix is a real tool endpoint
+                    from app.routers.x402_enforcement import TOOL_PRICES as _TP
+                    if prefix in _TP or any(prefix == t for t in TOOL_ALIASES if t == prefix):
+                        target = TOOL_ALIASES.get(prefix, prefix)
+                        injected_chain = suffix
+
+    if target is None:
+        raise HTTPException(status_code=404, detail=f"Tool '{tool_id}' not found. See /mcp/tools for available tools")
+
+    target_url = f"http://localhost:8000/api/v1/x402-tools/{target}"
+
+    try:
+        body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    except Exception:
+        body = {}
+
+    # Inject chain for per-chain variants
+    if injected_chain and isinstance(body, dict):
+        body.setdefault("chain", injected_chain)
+
+    headers = {}
+    for h in ("x-pay", "X-Pay", "User-Agent", "Authorization",
+              "x-wallet-address", "X-Wallet-Address",
+              "x-turnstile-token", "X-Turnstile-Token",
+              "X-Forwarded-For", "X-Real-IP", "CF-Connecting-IP"):
+        val = request.headers.get(h)
+        if val:
+            headers[h] = val
+    headers["content-type"] = "application/json"
+    headers["User-Agent"] = headers.get("User-Agent", "RMI-Alias-Proxy/3.1")
+    headers["X-RMI-Alias"] = tool_id
+
+    import httpx
+    async with httpx.AsyncClient(timeout=45) as client:
+        resp = await client.post(target_url, json=body, headers=headers)
+        try:
+            result = resp.json()
+        except Exception:
+            result = {"data": resp.text, "status": resp.status_code}
+
+    rh = {}
+    for h in ("X-RMI-Payment", "X-RMI-Trial", "X-RMI-Trial-Remaining", "X-RMI-Refund-Flagged"):
+        if resp.headers.get(h):
+            rh[h] = resp.headers[h]
+
+    # Wrap result with alias metadata
+    if isinstance(result, dict):
+        result["alias_of"] = target
+        result["tool"] = tool_id
+        if injected_chain:
+            result["chain"] = injected_chain
+
+    return JSONResponse(content=result, status_code=resp.status_code, headers=rh)

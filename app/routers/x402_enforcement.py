@@ -6,11 +6,13 @@ Returns 402 Payment Required when no valid payment is provided.
 
 ARCHITECTURE (May 23, 2026 — Multi-Facilitator):
 - Smart router auto-picks best facilitator per chain/token
-- 10 facilitators: Coinbase CDP, PayAI, Cloudflare x402, Pieverse (BNB),
-  AsterPay (EUR/SEPA), MERX (TRON), Primev (fee-free ETH), Satoshi (BTC),
+- 7 active facilitators: Coinbase CDP, PayAI, Cloudflare x402,
+  AsterPay (EUR/SEPA), Primev (fee-free ETH),
   x402-rs (self-hosted), EIP-7702 (universal EVM)
-- 13 payment chains: Base, Solana, Ethereum, BSC, TRON, Bitcoin,
+- 3 OFFLINE facilitators (NXDOMAIN): Pieverse, MERX TRON, Satoshi
+- 11 payment chains: Base, Solana, Ethereum, BSC,
   Arbitrum, Optimism, Polygon, Avalanche, Fantom, Gnosis, SEPA/EUR
+- TRON and Bitcoin chains disabled (sole facilitators dead)
 - Fallback: old PaymentVerifier if router unavailable
 
 Author: RMI Development
@@ -59,14 +61,18 @@ CHAIN_USDC = {
     # ── Facilitator-verified chains (instant/direct) ──
     "base": {"network": "eip155:8453", "chain_id": 8453, "usdc": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913", "name": "USD Coin", "version": "2", "method": "local_eip712", "verify": "facilitator", "facilitators": ["coinbase_cdp", "payai"]},
     "solana": {"network": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp", "chain_id": None, "usdc": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "name": "USD Coin", "version": "2", "method": "payai", "verify": "facilitator", "facilitators": ["payai"]},
-    "bsc": {"network": "eip155:56", "chain_id": 56, "usdc": "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", "name": "USD Coin", "version": "2", "method": "local_eip712", "verify": "facilitator", "facilitators": ["pieverse", "eip7702"]},
+    "bsc": {"network": "eip155:56", "chain_id": 56, "usdc": "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", "name": "USD Coin", "version": "2", "method": "local_eip712", "verify": "facilitator", "facilitators": ["eip7702"]},  # pieverse REMOVED — OFFLINE (api.pieverse.xyz NXDOMAIN)
     "ethereum": {"network": "eip155:1", "chain_id": 1, "usdc": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "name": "USD Coin", "version": "2", "method": "local_eip712", "verify": "facilitator", "facilitators": ["primev", "payai", "eip7702"]},
-    # ── TRON (MERX x402) ──
-    "tron": {"network": "tron:mainnet", "chain_id": None, "usdc": "TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8", "name": "USD Coin (TRC20)", "version": "1", "method": "merx_tron", "verify": "facilitator", "facilitators": ["merx_tron"],
-             "tokens": {"USDT": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", "USDD": "TPYmHEhy5n8TCEfZGqW2rPbmgh1fGqNBPa"}},
-    # ── Bitcoin (Satoshi Facilitator) ──
-    "bitcoin": {"network": "bitcoin:mainnet", "chain_id": None, "usdc": "", "name": "Bitcoin", "version": "1", "method": "satoshi", "verify": "facilitator", "facilitators": ["satoshi"],
-                "tokens": {"BTC": "native"}},
+    # ── TRON (MERX x402) — OFFLINE: api.merx.finance NXDOMAIN ──
+    # "tron": {"network": "tron:mainnet", "chain_id": None, "usdc": "TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8", "name": "USD Coin (TRC20)", "version": "1", "method": "merx_tron", "verify": "facilitator", "facilitators": ["merx_tron"],
+    #          "tokens": {"USDT": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", "USDD": "TPYmHEhy5n8TCEfZGqW2rPbmgh1fGqNBPa"}},
+    # NOTE: TRON chain disabled because MERX (sole facilitator) is dead.
+    # Re-enable if a TRON facilitator becomes available.
+    # ── Bitcoin (Satoshi Facilitator) — OFFLINE: api.satoshi.dev NXDOMAIN ──
+    # "bitcoin": {"network": "bitcoin:mainnet", "chain_id": None, "usdc": "", "name": "Bitcoin", "version": "1", "method": "satoshi", "verify": "facilitator", "facilitators": ["satoshi"],
+    #             "tokens": {"BTC": "native"}},
+    # NOTE: Bitcoin chain disabled because Satoshi (sole facilitator) is dead.
+    # Re-enable if a Bitcoin facilitator becomes available.
     # ── Self-verified EVM chains (EIP-7702 universal) ──
     "arbitrum": {"network": "eip155:42161", "chain_id": 42161, "usdc": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", "name": "USD Coin", "version": "2", "method": "local_eip712", "verify": "self", "facilitators": ["eip7702"]},
     "optimism": {"network": "eip155:10", "chain_id": 10, "usdc": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85", "name": "USD Coin", "version": "2", "method": "local_eip712", "verify": "self", "facilitators": ["eip7702"]},
@@ -204,10 +210,24 @@ try:
         "osint_identity_hunt": {"price_usd": 0.15, "price_atoms": "150000", "category": "premium", "trial_free": 2, "description": "Cross-platform OSINT investigation — hunt usernames across 400+ networks, domain intelligence, stealth page capture"},
         "investigation_report": {"price_usd": 0.20, "price_atoms": "200000", "category": "premium", "trial_free": 1, "description": "Full investigation report — on-chain forensics, financial valuation, OSINT findings, scam scoring in one deliverable"},
         "forensic_pack": {"price_usd": 0.40, "price_atoms": "400000", "category": "bundle", "trial_free": 1, "description": "Forensic Investigation Pack — valuation + OSINT + report at 33% discount"},
+        # API / meta tools — must be in TOOL_PRICES at startup (not loaded from catalog)
+        "catalog": {"price_usd": 0.00, "price_atoms": "0", "category": "api", "trial_free": 999, "description": "Browse available tools, pricing, and chain support"},
+        "smart_money_alpha": {"price_usd": 0.01, "price_atoms": "10000", "category": "intelligence", "trial_free": 3, "description": "Smart money alpha signals — track wallets that consistently outperform the market"},
+        "meme_vibe_score": {"price_usd": 0.01, "price_atoms": "10000", "category": "social", "trial_free": 3, "description": "Meme token vibe scoring — sentiment, community strength, and virality analysis"},
+        "mcp-proxy": {"price_usd": 0.01, "price_atoms": "10000", "category": "api", "trial_free": 5, "description": "MCP protocol proxy — route tool calls through the x402 payment layer"},
+        "human-execute": {"price_usd": 0.02, "price_atoms": "20000", "category": "api", "trial_free": 2, "description": "Human-in-the-loop execution — wallet-based payment for manual crypto investigation tasks"},
     }
     TOOL_PRICES.update(_NEW_TOOL_PRICES)
 except Exception as e:
     logger.warning(f"x402 enforcement: could not add new tool prices: {e}")
+
+# ── Expanded tools: 44 new specialized tools + 80 per-chain variants ──
+try:
+    from app.routers._expanded_tools import ADDITIONAL_TOOLS as _EXPANDED_TOOLS
+    TOOL_PRICES.update(_EXPANDED_TOOLS)
+    logger.info(f"x402 enforcement: loaded {len(_EXPANDED_TOOLS)} expanded tools (44 new + 80 per-chain variants)")
+except Exception as e:
+    logger.warning(f"x402 enforcement: could not load expanded tools: {e}")
 
 # ── Also load from x402_tools.py BUNDLES dict as fallback ──
 try:
@@ -226,6 +246,13 @@ except Exception as e:
 
 # ── Load all tool prices from gateway configs ──
 _load_tool_prices()
+
+# ── Clean up corrupted tool IDs (template variables, paths with slashes/braces) ──
+_bad_keys = [k for k in TOOL_PRICES if '{' in k or '/' in k or ' ' in k]
+if _bad_keys:
+    logger.warning(f"Removing corrupted tool IDs: {_bad_keys}")
+for _k in _bad_keys:
+    del TOOL_PRICES[_k]
 
 # ── 402 response builder ──
 def build_402_response(tool_id: str, client_id: str = "") -> JSONResponse:
@@ -1219,7 +1246,7 @@ router = APIRouter(prefix="/api/v1/x402", tags=["x402 Enforcement"])
 
 
 def _build_discovery_response():
-    """Build the full discovery response with all 13 chains and 10 facilitators."""
+    """Build the full discovery response with all 13 chains and active facilitators."""
     tools = {}
     for tool_id, pricing in TOOL_PRICES.items():
         try:
@@ -1273,20 +1300,20 @@ def _build_discovery_response():
         "x402": {
             "version": "2",
             "protocol": "x402",
-            "description": "Rug Munch Intelligence (RMI) — Multi-chain x402 payment system with 10 facilitators across 13 chains. Crypto scam detection, market analysis, and security intelligence via micropayments.",
+            "description": "Rug Munch Intelligence (RMI) — Multi-chain x402 payment system. Crypto scam detection, market analysis, and security intelligence via micropayments.",
             "trial_policy": "1 free trial per tool without wallet. Connect wallet for 3 free calls per standard tool, 1 per premium tool.",
             "refund_policy": "Full refund if tool returns no data. Request within 48h via POST /api/v1/x402/refund with tx hash.",
             "facilitator_summary": {
-                "coinbase_cdp": "Fee-free USDC on Base/Polygon/Arbitrum/Solana (1K free tx/mo)",
+                "coinbase_cdp": "Fee-free Base + Solana USDC via Coinbase Developer Platform",
                 "payai": "Base + Solana USDC, deferred settlement",
-                "cloudflare_x402": "Base Sepolia + Ethereum fallback",
-                "pieverse": "BNB Chain USDC/USDT, instant settlement",
-                "asterpay": "European EUR/SEPA off-ramp, MiCA compliant",
-                "merx_tron": "TRON USDT/USDC/USDD, sub-3s confirmation",
                 "primev": "Fee-free Ethereum via mev-commit preconfirmations",
-                "satoshi": "Bitcoin → Base/Solana cross-chain settlement",
-                "x402_rs": "Self-hosted Rust facilitator, multi-chain",
-                "eip7702": "Universal EVM — all chains, all tokens, all native coins",
+                "cloudflare_x402": "Base Sepolia + Ethereum fallback",
+                "eip7702": "Universal EVM — BSC, Polygon, Avalanche, Fantom, Gnosis, Arbitrum, Optimism, Base",
+                "pieverse": "BNB Chain — instant verification",
+                "merx_tron": "TRON USDT/USDC/USDD — sub-3s settlement",
+                "satoshi": "Bitcoin → Base/Solana bridge",
+                "asterpay": "EUR/SEPA European off-ramp",
+                "x402_rs": "Self-hosted x402-rs — multi-chain (requires Docker)",
             },
         },
         "gateway_url": "https://rugmunch.io",

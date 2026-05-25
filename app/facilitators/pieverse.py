@@ -1,6 +1,8 @@
 """
-BNB Chain Pieverse Facilitator
-===============================
+BNB Chain Pieverse Facilitator [OFFLINE — NXDOMAIN]
+====================================================
+STATUS: OFFLINE — api.pieverse.xyz DNS is NXDOMAIN (dead domain).
+Do not route payments to this facilitator. Kept for reference only.
 BNB Chain x402 facilitator with instant settlement.
 Supports USDC and USDT on BSC mainnet.
 """
@@ -20,7 +22,13 @@ logger = logging.getLogger("facilitator.pieverse")
 
 
 class PieverseFacilitator(Facilitator):
-    """BNB Chain Pieverse facilitator — instant settlement for BSC."""
+    """BNB Chain Pieverse facilitator — instant settlement for BSC.
+
+    OFFLINE: api.pieverse.xyz DNS is NXDOMAIN. This facilitator is dead.
+    """
+
+    # ── DEAD facilitator flag ──
+    status = "offline"  # NXDOMAIN: api.pieverse.xyz does not resolve
 
     def __init__(self, config: Optional[FacilitatorConfig] = None):
         self._config = config or get_config()
@@ -39,7 +47,7 @@ class PieverseFacilitator(Facilitator):
 
     @property
     def priority(self) -> int:
-        return 15  # High priority for BNB Chain
+        return 999  # Dead facilitator — lowest possible priority
 
     @property
     def verify_url(self) -> Optional[str]:
@@ -59,6 +67,13 @@ class PieverseFacilitator(Facilitator):
         )
 
     async def verify(
+        self, payload: Dict[str, Any],
+        requirements: Optional[Dict[str, Any]] = None,
+    ) -> VerificationResult:
+        # OFFLINE: api.pieverse.xyz is NXDOMAIN — refuse all verifications
+        return self._format_error("Pieverse facilitator is OFFLINE (api.pieverse.xyz NXDOMAIN)")
+
+    async def _verify_live(
         self, payload: Dict[str, Any],
         requirements: Optional[Dict[str, Any]] = None,
     ) -> VerificationResult:
@@ -113,17 +128,14 @@ class PieverseFacilitator(Facilitator):
             return self._format_error(f"Pieverse internal error: {e}")
 
     async def health(self) -> bool:
-        try:
-            timeout = aiohttp.ClientTimeout(total=10)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                headers = {"X-API-Key": self._config.pieverse_api_key} if self._config.pieverse_api_key else {}
-                async with session.get(self._config.pieverse_verify_url.replace("/verify", "/health"), headers=headers) as resp:
-                    return resp.status < 500
-        except Exception as e:
-            logger.warning(f"Pieverse health check failed: {e}")
-            return False
+        # OFFLINE: api.pieverse.xyz is NXDOMAIN — always return False
+        return False
 
     async def settle(self, payment_data: Dict[str, Any]) -> SettlementResult:
+        # OFFLINE: api.pieverse.xyz is NXDOMAIN — refuse all settlements
+        return SettlementResult(settled=False, reason="Pieverse facilitator is OFFLINE (api.pieverse.xyz NXDOMAIN)", facilitator=self.name)
+
+    async def _settle_live(self, payment_data: Dict[str, Any]) -> SettlementResult:
         try:
             timeout = aiohttp.ClientTimeout(total=30)
             async with aiohttp.ClientSession(timeout=timeout) as session:

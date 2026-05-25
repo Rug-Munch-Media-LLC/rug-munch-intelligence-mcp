@@ -14,15 +14,16 @@ Supported Facilitators:
         - Coinbase CDP (Base, instant settlement)
         - PayAI (Base, Solana, deferred)
         - Cloudflare x402 (Base, Ethereum)
-        - BNB Pieverse (BNB Chain)
         - AsterPay (EUR/SEPA, European)
-        - MERX x402 (TRON: USDT/USDC/USDD)
         - Primev FastRPC (Ethereum, fee-free, mev-commit)
-        - Satoshi (Bitcoin → Base/Solana)
     Self-Hosted:
         - x402-rs (multi-chain Rust facilitator)
     Universal:
         - EIP-7702 (all EVM chains, all tokens, all native coins)
+    OFFLINE (dead — DNS NXDOMAIN):
+        - BNB Pieverse (api.pieverse.xyz) — OFFLINE
+        - MERX x402 (api.merx.finance) — OFFLINE
+        - Satoshi (api.satoshi.dev) — OFFLINE
 """
 from app.facilitators.base import Facilitator, FacilitatorRegistry, VerificationResult, SettlementResult
 from app.facilitators.router import FacilitatorRouter, get_facilitator_router

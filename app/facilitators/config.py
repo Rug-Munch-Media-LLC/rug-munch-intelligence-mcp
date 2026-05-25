@@ -56,7 +56,8 @@ class FacilitatorConfig:
         )
     )
 
-    # ── BNB Chain Pieverse ────────────────────────────────────
+    # ── BNB Chain Pieverse [OFFLINE — NXDOMAIN] ───────────────
+    # api.pieverse.xyz DNS is NXDOMAIN — this facilitator is dead
     pieverse_api_key: str = field(
         default_factory=lambda: os.getenv("PIEVERSE_API_KEY", "")
     )
@@ -97,7 +98,8 @@ class FacilitatorConfig:
         default_factory=lambda: os.getenv("ASTERPAY_SEPA_IBAN", "")
     )
 
-    # ── MERX x402 for TRON ───────────────────────────────────
+    # ── MERX x402 for TRON [OFFLINE — NXDOMAIN] ──────────────
+    # api.merx.finance DNS is NXDOMAIN — this facilitator is dead
     merx_tron_api_key: str = field(
         default_factory=lambda: os.getenv("MERX_TRON_API_KEY", "")
     )
@@ -125,7 +127,8 @@ class FacilitatorConfig:
         default_factory=lambda: os.getenv("PRIMEV_API_KEY", "")
     )
 
-    # ── Satoshi Facilitator (Bitcoin) ─────────────────────────
+    # ── Satoshi Facilitator (Bitcoin) [OFFLINE — NXDOMAIN] ───
+    # api.satoshi.dev DNS is NXDOMAIN — this facilitator is dead
     satoshi_api_key: str = field(
         default_factory=lambda: os.getenv("SATOSHI_API_KEY", "")
     )

@@ -35,37 +35,33 @@ async def register_all_facilitators() -> None:
         logger.warning(f"Failed to register Primev: {e}")
 
     # ── 2. Coinbase CDP (highest priority for Base) ──
-    if config.coinbase_cdp_api_key:
-        try:
-            from app.facilitators.coinbase_cdp import CoinbaseCDPFacilitator
-            registry.register(CoinbaseCDPFacilitator())
-            logger.info("Registered: Coinbase CDP (Base, instant settlement)")
-        except Exception as e:
-            logger.warning(f"Failed to register Coinbase CDP: {e}")
-    else:
-        logger.info("Coinbase CDP: not configured (no API key)")
+    # Always register — health check will mark unavailable if no API key
+    try:
+        from app.facilitators.coinbase_cdp import CoinbaseCDPFacilitator
+        registry.register(CoinbaseCDPFacilitator())
+        logger.info("Registered: Coinbase CDP (Base + Solana, fee-free)")
+    except Exception as e:
+        logger.warning(f"Failed to register Coinbase CDP: {e}")
 
-    # ── 3. BNB Pieverse (BNB Chain) ──
-    if config.pieverse_api_key:
-        try:
-            from app.facilitators.pieverse import PieverseFacilitator
-            registry.register(PieverseFacilitator())
-            logger.info("Registered: BNB Pieverse (BNB Chain, instant)")
-        except Exception as e:
-            logger.warning(f"Failed to register Pieverse: {e}")
-    else:
-        logger.info("BNB Pieverse: not configured (no API key)")
+    # ── 3. BNB Pieverse (BNB Chain) — OFFLINE: api.pieverse.xyz NXDOMAIN ──
+    # Skipped: dead facilitator, DNS does not resolve
+    # try:
+    #     from app.facilitators.pieverse import PieverseFacilitator
+    #     registry.register(PieverseFacilitator())
+    #     logger.info("Registered: BNB Pieverse (BNB Chain, instant)")
+    # except Exception as e:
+    #     logger.warning(f"Failed to register Pieverse: {e}")
+    logger.info("SKIPPED: BNB Pieverse — OFFLINE (api.pieverse.xyz NXDOMAIN)")
 
-    # ── 4. MERX TRON ──
-    if config.merx_tron_api_key:
-        try:
-            from app.facilitators.merx_tron import MerxTronFacilitator
-            registry.register(MerxTronFacilitator())
-            logger.info("Registered: MERX x402 for TRON (USDT/USDC/USDD, sub-3s)")
-        except Exception as e:
-            logger.warning(f"Failed to register MERX TRON: {e}")
-    else:
-        logger.info("MERX TRON: not configured (no API key)")
+    # ── 4. MERX TRON — OFFLINE: api.merx.finance NXDOMAIN ──
+    # Skipped: dead facilitator, DNS does not resolve
+    # try:
+    #     from app.facilitators.merx_tron import MerxTronFacilitator
+    #     registry.register(MerxTronFacilitator())
+    #     logger.info("Registered: MERX x402 for TRON (USDT/USDC/USDD, sub-3s)")
+    # except Exception as e:
+    #     logger.warning(f"Failed to register MERX TRON: {e}")
+    logger.info("SKIPPED: MERX TRON — OFFLINE (api.merx.finance NXDOMAIN)")
 
     # ── 5. PayAI (Base + Solana, always available — no key needed) ──
     try:
@@ -76,15 +72,13 @@ async def register_all_facilitators() -> None:
         logger.warning(f"Failed to register PayAI: {e}")
 
     # ── 6. AsterPay (EUR/SEPA Europe) ──
-    if config.asterpay_api_key:
-        try:
-            from app.facilitators.asterpay import AsterPayFacilitator
-            registry.register(AsterPayFacilitator())
-            logger.info("Registered: AsterPay (European, EUR/SEPA off-ramp)")
-        except Exception as e:
-            logger.warning(f"Failed to register AsterPay: {e}")
-    else:
-        logger.info("AsterPay: not configured (no API key)")
+    # Always register — health check marks unavailable if no key
+    try:
+        from app.facilitators.asterpay import AsterPayFacilitator
+        registry.register(AsterPayFacilitator())
+        logger.info("Registered: AsterPay (European, EUR/SEPA off-ramp)")
+    except Exception as e:
+        logger.warning(f"Failed to register AsterPay: {e}")
 
     # ── 7. Cloudflare x402 (Base Sepolia fallback) ──
     try:
@@ -94,16 +88,15 @@ async def register_all_facilitators() -> None:
     except Exception as e:
         logger.warning(f"Failed to register Cloudflare x402: {e}")
 
-    # ── 8. Satoshi (Bitcoin) ──
-    if config.satoshi_api_key:
-        try:
-            from app.facilitators.satoshi import SatoshiFacilitator
-            registry.register(SatoshiFacilitator())
-            logger.info("Registered: Satoshi Facilitator (Bitcoin → Base/Solana)")
-        except Exception as e:
-            logger.warning(f"Failed to register Satoshi: {e}")
-    else:
-        logger.info("Satoshi: not configured (no API key)")
+    # ── 8. Satoshi (Bitcoin) — OFFLINE: api.satoshi.dev NXDOMAIN ──
+    # Skipped: dead facilitator, DNS does not resolve
+    # try:
+    #     from app.facilitators.satoshi import SatoshiFacilitator
+    #     registry.register(SatoshiFacilitator())
+    #     logger.info("Registered: Satoshi Facilitator (Bitcoin → Base/Solana)")
+    # except Exception as e:
+    #     logger.warning(f"Failed to register Satoshi: {e}")
+    logger.info("SKIPPED: Satoshi — OFFLINE (api.satoshi.dev NXDOMAIN)")
 
     # ── 9. Self-hosted x402-rs (optional, check if container is running) ──
     try:

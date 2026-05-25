@@ -244,7 +244,14 @@ def discover_route_tools() -> List[Dict]:
     backend_dir = os.path.dirname(__file__)
     skip = {'bundles', 'discovery', 'frameworks', 'comprehensive_audit',
             'anthropic-tools', 'gemini-tools', 'langchain-tools', 'openai-tools',
-            'bundles/all_in_one', 'bundles/intelligence_pack', 'bundles/security_pack'}
+            'bundles/all_in_one', 'bundles/intelligence_pack', 'bundles/security_pack',
+            '{tool_id}', 'payment-methods'}
+    
+    # Load authoritative pricing/categories from TOOL_PRICES
+    try:
+        from app.routers.x402_enforcement import TOOL_PRICES
+    except Exception:
+        TOOL_PRICES = {}
     
     for fname in ["x402_tools.py", "x402_forensic_tools.py"]:
         fpath = os.path.join(backend_dir, fname)
@@ -253,9 +260,21 @@ def discover_route_tools() -> List[Dict]:
         with open(fpath) as f:
             content = f.read()
         # Find all route paths
-        routes = re.findall(r'@router\.(?:get|post)\("/([^"]+)"\)', content)
+        routes = re.findall(r'@router\.(?:get|post)\("\/([^"]+)"\)', content)
         for route in routes:
             if route in skip:
+                continue
+            # Use TOOL_PRICES as source of truth for pricing and category
+            if route in TOOL_PRICES:
+                tp = TOOL_PRICES[route]
+                tools.append({
+                    "id": route, "name": tp.get("description", route.replace('_', ' ').title()),
+                    "description": tp.get("description", f"Tool: {route}"),
+                    "price": f"${tp.get('price_usd', 0.01):.2f}", "priceUsd": tp.get("price_usd", 0.01),
+                    "category": tp.get("category", "analysis"),
+                    "trialFree": tp.get("trial_free", 1), "method": "POST",
+                    "service": "rmi-native", "source": "route", "chains": [],
+                })
                 continue
             # Try to find docstring for description
             desc = f"Tool: {route}"
@@ -270,8 +289,6 @@ def discover_route_tools() -> List[Dict]:
                 "service": "rmi-native", "source": "route", "chains": [],
             })
     return tools
-
-
 def get_catalog():
     """Build full tool catalog from all gateways + external MCP servers"""
     # Always rebuild (no stale caching)

@@ -1,6 +1,8 @@
 """
-MERX x402 for TRON Facilitator
-===============================
+MERX x402 for TRON Facilitator [OFFLINE — NXDOMAIN]
+====================================================
+STATUS: OFFLINE — api.merx.finance DNS is NXDOMAIN (dead domain).
+Do not route payments to this facilitator. Kept for reference only.
 First TRON x402 facilitator. Supports USDT, USDC, USDD on TRON mainnet.
 Sub-3-second confirmation for micropayments.
 Express middleware compatible.
@@ -21,7 +23,13 @@ logger = logging.getLogger("facilitator.merx_tron")
 
 
 class MerxTronFacilitator(Facilitator):
-    """MERX x402 — TRON mainnet facilitator with sub-3s confirmation."""
+    """MERX x402 — TRON mainnet facilitator with sub-3s confirmation.
+
+    OFFLINE: api.merx.finance DNS is NXDOMAIN. This facilitator is dead.
+    """
+
+    # ── DEAD facilitator flag ──
+    status = "offline"  # NXDOMAIN: api.merx.finance does not resolve
 
     def __init__(self, config: Optional[FacilitatorConfig] = None):
         self._config = config or get_config()
@@ -40,7 +48,7 @@ class MerxTronFacilitator(Facilitator):
 
     @property
     def priority(self) -> int:
-        return 18
+        return 999  # Dead facilitator — lowest possible priority
 
     @property
     def verify_url(self) -> Optional[str]:
@@ -66,6 +74,13 @@ class MerxTronFacilitator(Facilitator):
         return "MERX x402 — TRON USDT/USDC/USDD micropayments, sub-3s"
 
     async def verify(
+        self, payload: Dict[str, Any],
+        requirements: Optional[Dict[str, Any]] = None,
+    ) -> VerificationResult:
+        # OFFLINE: api.merx.finance is NXDOMAIN — refuse all verifications
+        return self._format_error("MERX TRON facilitator is OFFLINE (api.merx.finance NXDOMAIN)")
+
+    async def _verify_live(
         self, payload: Dict[str, Any],
         requirements: Optional[Dict[str, Any]] = None,
     ) -> VerificationResult:
@@ -128,20 +143,14 @@ class MerxTronFacilitator(Facilitator):
             return self._format_error(f"MERX TRON internal error: {e}")
 
     async def health(self) -> bool:
-        try:
-            timeout = aiohttp.ClientTimeout(total=10)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                headers = {"X-MERX-API-Key": self._config.merx_tron_api_key} if self._config.merx_tron_api_key else {}
-                async with session.get(
-                    self._config.merx_tron_verify_url.replace("/verify", "/health"),
-                    headers=headers,
-                ) as resp:
-                    return resp.status < 500
-        except Exception as e:
-            logger.warning(f"MERX TRON health check failed: {e}")
-            return False
+        # OFFLINE: api.merx.finance is NXDOMAIN — always return False
+        return False
 
     async def settle(self, payment_data: Dict[str, Any]) -> SettlementResult:
+        # OFFLINE: api.merx.finance is NXDOMAIN — refuse all settlements
+        return SettlementResult(settled=False, reason="MERX TRON facilitator is OFFLINE (api.merx.finance NXDOMAIN)", facilitator=self.name)
+
+    async def _settle_live(self, payment_data: Dict[str, Any]) -> SettlementResult:
         try:
             timeout = aiohttp.ClientTimeout(total=30)
             async with aiohttp.ClientSession(timeout=timeout) as session:
