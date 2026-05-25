@@ -17,7 +17,7 @@ EXPANDED_ALIASES = {
     "dust_attack_detect": "urlcheck",
     "oracle_manipulation": "audit",
     "privilege_escalation": "audit",
-    "phantom_mint_detect": " honeypot_check",
+    "phantom_mint_detect": "honeypot_check",
 
     # Intelligence
     "cross_chain_whale": "whale",

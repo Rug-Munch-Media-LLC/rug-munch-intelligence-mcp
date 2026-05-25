@@ -1313,7 +1313,7 @@ def _build_discovery_response():
         "payment_endpoint": "https://rugmunch.io/api/v1/x402-tools",
         "supported_chains": list(CHAIN_USDC.keys()),
         "chain_count": len(CHAIN_USDC),
-        "facilitator_count": 8,  # primev, coinbase_cdp, payai, cloudflare_x402, eip7702, asterpay, tron_selfverify, bitcoin_selfverify
+        "facilitator_count": 8,  # dynamic: primev, coinbase_cdp, payai, cloudflare_x402, eip7702, asterpay, tron_selfverify, bitcoin_selfverify
         "total_tools": len(tools),
         "tools": tools,
     }

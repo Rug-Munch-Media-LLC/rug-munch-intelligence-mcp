@@ -245,6 +245,7 @@ def discover_route_tools() -> List[Dict]:
     skip = {'bundles', 'discovery', 'frameworks', 'comprehensive_audit',
             'anthropic-tools', 'gemini-tools', 'langchain-tools', 'openai-tools',
             'bundles/all_in_one', 'bundles/intelligence_pack', 'bundles/security_pack',
+            'bundles/forensic_pack',
             '{tool_id}', 'payment-methods'}
     
     # Load authoritative pricing/categories from TOOL_PRICES

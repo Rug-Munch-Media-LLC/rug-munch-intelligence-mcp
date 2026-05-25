@@ -3280,7 +3280,7 @@ async def meme_vibe_score(req: MemeVibeRequest):
             "guarantee": "Data delivered or auto-refund via x402 receipt",
         }
 
-        await record_x402_payment("meme_vibe_score", "0.10", req.token)
+        await record_x402_payment("meme_vibe_score", "0.01", req.token)
         return result
 
     except Exception as e:
@@ -3327,6 +3327,16 @@ BUNDLES = {
         "individual_total": 0.50,  # 0.15 + 0.25 + 0.10
         "bundle_price_usd": 0.35,  # 30% discount
         "bundle_price_atoms": "350000",
+        "category": "bundle",
+        "trial_free": 1,
+    },
+    "forensic_pack": {
+        "name": "Forensic Investigation Pack",
+        "description": "Complete forensic analysis — valuation, OSINT identity hunt, and investigation report at 33% discount.",
+        "tools": ["forensic_valuation", "osint_identity_hunt", "investigation_report"],
+        "individual_total": 0.60,  # 0.25 + 0.15 + 0.20
+        "bundle_price_usd": 0.40,  # 33% discount
+        "bundle_price_atoms": "400000",
         "category": "bundle",
         "trial_free": 1,
     },
@@ -3484,6 +3494,45 @@ async def bundle_all_in_one(req: BundleRequest):
         "results": results,
         "price_usd": "0.35",
         "savings": "30% vs individual calls",
+        "guarantee": "Data delivered or auto-refund via x402 receipt",
+    }
+
+
+@router.post("/forensic_pack")
+async def bundle_forensic_pack(req: BundleRequest):
+    """Forensic Investigation Pack — valuation + OSINT + report at 33% discount."""
+    target = req.address or req.token or req.wallet
+    if not target:
+        raise HTTPException(status_code=400, detail="Provide address, token, or wallet")
+
+    tasks = {
+        "forensic_valuation": f"http://localhost:8000/api/v1/x402-tools/forensic_valuation",
+        "osint_identity_hunt": f"http://localhost:8000/api/v1/x402-tools/osint_identity_hunt",
+        "investigation_report": f"http://localhost:8000/api/v1/x402-tools/investigation_report",
+    }
+
+    results = {}
+    async with aiohttp.ClientSession() as session:
+        coros = {}
+        for name, url in tasks.items():
+            body = {"address": target, "token": target, "wallet": target, "chain": req.chain}
+            coros[name] = session.post(url, json=body, timeout=aiohttp.ClientTimeout(total=30))
+        for name, coro in coros.items():
+            try:
+                resp = await coro
+                results[name] = await resp.json() if resp.status == 200 else {"status": resp.status}
+            except Exception as e:
+                results[name] = {"error": str(e)}
+
+    return {
+        "tool": "Forensic Investigation Pack",
+        "bundle": "forensic_pack",
+        "target": target,
+        "chain": req.chain,
+        "timestamp": datetime.utcnow().isoformat(),
+        "results": results,
+        "price_usd": "0.40",
+        "savings": "33% vs individual calls",
         "guarantee": "Data delivered or auto-refund via x402 receipt",
     }
 
