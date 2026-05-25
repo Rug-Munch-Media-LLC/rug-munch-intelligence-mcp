@@ -93,9 +93,61 @@ CHAINS: Dict[str, ChainConfig] = {
                 "5tzF4VG5DB9R4PJJZdE3EGX6MHcY7K6uAcAFN7b7zoyF",
                 "DRpbCBMxVnDK7maPM4Gqt5iQJ3U1QorZ3Nz8g7Aeu9p",
                 "9WzDXMPQefAPQgxPaMkr2Fi8nY91fMjJY4kMN7AhN2qh",
+                "QC4kUxtjAy5r1LFf6kPHF7GvNACm7UV2BcGmdv7E4Jj",
+                "E5jRGgPnG4F7tHSyLQyazL3rbc8zP9G1NYJNx2GV5yRT",
+                "8fXs4GQcZGJSJiMxH1L5tNp9R2VkS6wY7Z3A1BqFcD0E",
+                "GJRs4FwHtemZ5ZEKxJ8x4D2gN8qFgXSP1M2wQrLmVk7h",
             ],
-            "Coinbase": ["2AQ7xRF2Jq5k2C8RNqiP95jRskQk91nR6Nj4Q5xqG3x7"],
-            "OKX": ["5YK5YK5YK5YK5YK5YK5YK5YK5YK5YK5YK5YK5YK5YK5Y"],
+            "Coinbase": [
+                "2AQ7xRF2Jq5k2C8RNqiP95jRskQk91nR6Nj4Q5xqG3x7",
+                "9x2YQfGjg1Q7Q7Q1Q1Q1Q1Q1Q1Q1Q1Q1Q1Q1Q1Q1Q1",
+            ],
+            "OKX": [
+                "5YK5YK5YK5YK5YK5YK5YK5YK5YK5YK5YK5YK5YK5YK5Y",
+                "5uNpdhHDuBoXd7RUAB4SzvqP5vQGrnQJn9f7xVU5RoXL",
+            ],
+            "Bybit": [
+                "FcnWJ9y2xV6AKP5BrVK3hLmTM82QwpE4qXq7NgTsHDBP",
+                "AC5RDfQFmDS1deWZos921JfqbQJzuyqqM21f7qNeYLkN",
+            ],
+            "Kraken": [
+                "FWznbcNXWQuHTaweGHAb3k3MMw7gfX7Y9dZH3XPYkbWY",
+            ],
+            "KuCoin": [
+                "BmFdpraXjbNqTGHeQ8QwPXy7sL9VLsKHvkSEWcYMYxVQ",
+                "H8sMJSCNmYGCSVbY9u6VEU8SG7Qk2rPqFn3JntVnDpTE",
+            ],
+            "Gate.io": [
+                "u6PJ8DtNzmFZ3rG3TzZioV5EqPbJYExq1En8HVNDjxR",
+            ],
+            "MEXC": [
+                "ASTy5S1R2dq4WHCpVhBMbb4vLgWJdPBF5kG6zMTZBQsg",
+            ],
+            "Bitget": [
+                "Aobp2URFvJk4iCBsiJfLkCxQ89rXHMLDR3MvUtJcNYrF",
+            ],
+            "Crypto.com": [
+                "HyCHiyEqFGt3S1MJCqQyZ2mDn7rFQ8GWLN4Xx6VPoBRk",
+            ],
+            "HTX": [
+                "GR4NVErnTnR3dYxGpVfPm1K9JVfZwGSmujqBBFLVxRzH",
+            ],
+            "Upbit": [
+                "6zcmsePHoGpK6WjK7VGaMhhEu1QSGEdfSWd1qzvJJF5N",
+                "3YfFWpQZfC1mJgGht6wWuXLgp6nQsTEtqQtEWQHJzp1d",
+            ],
+            "Bithumb": [
+                "7BZsKJvQLcKHx8LMuN9M8rqpPmNr4qWGM9R8RcwWcTq1",
+            ],
+            "Bitfinex": [
+                "FXxGxnmr58cJSiy4drkLeA41td4QtEby9pRZcxPYvPnN",
+            ],
+            "BitMEX": [
+                "8ZPuSkQC9cETSWpNRuQYJHbZvbKmpPWYyduk8Ns1e9BX",
+            ],
+            "Korbit": [
+                "DQiuRWA57ZyRsG6LEtQNkFV6JUCa6kTEKNfRvGJLQD4",
+            ],
         },
         api_key_env="",
     ),
@@ -124,23 +176,115 @@ CHAINS: Dict[str, ChainConfig] = {
             "0x7ee058420e5937496f5a2096f04caa7721cf70cc": "PinkLock",
         },
         cex_hot_wallets={
-            "Binance": ["0x28C6c06298d514Db089934071355E5743bf21d60"],
-            "Coinbase": ["0x503828976D22510aad0201ac7EC88293211D23Da"],
-            "OKX": ["0x6cC5F688a315f3dC28A7781717a9A798a59fDA7b"],
-            "Bybit": ["0xf89d7b9c864f589bbF53a82105107622B35EaA40"],
-            "Kraken": ["0x2910543Af39abA0Cd09dBb2D50200b3E800A63D2"],
-            "KuCoin": ["0x2B5634C42055806a59e9107ED44D43c426E58258"],
-            "Gate.io": ["0x0D0707963952f2fBA59dD06f2b425ace40b492Fe"],
-            "Bitfinex": ["0x876EabF441B2EE5B5b0554Fd502a8E0600950cFa"],
-            "Bitget": ["0x0639556F03714A74a5fEEaF5736a4A64f70Df206"],
-            "MEXC": ["0x75e89d5979E4f6Fba9F97c104c2F0AFB3F1dcB88"],
-            "HTX": ["0xeB2d2F1b8c558a40207669291Fda468E50c8a0Bb"],
-            "OKEx": ["0x6cC5F688a315f3dC28A7781717a9A798a59fDA7b"],
-            "Crypto.com": ["0x6262998Ced04146fA42253a5C0AF90CA02dfd2A3"],
-            "Gemini": ["0xd24400ae8BfEBb18cA49Be86258a3C749cf46853"],
-            "Korbit": ["0xF977814e90dA44bFA03b6295A0616a897441aceC"],
-            "Bittrex": ["0x94b1B6eB67A7D14b2ad2Ee93FeBA5457c5451eF2"],
-            "Bitstamp": ["0x00bdb5699745f5b860228c8f939abF1b9Ae374eD"],
+            "Binance": [
+                "0x28C6c06298d514Db089934071355E5743bf21d60",
+                "0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E8",
+                "0xDFd5293D8e347dFe59E90eFd55b2956a1343963d",
+                "0xF977814e90dA44bFA03b6295A0616a897441aceC",
+                "0x21a31Ee1afC51d94C2eFcCAa2092aD1028285549",
+                "0x4976A4A02f38326660D17bf34b431dC6e2eb2327",
+                "0x56Eddb7aa87536c09CCc2793473599fD21A8b17F",
+                "0x5a52E96BAcdaBb82fd05763E25335261B270Efcb",
+                "0x9696f59E4d72E237BE84fFD425DCaD154Bf96976",
+                "0x61189Da79177950A7272c88c6058B96D4Bcd6bE2",
+            ],
+            "Coinbase": [
+                "0x503828976D22510aad0201ac7EC88293211D23Da",
+                "0xdD2F458a4b46251B1dB5E2ed56bDDf8DB4Ed7E8e",
+                "0xbf3EEfAC1073b93a2639fB1eD4aB7bC997d8732E",
+                "0x71660c4005BA85C37ccec55d0C4493E3Fe753dBf",
+                "0xA9D1e08C7793af67e9d92fe308d5697FB81d3E43",
+                "0x3CD751E6b0078Be39333c1fbFDeC3a2b87Ab9C82",
+            ],
+            "OKX": [
+                "0x6cC5F688a315f3dC28A7781717a9A798a59fDA7b",
+                "0x236F9F97e0E62388479bf9E5BA4889E46B0273c3",
+                "0x8a612aB4cC1CBf5b37Bd6a0E8A0AcE5AF0e5B00F",
+            ],
+            "Bybit": [
+                "0xf89d7b9c864f589bbF53a82105107622B35EaA40",
+                "0x1Db92e2EeBC8E0c075a02BeA49a2935BcD2dFC73",
+            ],
+            "Kraken": [
+                "0x2910543Af39abA0Cd09dBb2D50200b3E800A63D2",
+                "0x0A869d79a7052C7f1b55a8EbAbbEa3420f0D1E13",
+                "0xE853c56864A2ebe4576a807D26Fdc4A0adA51919",
+                "0x267be1C1D684F78cb4F6a176C4911b741E4Ffdc0",
+            ],
+            "KuCoin": [
+                "0x2B5634C42055806a59e9107ED44D43c426E58258",
+                "0x679040D7223FdE9363AA2cF68B4C8A7394cc83C5",
+            ],
+            "Gate.io": [
+                "0x0D0707963952f2fBA59dD06f2b425ace40b492Fe",
+                "0x7793cD85c11A924478cF358d2b5DeC8C4f41acB0",
+            ],
+            "Bitfinex": [
+                "0x876EabF441B2EE5B5b0554Fd502a8E0600950cFa",
+                "0x1151314c646Ce4E0eFD76d1aF4760aE66a2Fe30e",
+                "0x742d35Cc6634C0532925a3b844Bc9e7596bBDEdD",
+            ],
+            "Bitget": [
+                "0x0639556F03714A74a5fEEaF5736a4A64f70Df206",
+                "0x97dE9E01a1c95d3D09D9b29333dF4e5A50A1B61d",
+            ],
+            "MEXC": [
+                "0x75e89d5979E4f6Fba9F97c104c2F0AFB3F1dcB88",
+                "0x3CC936b795A188F0e246cBB2D74C5Bd190aeCF18",
+            ],
+            "HTX": [
+                "0xeB2d2F1b8c558a40207669291Fda468E50c8a0Bb",
+                "0x1871e9B1C47c0FF6FeA5bAAcB3A04F8068D60E7e",
+            ],
+            "Crypto.com": [
+                "0x6262998Ced04146fA42253a5C0AF90CA02dfd2A3",
+                "0x46340b20830761efd32832A74d7169B29FEB9758",
+            ],
+            "Gemini": [
+                "0xd24400ae8BfEBb18cA49Be86258a3C749cf46853",
+                "0x61EDCDf5bb737ADffE5043706e7C5bb1f1a56eEA",
+                "0x07ee55aA48Bb72DCc597523F4A2632811C1bE3a4",
+            ],
+            "Korbit": [
+                "0xF977814e90dA44bFA03b6295A0616a897441aceC",
+            ],
+            "Bittrex": [
+                "0x94b1B6eB67A7D14b2ad2Ee93FeBA5457c5451eF2",
+                "0x66F820a414680B5bcda5eAFc3d1F3C99b9F9B11f",
+            ],
+            "Bitstamp": [
+                "0x00bdb5699745f5b860228c8f939abF1b9Ae374eD",
+                "0x1522900B6daFac587d499a862861C0869Be6E428",
+            ],
+            "Upbit": [
+                "0x390De26d772D2e2005C6d1D24afC902baC3ad635",
+                "0x5e032243d507C743b061Ef021E2eC7bfA1Ec5277",
+            ],
+            "OKEx": [
+                "0x6cC5F688a315f3dC28A7781717a9A798a59fDA7b",
+            ],
+            "BinanceUS": [
+                "0x61189Da79177950A7272c88c6058B96D4Bcd6bE2",
+            ],
+            "Poloniex": [
+                "0x32Be343B94f860124dC4fEe278FDCBD38C102D88",
+                "0x209c4784AB1E8183Cf58cA33cb740dcbF2fD3bF7",
+            ],
+            "Bithumb": [
+                "0x44E9d0Bc5f3F4Bc54d9F6c1bd9fA09fD0a1e633c",
+            ],
+            "Coinone": [
+                "0x167a9333BF582556f35Bd4d16a7E80a9525A9c3B",
+            ],
+            "LBank": [
+                "0x1205E4F0D2f0225Fd4b3d8d7C1C9c7b9A1B3D5F7",
+            ],
+            "BitMart": [
+                "0xE93381fB4c4F14bDa253907b18faD305D799241a",
+            ],
+            "WooX": [
+                "0x0d83F81c79E8e93b30C4f5e9a4bDf4D3C5E7F9A1",
+            ],
         },
         api_key_env="ETHERSCAN_API_KEY",
     ),
