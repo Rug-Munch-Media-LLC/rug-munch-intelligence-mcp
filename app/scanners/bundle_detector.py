@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 import httpx
 
 from app.chain_client import ChainClient
+from app.chain_registry import is_solana, is_evm
 from app.free_solscan_client import FreeSolscanClient
 
 logger = logging.getLogger("bundle_detector")
@@ -191,7 +192,7 @@ class BundleDetector:
         """
         # If explicit deploy_tx provided, fetch it
         if deploy_tx:
-            if chain == "solana":
+            if is_solana(chain):
                 tx_data = await self._fetch_helius_transaction(deploy_tx)
                 if tx_data:
                     # Extract deployer from the transaction
@@ -218,7 +219,7 @@ class BundleDetector:
                 return (deployer, 0, block_time)
 
         # Try Solscan token data for creation info on Solana
-        if chain == "solana":
+        if is_solana(chain):
             sol_data = await self._fetch_solscan_token_data(token)
             if sol_data:
                 deployer = sol_data.get("creator", sol_data.get("owner", ""))
@@ -236,7 +237,7 @@ class BundleDetector:
         """
         early_buyers = []
 
-        if chain == "solana" and deploy_block > 0:
+        if is_solana(chain) and deploy_block > 0:
             # Get signatures for the token address (mint account)
             sigs = await self._fetch_helius_signatures(token, limit=50)
             for sig_info in sigs[:20]:
@@ -260,7 +261,7 @@ class BundleDetector:
         """
         chain_result: List[FundingStep] = []
 
-        if chain == "solana":
+        if is_solana(chain):
             # Try Solscan funding sources first
             funding_sources = self._solscan.get_wallet_funding_sources(wallet, days=30)
             if funding_sources:
@@ -437,7 +438,7 @@ class BundleDetector:
         # Compute budget analysis (Solana)
         compute_patterns = {}
         jito_count = 0
-        if chain == "solana":
+        if is_solana(chain):
             compute_patterns, jito_count = self._analyze_compute_budgets(early_buyers)
         
         # Calculate totals

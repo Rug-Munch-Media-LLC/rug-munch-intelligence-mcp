@@ -27,6 +27,8 @@ from enum import Enum
 
 import httpx
 
+from app.chain_registry import CHAINS
+
 logger = logging.getLogger("dev_reputation")
 
 # ── API Keys ────────────────────────────────────────────────
@@ -387,7 +389,7 @@ class DevReputationEngine:
         5. Cross-chain address lookup (Moralis)
         """
         if chains is None:
-            chains = ["solana", "ethereum", "base", "bsc"]
+            chains = list(CHAINS.keys())[:4]
 
         # Fetch token launches from DexScreener
         launches = []

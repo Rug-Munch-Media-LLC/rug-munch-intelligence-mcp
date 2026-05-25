@@ -20,6 +20,8 @@ from typing import List, Dict, Optional
 
 import httpx
 
+from app.chain_registry import is_solana, is_evm
+
 logger = logging.getLogger("honeypot_detector")
 
 JUPITER_QUOTE_URL = "https://quote-api.jup.app/v6/quote"
@@ -86,7 +88,7 @@ class HoneypotDetector:
 
     async def detect(self, token_address: str, chain: str, pair_address: str = "") -> HoneypotReport:
         chain = chain.lower()
-        if chain in ("solana", "sol"):
+        if is_solana(chain):
             return await self._detect_solana(token_address)
         return await self._detect_evm(token_address, chain, pair_address)
 

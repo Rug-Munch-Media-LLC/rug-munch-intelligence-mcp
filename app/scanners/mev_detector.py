@@ -19,6 +19,8 @@ from datetime import datetime, timezone
 
 import httpx
 
+from app.chain_registry import is_solana, is_evm
+
 logger = logging.getLogger("mev_detector")
 
 # ─── Known MEV bot addresses ─────────────────────────────────────────
@@ -151,7 +153,7 @@ class MEVDetector:
         report = MEVReport(token_address=token_address, chain=chain)
 
         try:
-            if chain == "solana":
+            if is_solana(chain):
                 await self._analyze_solana(token_address, report, tx_count)
             else:
                 chain_id = self._get_chain_id(chain)

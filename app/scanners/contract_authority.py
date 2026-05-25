@@ -31,6 +31,7 @@ from enum import Enum
 import httpx
 
 from app.chain_client import ChainClient
+from app.chain_registry import is_solana, is_evm
 
 logger = logging.getLogger("contract_authority")
 
@@ -150,7 +151,7 @@ class ContractAuthorityScanner:
         """Run full authority analysis for a token on the given chain."""
         chain_lower = chain.lower().strip()
 
-        if chain_lower == "solana":
+        if is_solana(chain_lower):
             return await self._scan_solana(token_address)
         elif chain_lower in ETHERSCAN_NETWORKS:
             return await self._scan_evm(token_address, chain_lower)

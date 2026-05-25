@@ -25,6 +25,7 @@ from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 
 import httpx
+from app.chain_registry import is_solana, is_evm
 
 logger = logging.getLogger("wash_trading")
 
@@ -674,7 +675,7 @@ class WashTradingDetector:
           - Solana: Helius Enhanced Transactions + DAS
           - EVM: Moralis token transfers (primary) + Etherscan tokentx (fallback)
         """
-        if chain == "solana":
+        if is_solana(chain):
             return await self._fetch_solana_transfers(token_address)
         else:
             return await self._fetch_evm_transfers(token_address, chain)

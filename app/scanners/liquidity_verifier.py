@@ -27,6 +27,8 @@ from enum import Enum
 
 import httpx
 
+from app.chain_registry import is_solana, is_evm, get_known_lockers
+
 logger = logging.getLogger("liquidity_verifier")
 
 # ── API Keys ────────────────────────────────────────────────
@@ -96,34 +98,6 @@ class LockReport:
     risk_level: str = "LOW"  # LOW, MEDIUM, HIGH, CRITICAL
     warnings: List[str] = field(default_factory=list)
 
-
-# Known legitimate locker contract addresses by chain
-KNOWN_LOCKERS = {
-    "ethereum": {
-        "0x663A5C229c09b049E36dCc11a9B0d4a8c9c3dBC2": "UNCX Network",
-        "0x5e1f0C7a0B9E9E9E9E9E9E9E9E9E9E9E9E9E9E9E": "Team Finance",
-        "0x7ee058420e5937496f5a2096f04caa7721cf70cc": "PinkLock",
-    },
-    "bsc": {
-        "0x663A5C229c09b049E36dCc11a9B0d4a8c9c3dBC2": "UNCX Network",
-        "0x5e1f0C7a0B9E9E9E9E9E9E9E9E9E9E9E9E9E9E9E": "Team Finance",
-        "0x7ee058420e5937496f5a2096f04caa7721cf70cc": "PinkLock",
-        "0x2D8E3580C6E428d4EaA069198D0B76ae0f98e43a": "Mudra",
-    },
-    "polygon": {
-        "0x663A5C229c09b049E36dCc11a9B0d4a8c9c3dBC2": "UNCX Network",
-        "0x7ee058420e5937496f5a2096f04caa7721cf70cc": "PinkLock",
-    },
-    "arbitrum": {
-        "0x663A5C229c09b049E36dCc11a9B0d4a8c9c3dBC2": "UNCX Network",
-    },
-    "avalanche": {
-        "0x5e1f0C7a0B9E9E9E9E9E9E9E9E9E9E9E9E9E9E9E": "Team Finance",
-    },
-    "base": {
-        "0x663A5C229c09b049E36dCc11a9B0d4a8c9c3dBC2": "UNCX Network",
-    },
-}
 
 # Dead/burn addresses for Solana
 SOLANA_BURN_ADDRESSES = {
@@ -262,12 +236,12 @@ class LiquidityVerifier:
 
     def is_known_locker(self, address: str, chain: str) -> Optional[str]:
         """Check if address is a known legitimate locker contract."""
-        chain_lockers = KNOWN_LOCKERS.get(chain, {})
-        return chain_lockers.get(address.lower() if chain != "solana" else address)
+        chain_lockers = get_known_lockers(chain)
+        return chain_lockers.get(address.lower() if not is_solana(chain) else address)
 
     def is_dead_address(self, address: str, chain: str) -> bool:
         """Check if address is a known burn/dead address."""
-        if chain == "solana":
+        if is_solana(chain):
             return address in SOLANA_BURN_ADDRESSES
         return address.lower() in {
             "0x000000000000000000000000000000000000dEaD".lower(),
@@ -294,7 +268,7 @@ class LiquidityVerifier:
         all_legit = True
 
         # For Solana, check LP burn (simplest and safest mechanism)
-        if chain == "solana":
+        if is_solana(chain):
             lp_burned = await self._check_solana_lp_burn(token_address)
             if lp_burned:
                 return LockReport(

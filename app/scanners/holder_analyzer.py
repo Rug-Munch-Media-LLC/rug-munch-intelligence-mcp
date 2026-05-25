@@ -23,6 +23,7 @@ from collections import defaultdict
 import httpx
 
 from app.birdeye_client import BirdeyeClient
+from app.chain_registry import is_solana, is_evm
 from app.free_solscan_client import FreeSolscanClient
 
 logger = logging.getLogger("holder_analyzer")
@@ -155,7 +156,7 @@ class HolderAnalyzer:
         """
         holders: List[HolderInfo] = []
 
-        if chain == "solana":
+        if is_solana(chain):
             # Primary: Solscan holders (has address, balance, percentage)
             raw_holders = await self._fetch_solscan_holders(token_address, top_n=50)
             if raw_holders:

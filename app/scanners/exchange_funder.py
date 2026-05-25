@@ -21,6 +21,7 @@ from collections import defaultdict
 import httpx
 
 from app.chain_client import ChainClient
+from app.chain_registry import is_solana, is_evm, get_cex_wallets
 from app.free_solscan_client import FreeSolscanClient, is_known_exchange
 
 logger = logging.getLogger("exchange_funder")
@@ -71,61 +72,6 @@ class ExchangeFunderDetector:
     
     Fetches data directly from Solscan, Helius, and Birdeye.
     """
-
-    # Known CEX hot wallets — Solana
-    SOLANA_CEX_WALLETS = {
-        # Binance
-        "5tzF4VG5DB9R4PJJZdE3EGX6MHcY7K6uAcAFN7b7zoyF": "Binance",
-        "DRpbCBMxVnDK7maPM4Gqt5iQJ3U1QorZ3Nz8g7Aeu9p": "Binance",
-        "9WzDXMPQefAPQgxPaMkr2Fi8nY91fMjJY4kMN7AhN2qh": "Binance",
-        "QC4kUxtjAy5r1LFf6kPHF7GvNACm7UV2BcGmdv7E4Jj": "Binance",
-        "H8o7Q6k6eQ7Q7Q1Q1Q1Q1Q1Q1Q1Q1Q1Q1Q1Q1Q1Q1Q1": "Binance",
-        # Coinbase
-        "2AQ7xRF2Jq5k2C8RNqiP95jRskQk91nR6Nj4Q5xqG3x7": "Coinbase",
-        "9x2YQfGjg1Q7Q7Q1Q1Q1Q1Q1Q1Q1Q1Q1Q1Q1Q1Q1Q1Q1": "Coinbase",
-        # OKX
-        "5YK5YK5YK5YK5YK5YK5YK5YK5YK5YK5YK5YK5YK5YK5Y": "OKX",
-        "6YK6YK6YK6YK6YK6YK6YK6YK6YK6YK6YK6YK6YK6YK6Y": "OKX",
-        # Bybit
-        "3NZ82Y3NZ82Y3NZ82Y3NZ82Y3NZ82Y3NZ82Y3NZ82Y3NZ8": "Bybit",
-        # Kraken
-        "7xzY7xzY7xzY7xzY7xzY7xzY7xzY7xzY7xzY7xzY7xzY7xz": "Kraken",
-        # Gate.io
-        "8SxV8SxV8SxV8SxV8SxV8SxV8SxV8SxV8SxV8SxV8SxV8": "Gate.io",
-        # MEXC
-        "4Qr3Qr3Qr3Qr3Qr3Qr3Qr3Qr3Qr3Qr3Qr3Qr3Qr3Qr3Q": "MEXC",
-    }
-
-    # Known CEX hot wallets — EVM chains
-    EVM_CEX_WALLETS = {
-        # Binance hot wallets (most active)
-        "0x28C6c06298d1aDb2561a6c7E7b6e3Bb07Aaf0eC4": "Binance",
-        "0x21a31Ee1afC51d94C2eFcCA476aC1bE2e25eE73b": "Binance",
-        "0x9694Ecb6aEB224CB6bc1a3b08bF7E0aF0fC6E564": "Binance",
-        "0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E8": "Binance",
-        "0xF977814e90dA44bFA03b6295Aa1bA3F51F4A8D11": "Binance",
-        "0x56Eddb7aa93E865B0836C4EBCE7FBb1a3F33E4F6": "Binance",
-        # Coinbase
-        "0x71660c4005DD85d9b7EB9EC8F92889B6E6E88a81": "Coinbase",
-        "0x95aD61b0a150d79219dCF64C2d5391B3a6bFEAF0": "Coinbase",
-        "0x1DB92e2EEBC8E0C4E0A81E07b2D06E4aE019BF4E": "Coinbase",
-        "0x88134Bf81BF4a2463377D7E8a0cb7f7a7E0d0cCA": "Coinbase",
-        # OKX
-        "0x6cc5F01840B3c00e2f78Cad7Bc6F0d0aF51A5Xxx": "OKX",
-        "0x72a5843bCcc4A8C7B5bC47E1B6146eE80CA3Yyyy": "OKX",
-        # Bybit
-        "0x7C13c0cc2ae8a7673A9F039F04C3b68E5E0dXXxx": "Bybit",
-        "0xE5b2717732b813E50A1eB5D50F6ac0016A8Xyyy": "Bybit",
-        # Kraken
-        "0x0e41C431108a770688f432910661b31a1X4Fb89e": "Kraken",
-        "0x2910546aff38eC3585aE15F2d8F5522E8A9X7d1a": "Kraken",
-        # Gate.io
-        "0x64C6415B3c6A3BDC2e36Fb8CeA2E941a7DDX7b5c": "Gate.io",
-        # Uniswap Universal Router (used as intermediary)
-        "0x3fC91A3afd703952495642f17E6B506A5Af4D7Xc": "Uniswap",
-        # 1inch
-        "0x11111125484AF021b4C8C8C8f44d5aA3AC9XXx1": "1inch",
-    }
 
     # Dead/burn addresses for renounce verification
     DEAD_ADDRESSES = {
@@ -198,17 +144,18 @@ class ExchangeFunderDetector:
         """Check if an address is a known CEX hot wallet."""
         addr_lower = address.lower()
         
-        # Check Solana CEX wallets
-        if chain == "solana":
-            # Check our built-in list
-            result = self.SOLANA_CEX_WALLETS.get(address, "")
-            if not result:
-                # Also check the Solscan known exchange list
-                result = is_known_exchange(address) or ""
+        # Check chain's CEX wallets from registry
+        cex_wallets = get_cex_wallets(chain)
+        for exchange_name, addresses in cex_wallets.items():
+            if address in addresses or addr_lower in [a.lower() for a in addresses]:
+                return exchange_name
+        
+        # Also check the Solscan known exchange list for Solana
+        if is_solana(chain):
+            result = is_known_exchange(address) or ""
             return result
         
-        # Check EVM CEX wallets
-        return self.EVM_CEX_WALLETS.get(addr_lower, "")
+        return ""
 
     def calculate_risk_score(self, report: ExchangeFundReport) -> Tuple[int, str, List[str]]:
         """Calculate risk score based on CEX-funded wallet concentration."""
@@ -268,7 +215,7 @@ class ExchangeFunderDetector:
         # If no buyer addresses provided, try to fetch from Solscan (Solana only)
         if not buyer_addresses:
             buyer_addresses = []
-            if chain == "solana":
+            if is_solana(chain):
                 # Get top holders from Solscan as proxy for early buyers
                 try:
                     holders = self._solscan.get_holder_wallets(token_address, top_n=20)
@@ -296,7 +243,7 @@ class ExchangeFunderDetector:
         for buyer in buyer_addresses:
             info = BuyerFundingInfo(buyer_address=buyer, first_funding_source="unknown")
             
-            if chain == "solana":
+            if is_solana(chain):
                 # Trace funding sources via Solscan
                 funding_sources = await self._fetch_solscan_funding_sources(buyer, days=30)
                 if funding_sources:
