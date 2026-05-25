@@ -729,6 +729,8 @@ def get_cex_wallets(chain_name: str) -> Dict[str, List[str]]:
     return cfg.cex_hot_wallets if cfg else {}
 
 def get_known_lockers(chain_name: str) -> Dict[str, str]:
-    """Get known liquidity locker contracts for a chain."""
+    """Get known liquidity locker contracts for a chain (keys are lowercase-normalized)."""
     cfg = CHAINS.get(chain_name.lower())
-    return cfg.known_lockers if cfg else {}
+    if not cfg:
+        return {}
+    return {k.lower(): v for k, v in cfg.known_lockers.items()}
