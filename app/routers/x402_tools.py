@@ -3541,7 +3541,7 @@ async def bundle_forensic_pack(req: BundleRequest):
 async def framework_discovery():
     """Returns all available framework integrations with endpoints.
     This is the master discovery endpoint for AI frameworks."""
-    base = "https://api.rugmunch.io/api/v1/x402-tools"
+    base = "https://rugmunch.io/api/v1/x402-tools"
     return {
         "service": "Rug Munch Intelligence",
         "tagline": "We build tools to keep the crypto space safer",
