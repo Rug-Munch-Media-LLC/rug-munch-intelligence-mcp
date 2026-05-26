@@ -1,0 +1,170 @@
+## **Husimi Functions for Coupled Optical Resonators** 
+
+**MARTÍ BOSCH,[1] ARNE BEHRENS,[2] , STEFAN SINZINGER[2] , AND MARTINA HENTSCHEL[3]** 
+
+_1Institut für Physik, Technische Universität Ilmenau, D-98693 Ilmenau, Germany_ 
+
+_2Fachgebiet Technische Optik, Institut für Mikro- und Nanotechnologien MacroNano, Technische Universität Ilmenau, D-98693 Ilmenau, Germany_ 
+
+_3Institute of Physics, Technische Universität Chemnitz, D-09107 Chemnitz, Germany_ 
+
+_*marti.bosch@tu-ilmenau.de_ 
+
+**Abstract:** Phase-space analysis has been widely used in the past for the study of optical resonant systems. While it is usually employed to analyze the far-field behaviour of resonant systems we focus here on it’s applicability to coupling problems. By looking at the phase-space description of both the resonant mode and the exciting source it is possible to understand the coupling mechanisms as well as to gain insights and approximate the coupling behaviour with reduced computational efforts. In this work we develop the framework for this idea and apply it to a system of an asymmetric dielectric resonator coupled to a waveguide. 
+
+© 2021 Optical Society of America 
+
+## **1. Introduction** 
+
+Over the last years, optical microcavities have attracted researcher’s attention in both fundamental and applied physics due to their high quality factor (Q) and small mode volumes [1]. Besides applications in sensing [2], nonlinear optics [3], light-matter interaction [4] and lasing [5], they have been used as a research platform to study exciting physical phenomena such as exceptional points [6,7] and optical chirality [8]. In recent years, the application range of optical microresonators has been further expanded by introducing systems of deformed or perturbed resonators. This leads to new effects which can be used for applications such as microlasers with directional emission [9,10] or enhanced coupling [11]. Phase-space analysis is a powerful tool to both describe and understand the optical modes in such deformed resonators, where the chaotic dynamics plays a major role. Instead of studying the real-space mode distribution, one looks at the field intensities as a function of both position and angle of incidence for a reduced subsystem, usually the resonator boundary. This method provides a thorough understanding of the underlying dynamics and is well suited to establish ray-wave correspondence [12]. A common phase-space representation are Husimi functions, which were introduced for open dielectric systems by Hentschel _et. al._ [13] and have been used extensively to study the far-field patterns, wave dynamics and ray-wave correspondence. Recently, these phase-space approaches have been extended to include systems with non-homogenous refractive index [14] and have been used to study free space coupling into asymmetric cavities [15] and the dynamical evolution of light in a deformed cavity by calculating the respective functions at different times and following the evolution in both real space and phase space [16,17]. In this paper, we apply phase-space analysis based on generalized Husimi functions to study systems of coupled resonators, providing an intuitive understanding of the involved coupling processes. Coupled resonator systems have shown promising features for lasing systems [18] and non-hermitian physics [19] and are as such a subject of interest. Firstly we present how the Husimi functions as derived in [13] can be used to study coupling phenomena in resonator systems and the difficulties involved. We then proceed to analyze the coupling in an illustrative waveguide-resonator system using the described method. 
+
+## **2. Husimi functions for eigenmodes in dielectric cavities** 
+
+The Husimi function was originally defined as a quasi-probability distribution in phase space [20], given by the overlap of the wavefunction with a Gaussian-type wavepacket (minimal-uncertainty). Applied to optical systems, it allows the representation of the field intensities as a function of position as well as momentum. Mathematically it is a windowed transformation, with the Gaussian window leading to the smallest possible uncertainty linked to such transformations. For 2D optical cavities, the Husimi function is usually calculated on the Poincaré surface of section (SOS) at the system boundary, leading to a phase-space representation of a reduced system which can be easily visualised in two dimensions [21]. The values of the Husimi function correspond to the field intensities for a given boundary position _𝑠_ and angle of incidence _𝜒_ with respect to the boundary normal, where _𝜒<_ ( _>_ )0 indicates (counter-) clockwise propagation direction. Hentschel _et. al._ [13] presented four different Husimi functions for open dielectric systems with piecewise constant refractive indices, corresponding to the intensities of the incident (inc) and emerging (em) waves inside ( _𝑗_ = 1) and outside ( _𝑗_ = 0) of the interface (see Fig. 1(a)). The four Husimi functions along the cavity boundary Γ with Birkhoff coordinates ( _𝑠,_ sin _𝜒_ ) are defined as: 
+
+**==> picture [339 x 28] intentionally omitted <==**
+
+with the weighting factors _𝐹𝑗_ =[√] _𝑛 𝑗_ cos _𝜒 𝑗_ , the refractive indices _𝑛_ 0 = 1, _𝑛_ 1, the (vacuum) wave number _𝑘_ 0, and the overlap functions _ℎ 𝑗_ , _ℎ_[′] _𝑗_[given by] 
+
+**==> picture [277 x 24] intentionally omitted <==**
+
+**==> picture [277 x 23] intentionally omitted <==**
+
+The wave functions _𝜓_ (and its normal derivative _𝜓_[′] ) are taken on the respective side _𝑗_ of the dielectric interface. The minimum-uncertainty wave packet _𝜉_ is given by 
+
+**==> picture [337 x 28] intentionally omitted <==**
+
+which is a periodic function in _𝑠_[′] centered around ( _𝑠_[′] _,_ sin _𝜒 𝑗_ ). The parameter _𝜎_ = ~~√~~ 2/ _𝑘_ 1 determines the extension along the _𝑠_[′] direction and thereby the uncertainty in sin _𝜒 𝑗_ . The value _𝑘 𝑗_ is the wavenumber in each region, the angles of incidence are related by Snell’s law _𝑛_ 1 sin _𝜒_ 1 = _𝑛_ 0 sin _𝜒_ 0. This phase-space representation gives insight into the wave dynamics and allows the identification of regions in phase-space with high intensity. This approach has been used extensively to study asymmetric cavities [22–24]. 
+
+The four Husimi functions for an eigenmode of the shortegg cavity [25] can be seen in Fig. 1. The whispering gallery mode (WGM) is confined by total internal reflection at the dielectric boundary. This can be seen in the Husimi functions inside the cavity _𝐻_ 1[em] and _𝐻_ 1[inc][, which show] high intensities for angles close to the boundary tangent only. The influence of the deformation can be seen in the deviation from perfectly straight lines, which is in turn the cause for the directional emission exhibited by this cavity. The differences between _𝐻_ 1[inc] and _𝐻_ 1[em] can be seen clearly for the points in the leaky region (between the dashed lines sin _𝜒𝑐𝑟_ = ±1/ _𝑛_ ), for which the light leaves the cavity according to Snell’s law. Outside these lines, total reflection occurs and the incoming and emitted components are similar. The high intensity emission points along the boundary can be identified in _𝐻_ 0[em] and _𝐻_ 1[inc][.][The directional emission can be seen clearly as] well in phase-space: the highest outgoing intensities outside of the cavity in _𝐻_ 0[em] are localized 
+
+**==> picture [268 x 124] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+H [inc] 0 : H [em] 0 4 Hive0) ><br>a χ 0  χ H: 0 n 0 = 1 s 1.5<br>—~ 20 1<br>Γ χ 1 χ 1 s A N 0.5<br>H [inc] 1 H [em] 1<br>n 1 =  n 0 2 4 6<br>& » 3<br>20 2<br>1<br>2 4 6<br>(a) (b) (c)<br>**----- End of picture text -----**<br>
+
+
+Fig. 1. (a) Incident and emerging rays at a dielectric boundary Γ corresponding to the four Husimi functions and introduction of phase-space coordinates arc length _𝑠_ (with 0 ≤ _𝑠_ ≤ 2 _𝜋_ ) and angle _𝜒_ of incidence. (b) Mode distribution of the shortegg cavity with _𝑛_ = 1 _._ 44 for a TE whispering-gallery eigenmode with the mode number _𝑘𝑅_ = 79 _._ 935−0 _._ 003 _𝑖_ . (c) The four Husimi functions calculated for the mode distribution shown in Fig. 1(b). Note that the scale depicts a relative intensity. 
+
+along a line joining the positions ( _𝑠_ = 0 _._ 35 _,_ sin _𝜒_ 0 = 1) and ( _𝑠_ = _𝜋_ − 0 _._ 35 _,_ sin _𝜒_ 0 = −1). This closely resembles the signature of a plane wave emerging from _𝑠_ ≈ _𝜋_ /2, in accordance with the shortegg’s farfield emission characteristics. 
+
+## **3. Husimi functions for waveguide-resonator coupled systems** 
+
+When analyzing coupling processes, it is necessary to look at whether the incoming fields excite the resonant mode at the right position as well as with the right angle of incidence. The phase-space analysis of coupling problems via Husimi functions allows to do this naturally by identifying the signatures of the _𝐻_ 0[inc] function for the resonator of interest in a coupled system. _𝐻_ 0[inc] gives insight into how incoming light from neighbouring regions behaves at the resonator boundary and can thus provide an explanation for the coupled system response. The excitation of supported modes is expected to be directly correlated to the overlap between the incoming exciting fields and the resonant eigenmode. A problem with this approach, however, arises due to the relative intensities of the incoming components and the resonant fields. Fig. 2 shows the Husimi functions for a coupled waveguide-shortegg system at an off-resonant as well as for a resonant frequency. The fields in the resonator were excited by an incoming field distribution from the left (red arrow) calculated from a port boundary analysis. The incoming field components _𝐻_ 0[inc] from the waveguide are expected to be located around ( _𝑠_ = _𝜋_ /2 _,_ sin _𝜒_ 0 = −1, see red arrow), but they can barely be distinguished from the intensities arising due to the intra-cavity field in the resonant case. In the off-resonant case, the waveguide component can be seen in _𝐻_ 0[inc] due to the lower intra-cavity intensity. 
+
+For all practical purposes, representing the fully coupled waveguide-resonator system in phase space will cause difficulties related to the dominance of the resonant mode in all the Husimi functions. One could try to change the Gaussian pulse in order to attain a higher precision in sin _𝜒 𝑗_ , but this is only possible through an undesired trade-off with increasing the uncertainty in _𝑠_ . 
+
+To overcome this issue, one can compute the field components originating from the coupled system (waveguide, neighbouring resonator) separately. In particular, one can compute the waveguide’s field distribution at the resonator boundary without including the resonator in the calculation, hereby preventing the resonant intensity from overshadowing the analysis of the 
+
+**==> picture [199 x 158] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+(a) (b)<br>1 Hive<br>6<br>Seen cee =oS 4<br>co m=<br>Wy<br>r 0 2 4 6<br>;<br>1 a<br>: 15<br>.<br>Fo 10<br>El 5<br>|<br>0 2 4<br>.<br>(c) (d)<br>**----- End of picture text -----**<br>
+
+
+Fig. 2. (a) Mode distribution of the waveguide-shortegg system at the off-resonant frequency Re( _𝑘𝑅_ ) = 80 _._ 015. (b) Husimi functions corresponding to the mode showed in (a). (c) Mode distribution of the waveguide-shortegg system at the resonant frequency Re( _𝑘𝑅_ ) = 80 _._ 211. (d) Husimi functions corresponding to the mode showed in (c). The width of the waveguide is set to _𝑤𝑊𝐺_ = 0 _._ 565 _𝜆_ / _𝑛𝑖𝑛_ and the distance between the resonator and the waveguide is Δ = _𝜆_ /2. The waveguide has the same refractive index as the cavity _𝑛𝑖𝑛_ = _𝑛_ = 1 _._ 44. 
+
+coupling. To this end, the Husimi projection is taken at the boundary where the resonator to be coupled into would be situated. This result is subsequently used to calculate the overlap with the resonant mode’s Husimi function (using the Husimi function _𝐻_ 1[em] in both cases). 
+
+Although Husimi functions were originally motivated and derived for dielectric boundaries, it is not restricted to this, and the overlap of the wave field with a minimum-uncertainty wave packet can be calculated along an arbitrary boundary Γ. This allows us to proceed in calculating the incoming and outgoing field components originating at the waveguide mode along the boundary where the resonator would be while setting _𝑛_ 0 = _𝑛_ 1 = 1. The overlap _𝑆_ Exc _,_ Res between the Husimi functions of the exciting fieldcan be calculated via _𝐻_ 1[em] _,_ exc[and the Husimi Functions of a chosen resonant mode] _[ 𝐻]_ 1[em] _,_ res 
+
+**==> picture [307 x 31] intentionally omitted <==**
+
+and is correlated to the coupling strength between the incoming field and the resonant mode. Note that both _𝐻[𝑒𝑚]_ The results are not expected to match full-wave calculations perfectly due to two reasons:1 _,_ exc[and] _[ 𝐻]_ 1[em] _,_ res[have to be evaluated along the same boundary][ Γ][.] first, 
+
+**==> picture [202 x 8] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+(a) (b)<br>**----- End of picture text -----**<br>
+
+
+Fig. 3. (a) Mode distribution in the shortegg cavity with _𝑛_ = 1 _._ 44 for a TE eigenmode with the mode number _𝑘𝑅_ = 80 _._ 004 − 0 _._ 029 _𝑖_ . (b) The four Husimi functions calculated for the mode distribution showed in 3(a), with the dashed line marking the critcal angles sin _𝜒𝑖_ = 1/ _𝑛_ . The Husimi functions inside show four areas with high intensity along _𝑠_ , which can be linked to the four reflection areas on which the mode distribution along the boundary has the highest values. 
+
+the uncertainty arising from the Husimi projection and second, the fact that interactions between the cavity and the exciting system can not be accounted for. In the weak coupling regime, realized if the distance between the resonator and the waveguide is large enough, the eigenmodes of the coupled resonator remain essentially unchanged. Consequently, the results should correlate well with full numerical wave simulation results of the combined system. More importantly, this analysis gives an intuitive understanding of the involved coupling processes in phase space. If one is interested in a time-dependent analysis, the phase-space description of the incoming fields can be used as time-dependent input for the computation of the dynamical fields inside the resonator. 
+
+In order to illustrate this method, we studied the transmission through the waveguide in dependence on the orientation angle of the shortegg resonator and compared the results from conventional numerical methods for the full system with the phase-space analysis described above. The electric field distributions used for the eigenmodes, the phase-space analysis as well as the transmission curves were calculated by solving the 2D Helmholtz equation in the frequency domain, with outgoing wave conditions imposed at infinity [26]. 
+
+We focus here on TE modes, where _𝐸_ z and its normal derivative are continuous across dielectric boundaries. The fields were solved for numerically in COMSOL v5.4 [27], using perfectly matched layers (PMLs) at the edges of the truncated system. The analyzed system consisted of a waveguide coupled to a shortegg cavity, whose geometric shape is given, in polar coordinates ( _𝑟, 𝜙_ ), as _𝑟_ ( _𝜙_ ) = _𝑅_ 0 (1 + 0 _._ 16 cos( _𝜙_ ) − 0 _._ 022 cos(2 _𝜙_ ) − 0 _._ 05 cos(3 _𝜙_ )) _._ For both the waveguide and the shortegg cavity the refractive index was set to _𝑛_ = 1 _._ 44. The distance between the resonator and waveguide was held constant at Δ = 0 _._ 5 _𝜆_ for all angles by shifting the center of the resonator. 
+
+As known from in-house experimental data [28], the transmission spectrum (i.e., intensity transmitted through the waveguide as a function of the orientation angle) is highly dependent on the orientation of the waveguide relative to the resonator. Although this is to be expected due to the asymmetry of the resonator, an accurate, quantitative, and predictive explanation is accessible by analyzing the system in phase space. 
+
+A typical mode distribution as well as the four Husimi functions can be seen in Fig. 3(a). Note that the resonant frequency for the coupled system shown in 2 and the eigenfrequency vary 
+
+**==> picture [309 x 121] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+(a) (b)<br>1 1 1 1<br>0 . 8 0 . 8 0 . 8<br>0 . 95<br>0 . 6 0 . 6 0 . 6<br>0 . 4 0 . 4 0 . 9 0 . 4<br>0 . 2 0 . 2 0 . 2<br>0 . 85<br>0 − 100 0 100 0 − 100 0 100 0<br>Respective Angle [deg] Angle Position [deg]<br>(c) (d)<br>[J]<br>[a.u.] [a.u.] [a.u.]<br>Res ,<br>Energy<br>S Exc Overlap<br>Transmission<br>Intracavity Overlap FEM Reversed<br>**----- End of picture text -----**<br>
+
+
+Fig. 4. (a) Waveguide-only mode used to compute the exciting fields on the boundary marked by the dashed lines. (b, top) Husimi function _𝐻_ 0[inc] _,_ exc[computed from the field] distribution in (a) on the dashed boundary. (b, bottom) _𝐻_ 1[em] _,_ exc[inside][the][resonator] boundaryComparisoncomputedof the normalizedby applyingintracavitySnells andenergyFresnelandlawsthetooverlap _𝐻_ 0[inc] _,_ exc _𝑆_[on] Exc[(b,top).] _,_ Res for the[(c)] waveguide-shortegg coupled system. (d) Comparison of the transmission and the reversed normalized overlap for the same system. The black curves (left axis) are obtained from the full-wave simulation, the red curves (right axis) from the phase space analysis. 
+
+waveguide-only system (see Fig.slightly due to the coupling.calculate the fields used for _𝐻_ The values1[em] _,_ exc4(a)) is computed.[originating at the waveguide, the mode distribution of the] _𝐻_ 1[em] _,_ res[are computed from eigenvalue calculations.] The waveguide mode corresponds to the[To] fundamental mode for the used frequency and waveguide width and was derived from a numerical boundary mode analysis. 
+
+Figure 4(b) shows its Husimi function _𝐻_ 0[inc] at the boundary marked by the dashed line (top), from which the refracted field can be computed using Snell’s and Fresnel’s laws (bottom) yielding by shifting the center ofcomputational effort than computing the transmission for each orientation angle individually via _𝐻_ 1[em] _,_ exc[used in Eq.][(5)][.][The overlap value] _𝐻_ 1[em] _,_ exc[to the respective angle.] _[ 𝑆]_[Exc] _[,]_[Res][can be computed for each orientation angle][This method requires considerably less] a full-wave simulation, since here the eigenfrequency and the excitation field have to be computed only once from FEM simulations instead of for each angle separately. The dependence on the orientation angle is accounted for in the overlap computation. Figure. 4(c) shows the intracavity energy computed with FEM as well as the overlap _𝑆_ Exc _,_ Res calculated from the phase-space 
+
+analysis as function of the respective angle, which is 0 _[𝑜]_ for the resonator position depicted in Fig. 4(a). In experiments it is common to measure the transmission, since the intracavity energy is not easily accessible and both values are connected due to energy conservation. Note that a big overlap value corresponds to a strong excitation of the mode and therefore a low transmission through the waveguide, thus the overlap values are normalized and substracted from unity (reversed overlap) to yield a comparative measure for the waveguide transmission: _𝑆𝑟𝑒𝑣_ ( _𝜃_ ) = 1 − _𝑆_ Exc _,_ Res( _𝜃_ ) /max( _𝑆_ Exc _,_ Res), as displayed in Figure. 4(d). 
+
+In Fig. 4(d) one can observe the missing symmetry about the 0 _[𝑜]_ -position of the reversed overlap value and the FEM-computed transmission. This is linked to observing only in-coupling components into the cavity and not correcting by how the cavity fields couple back into the waveguide. A close look at _𝐻_ 1[em] in Fig. 3(b), shows that the Husimi function is not perfectly symmetric around ( _𝑠_ = _𝜋_ /2 _,_ sin _𝜒_ 1 = −0 _._ 8), leading to the asymmetry displayed here. As expected, this effects are not relevant when looking at the intra-cavity energy. Nonetheless, the results agree semi quantitatively with the values from full-wave simulations. The differences can be attributed to the uncertainty involved in the calculation of the Husimi function as well as not having corrected for the non-constant curvature of the shortegg cavity. This could be accounted for by computingthus negates one of the advantages of the used method, since the used method the computation _𝐻_ 1[em] _,_ exc[for each angle, but it comes with a considerable computational effort and] involves only the evaluation of an overlap integral and it provides a reasonable approach to full numerical simulations. 
+
+## **4. Summary** 
+
+In this work we introduce a phase-space approach based on Husimi functions to analyze systems of coupled dielectric resonators. The method involves the computation of the incoming field components at the boundary where the coupling occurs for the individual non-coupled subsystems. From this we compute the respective Husimi functions and use their overlap to characterize the coupling efficiency. The method was verified on a system consisting of an asymmetric resonator excited by coupling to a waveguide. The proposed method provides a good approximation of full FEM calculations with considerably lower computational effort. In addition, this analysis gives intuitive insights into the coupling mechanisms taking place at the cavity boundaries. This method can be applied to more complex coupled optical systems consisting of multiple optical components, enabling a deeper understanding of the coupling processes and an effective approximation of the expected behaviour for the weak coupling regime. 
+
+## **References** 
+
+1. K. J. Vahala, “Optical microcavities,” Nature **424** , 839–846 (2003). 
+
+2. M. R. Foreman, J. D. Swaim, and F. Vollmer, “Whispering gallery mode sensors,” Adv. optics photonics **7** , 168–240 (2015). 
+
+3. V. S. Ilchenko, A. A. Savchenkov, A. B. Matsko, and L. Maleki, “Nonlinear optics and crystalline whispering gallery mode cavities,” Phys. review letters **92** , 043903 (2004). 
+
+4. Y.-F. Xiao, Y.-C. Liu, B.-B. Li, Y.-L. Chen, Y. Li, and Q. Gong, “Strongly enhanced light-matter interaction in a hybrid photonic-plasmonic resonator,” Phys. Rev. A **85** (2012). 
+
+5. T. Harayama and S. Shinohara, “Two-dimensional microcavity lasers,” Laser & Photonics Rev. **5** , 247–271 (2011). 6. J. Wiersig, “Enhancing the sensitivity of frequency and energy splitting detection by using exceptional points: Application to microcavity sensors for single-particle detection,” Phys. review letters **112** (2014). 
+
+7. W. Chen, Ş. Kaya Özdemir, G. Zhao, J. Wiersig, and L. Yang, “Exceptional points enhance sensing in an optical microcavity,” Nature **548** , 192–196 (2017). 
+
+8. S. Liu, J. Wiersig, W. Sun, Y. Fan, L. Ge, J. Yang, S. Xiao, Q. Song, and H. Cao, “Chaotic-to-regular tunneling: Transporting the optical chirality through the dynamical barriers in optical microcavities (laser photonics rev. 12(10)/2018),” Laser & Photonics Rev. **12** , 1870045 (2018). 
+
+9. J. Wiersig and M. Hentschel, “Unidirectional light emission from high- q modes in optical microcavities,” Phys. Rev. A **73** (2006). 
+
+10. T. Harayama and S. Shinohara, “Ray-wave correspondence in chaotic dielectric billiards,” Phys. review. E, Stat. nonlinear, soft matter physics **92** , 042916 (2015). 
+
+11. X. Jiang, L. Shao, S.-X. Zhang, X. Yi, J. Wiersig, L. Wang, Q. Gong, M. Lončar, L. Yang, and Y.-F. Xiao, “Chaos-assisted broadband momentum transformation in optical microresonators,” Sci. (New York, N.Y.) **358** , 344–347 (2017). 
+
+12. M. Hentschel and K. Richter, “Quantum chaos in optical systems: The annular billiard,” Phys. Rev. E **66** , 056207 (2002). 
+
+13. M. Hentschel, H. Schomerus, and R. Schubert, “Husimi functions at dielectric interfaces: Inside-outside duality for optical systems and beyond,” Europhys. Lett. (EPL) **62** , 636–642 (2003). 
+
+14. I. Kim, J. Cho, Y. Kim, B. Min, J.-W. Ryu, S. Rim, and M. Choi, “Husimi functions at gradient index cavities designed by conformal transformation optics,” Opt. express **26** , 6851–6859 (2018). 
+
+15. F.-J. Shu, C.-L. Zou, and F.-W. Sun, “Dynamic process of free space excitation of asymmetric resonant microcavity,” J. Light. Technol. **31** , 1884–1889 (2013). 
+
+16. L.-K. Chen, Y.-Z. Gu, Q.-T. Cao, Q. Gong, J. Wiersig, and Y.-F. Xiao, “Regular-orbit-engineered chaotic photon transport in mixed phase space,” Phys. review letters **123** , 173903 (2019). 
+
+17. T.-Y. Kwon, S.-Y. Lee, J.-W. Ryu, and M. Hentschel, “Phase-space analysis of lasing modes in a chaotic microcavity,” Phys. Rev. A **88** , 023855 (2013). 
+
+18. J. Kreismann, J. Kim, M. Bosch, M. Hein, S. Sinzinger, and M. Hentschel, “Superdirectional light emission and emission reversal from microcavity arrays,” Phys. Rev. Res. **1** (2019). 
+
+19. M. Bosch, S. Malzard, M. Hentschel, and H. Schomerus, “Non-hermitian defect states from lifetime differences,” Phys. Rev. A **100** (2019). 
+
+20. K. Husimi, “Some formal properties of the density matrix,” Proc. Phys.-Math. Soc. Jpn **22** , 264–314 (1940). 
+
+21. Crespi, Perez, and Chang, “Quantum poincaré sections for two-dimensional billiards,” Phys. review. E, Stat. physics, plasmas, fluids, related interdisciplinary topics **47** , 986–991 (1993). 
+
+22. Q. H. Song, L. Ge, A. D. Stone, H. Cao, J. Wiersig, J.-B. Shim, J. Unterhinninghofen, W. Fang, and G. S. Solomon, 
+
+   - “Directional laser emission from a wavelength-scale chaotic microcavity,” Phys. review letters **105** , 103902 (2010). 
+
+23. J. Wiersig and M. Hentschel, “Combining directional light output and ultralow loss in deformed microdisks,” Phys. review letters **100** , 033901 (2008). 
+
+24. S. Shinohara, T. Harayama, T. Fukushima, M. Hentschel, T. Sasaki, and E. E. Narimanov, “Chaos-assisted directional light emission from microcavity lasers,” Phys. review letters **104** , 163902 (2010). 
+
+25. M. Schermer, S. Bittner, G. Singh, C. Ulysse, M. Lebental, and J. Wiersig, “Unidirectional light emission from low-index polymer microlasers,” Appl. Phys. Lett. **106** , 101107 (2015). 
+
+26. J. D. Jackson, _Classical electrodynamics_ (Wiley, New York, 1998), 3rd ed. 
+
+27. Comsol, “Comsol multiphysics,” Comsol Multiphysics (2018). 
+
+28. A. Behrens, M. Bosch, P. Fesser, M. Hentschel, and S. Sinzinger, “Fabrication and characterization of deformed microdisk cavities in silicon dioxide with high q-factor,” Appl. optics **59** , 7893–7899 (2020). 
+

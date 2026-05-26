@@ -1,7 +1,7 @@
 """
 SENTINEL — Unified Pipeline Orchestrator
 ==========================================
-Runs all 12 scanner modules in parallel with graceful degradation.
+Runs all 20 scanner modules in parallel with graceful degradation.
 If any module fails, the others still return results.
 
 Modules:
@@ -17,6 +17,14 @@ Modules:
   10. HoneypotDetector          → Buy/sell simulation, transfer tax analysis
   11. ContractAuthorityScanner  → Mint/freeze/update authority, proxy detection
   12. MEVDetector               → Sandwich attacks, Jito bundles, known bot tracking
+  13. FlashLoanDetector         → Flash loan attack detection, borrow-then-dump
+  14. PumpDumpDetector          → Pump-and-dump lifecycle, coordinated shill, volume spikes
+  15. OracleManipulationDetector → Oracle source/depth, price manipulation vulnerability
+  16. GovernanceAttackDetector  → Governance concentration, timelock/quorum risk
+  17. ProxyDetector             → Proxy resolution, implementation fingerprinting, upgrade risk
+  18. StaticAnalyzer            → Slither static analysis, Forta alerts, SmartCheck
+  19. DecompilerAnalyzer        → Heimdall decompilation, whatsABI selector extraction, rug patterns
+  20. AddressLabeler            → Multi-source address labeling, scam/exchange/MEV identification
 """
 
 import asyncio
@@ -39,6 +47,15 @@ from .pumpfun_analyzer import PumpFunAnalyzer, PumpFunReport
 from .honeypot_detector import HoneypotDetector, HoneypotReport
 from .contract_authority import ContractAuthorityScanner, ContractAuthorityReport
 from .mev_detector import MEVDetector, MEVReport
+from .flash_loan_detector import FlashLoanDetector, FlashLoanReport
+from .pump_dump_detector import PumpDumpDetector, PumpDumpReport
+from .oracle_manipulation import OracleManipulationDetector, OracleManipulationReport
+from .governance_attack import GovernanceAttackDetector, GovernanceAttackReport
+from .proxy_detector import ProxyDetector, ProxyReport
+from .static_analyzer import StaticAnalyzer, StaticAnalysisReport
+from .decompiler_analyzer import DecompilerAnalyzer, DecompilerReport
+from .address_labeler import AddressLabeler, AddressLabelReport
+from .fund_flow_visualizer import FundFlowVisualizer, FundFlowReport
 
 logger = logging.getLogger("sentinel_pipeline")
 
@@ -116,6 +133,19 @@ class SentinelReport:
     honeypot_detection: Optional[Dict[str, Any]] = None
     contract_authority: Optional[Dict[str, Any]] = None
     mev_detection: Optional[Dict[str, Any]] = None
+    flash_loan_detection: Optional[Dict[str, Any]] = None
+    pump_dump_detection: Optional[Dict[str, Any]] = None
+    oracle_manipulation: Optional[Dict[str, Any]] = None
+    governance_attack: Optional[Dict[str, Any]] = None
+    proxy_detection: Optional[Dict[str, Any]] = None
+
+    # Tier 3 scanners
+    static_analysis: Optional[Dict[str, Any]] = None
+    decompiler_analysis: Optional[Dict[str, Any]] = None
+    address_labels: Optional[Dict[str, Any]] = None
+
+    # Tier 4 — Visualization
+    fund_flow: Optional[Dict[str, Any]] = None
 
     # Module errors (module_name → error message)
     errors: Dict[str, str] = field(default_factory=dict)
@@ -152,6 +182,19 @@ _pumpfun_analyzer: Optional[PumpFunAnalyzer] = None
 _honeypot_detector: Optional[HoneypotDetector] = None
 _contract_authority: Optional[ContractAuthorityScanner] = None
 _mev_detector: Optional[MEVDetector] = None
+_flash_loan_detector: Optional[FlashLoanDetector] = None
+_pump_dump_detector: Optional[PumpDumpDetector] = None
+_oracle_manipulation: Optional[OracleManipulationDetector] = None
+_governance_attack: Optional[GovernanceAttackDetector] = None
+_proxy_detector: Optional[ProxyDetector] = None
+
+# Tier 3 singletons
+_static_analyzer: Optional[StaticAnalyzer] = None
+_decompiler_analyzer: Optional[DecompilerAnalyzer] = None
+_address_labeler: Optional[AddressLabeler] = None
+
+# Tier 4 singletons
+_fund_flow_visualizer: Optional[FundFlowVisualizer] = None
 
 
 def _ensure_modules(config: Optional[SentinelConfig] = None) -> None:
@@ -165,6 +208,10 @@ def _ensure_modules(config: Optional[SentinelConfig] = None) -> None:
     global _liquidity_verifier, _dev_reputation, _wash_trading
     global _metadata_fingerprinter, _sentiment_analyzer, _pumpfun_analyzer
     global _honeypot_detector, _contract_authority, _mev_detector
+    global _flash_loan_detector, _pump_dump_detector, _oracle_manipulation
+    global _governance_attack, _proxy_detector
+    global _static_analyzer, _decompiler_analyzer, _address_labeler
+    global _fund_flow_visualizer
 
     cfg = config or _default_config
     dex_client = cfg.get_dexscreener_client()
@@ -202,6 +249,28 @@ def _ensure_modules(config: Optional[SentinelConfig] = None) -> None:
         _contract_authority = ContractAuthorityScanner()
     if _mev_detector is None:
         _mev_detector = MEVDetector()
+    if _flash_loan_detector is None:
+        _flash_loan_detector = FlashLoanDetector()
+    if _pump_dump_detector is None:
+        _pump_dump_detector = PumpDumpDetector()
+    if _oracle_manipulation is None:
+        _oracle_manipulation = OracleManipulationDetector()
+    if _governance_attack is None:
+        _governance_attack = GovernanceAttackDetector()
+    if _proxy_detector is None:
+        _proxy_detector = ProxyDetector()
+
+    # Tier 3 modules
+    if _static_analyzer is None:
+        _static_analyzer = StaticAnalyzer()
+    if _decompiler_analyzer is None:
+        _decompiler_analyzer = DecompilerAnalyzer()
+    if _address_labeler is None:
+        _address_labeler = AddressLabeler()
+
+    # Tier 4 modules
+    if _fund_flow_visualizer is None:
+        _fund_flow_visualizer = FundFlowVisualizer()
 
 
 # ─── Risk score extraction helpers ────────────────────────────────────
@@ -360,7 +429,7 @@ async def run_sentinel_scan(
     dev_address: Optional[str] = None,
     config: Optional[SentinelConfig] = None,
 ) -> SentinelReport:
-    """Run all 9 SENTINEL modules concurrently with graceful degradation.
+    """Run all 17 SENTINEL modules concurrently with graceful degradation.
 
     Args:
         token_address: Token contract address to scan.
@@ -404,6 +473,21 @@ async def run_sentinel_scan(
     coros["contract_authority"] = _contract_authority.analyze(token_address, chain)
     coros["mev_detection"] = _mev_detector.analyze(token_address, chain)
 
+    # Tier 2 scanners
+    coros["flash_loan_detection"] = _flash_loan_detector.analyze(token_address, chain)
+    coros["pump_dump_detection"] = _pump_dump_detector.analyze(token_address, chain)
+    coros["oracle_manipulation"] = _oracle_manipulation.analyze(token_address, chain)
+    coros["governance_attack"] = _governance_attack.analyze(token_address, chain)
+    coros["proxy_detection"] = _proxy_detector.analyze(token_address, chain)
+
+    # Tier 3 scanners
+    coros["static_analysis"] = _static_analyzer.analyze(token_address, chain)
+    coros["decompiler_analysis"] = _decompiler_analyzer.analyze(token_address, chain)
+    coros["address_labels"] = _address_labeler.analyze(token_address, chain)
+
+    # Tier 4 — Visualization
+    coros["fund_flow"] = _fund_flow_visualizer.analyze(token_address, chain)
+
     # PumpFun is Solana-only
     if chain.lower() == "solana":
         coros["pumpfun_analysis"] = _pumpfun_analyzer.analyze(token_address)
@@ -440,6 +524,15 @@ async def run_sentinel_scan(
         "honeypot_detection": lambda r: float(getattr(r, 'risk_score', 0)),
         "contract_authority": lambda r: float(getattr(r, 'risk_score', 0)),
         "mev_detection": lambda r: float(getattr(r, 'mev_risk_score', 0)),
+        "flash_loan_detection": lambda r: float(getattr(r, 'risk_score', 0)),
+        "pump_dump_detection": lambda r: float(getattr(r, 'risk_score', 0)),
+        "oracle_manipulation": lambda r: float(getattr(r, 'risk_score', 0)),
+        "governance_attack": lambda r: float(getattr(r, 'risk_score', 0)),
+        "proxy_detection": lambda r: float(getattr(r, 'risk_score', 0)),
+        "static_analysis": lambda r: float(getattr(r, 'risk_score', 0)),
+        "decompiler_analysis": lambda r: float(getattr(r, 'risk_score', 0)),
+        "address_labels": lambda r: float(getattr(r, 'risk_score', 0)),
+        "fund_flow": lambda r: float(getattr(r, 'risk_score', 0)),
     }
 
     # Module name → field name on SentinelReport
@@ -456,6 +549,15 @@ async def run_sentinel_scan(
         "honeypot_detection": "honeypot_detection",
         "contract_authority": "contract_authority",
         "mev_detection": "mev_detection",
+        "flash_loan_detection": "flash_loan_detection",
+        "pump_dump_detection": "pump_dump_detection",
+        "oracle_manipulation": "oracle_manipulation",
+        "governance_attack": "governance_attack",
+        "proxy_detection": "proxy_detection",
+        "static_analysis": "static_analysis",
+        "decompiler_analysis": "decompiler_analysis",
+        "address_labels": "address_labels",
+        "fund_flow": "fund_flow",
     }
 
     for module_name, raw_result in results.items():
@@ -578,4 +680,76 @@ async def run_mev_detection(token_address: str, chain: str,
     """Run MEVDetector only, return dict."""
     _ensure_modules(config)
     result = await _mev_detector.analyze(token_address, chain)
+    return dataclass_to_dict(result)
+
+
+async def run_flash_loan_detection(token_address: str, chain: str,
+                                    config: Optional[SentinelConfig] = None) -> Dict[str, Any]:
+    """Run FlashLoanDetector only, return dict."""
+    _ensure_modules(config)
+    result = await _flash_loan_detector.analyze(token_address, chain)
+    return dataclass_to_dict(result)
+
+
+async def run_pump_dump_detection(token_address: str, chain: str,
+                                   config: Optional[SentinelConfig] = None) -> Dict[str, Any]:
+    """Run PumpDumpDetector only, return dict."""
+    _ensure_modules(config)
+    result = await _pump_dump_detector.analyze(token_address, chain)
+    return dataclass_to_dict(result)
+
+
+async def run_oracle_manipulation(token_address: str, chain: str,
+                                    config: Optional[SentinelConfig] = None) -> Dict[str, Any]:
+    """Run OracleManipulationDetector only, return dict."""
+    _ensure_modules(config)
+    result = await _oracle_manipulation.analyze(token_address, chain)
+    return dataclass_to_dict(result)
+
+
+async def run_governance_attack(token_address: str, chain: str,
+                                 config: Optional[SentinelConfig] = None) -> Dict[str, Any]:
+    """Run GovernanceAttackDetector only, return dict."""
+    _ensure_modules(config)
+    result = await _governance_attack.analyze(token_address, chain)
+    return dataclass_to_dict(result)
+
+
+async def run_proxy_detection(token_address: str, chain: str,
+                                config: Optional[SentinelConfig] = None) -> Dict[str, Any]:
+    """Run ProxyDetector only, return dict."""
+    _ensure_modules(config)
+    result = await _proxy_detector.analyze(token_address, chain)
+    return dataclass_to_dict(result)
+
+
+async def run_static_analysis(token_address: str, chain: str,
+                                config: Optional[SentinelConfig] = None) -> Dict[str, Any]:
+    """Run StaticAnalyzer only, return dict."""
+    _ensure_modules(config)
+    result = await _static_analyzer.analyze(token_address, chain)
+    return dataclass_to_dict(result)
+
+
+async def run_decompiler_analysis(token_address: str, chain: str,
+                                    config: Optional[SentinelConfig] = None) -> Dict[str, Any]:
+    """Run DecompilerAnalyzer only, return dict."""
+    _ensure_modules(config)
+    result = await _decompiler_analyzer.analyze(token_address, chain)
+    return dataclass_to_dict(result)
+
+
+async def run_address_labels(token_address: str, chain: str,
+                               config: Optional[SentinelConfig] = None) -> Dict[str, Any]:
+    """Run AddressLabeler only, return dict."""
+    _ensure_modules(config)
+    result = await _address_labeler.analyze(token_address, chain)
+    return dataclass_to_dict(result)
+
+
+async def run_fund_flow(token_address: str, chain: str,
+                         config: Optional[SentinelConfig] = None) -> Dict[str, Any]:
+    """Run FundFlowVisualizer only, return dict."""
+    _ensure_modules(config)
+    result = await _fund_flow_visualizer.analyze(token_address, chain)
     return dataclass_to_dict(result)

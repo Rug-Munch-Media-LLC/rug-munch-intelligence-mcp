@@ -8,26 +8,26 @@ This file only maps the 44 brand-new tool names.
 """
 
 EXPANDED_ALIASES = {
-    # Security → audit (deep contract analysis) or other specific handlers
-    "flash_loan_detect": "audit",
-    "governance_attack": "audit",
-    "contract_upgrade_monitor": "audit",
-    "reentrancy_scanner": "audit",
-    "wallet_drain_scanner": "audit",
+    # Security → real SENTINEL Tier 2/3 endpoints where available
+    "flash_loan_detect": "flash_loan_detect",
+    "governance_attack": "governance_attack",
+    "contract_upgrade_monitor": "proxy_detect",
+    "reentrancy_scanner": "static_analysis",
+    "wallet_drain_scanner": "decompiler_analysis",
     "dust_attack_detect": "urlcheck",
-    "oracle_manipulation": "audit",
-    "privilege_escalation": "audit",
+    "oracle_manipulation": "oracle_manipulation",
+    "privilege_escalation": "static_analysis",
     "phantom_mint_detect": "honeypot_check",
+    "smart_contract_interactions": "decompiler_analysis",
+    "wallet_label_registry": "address_labels",
 
     # Intelligence
     "cross_chain_whale": "whale",
     "degen_score": "smart_money_alpha",
     "wallet_cluster_score": "cluster",
     "dormant_whale_alert": "whale",
-    "smart_contract_interactions": "wallet",
     "token_distribution_health": "wallet",
     "token_velocity": "pulse",
-    "wallet_label_registry": "wallet",
 
     # Market
     "funding_rate": "market_overview",
@@ -40,7 +40,7 @@ EXPANDED_ALIASES = {
     # Social
     "reddit_sentiment": "sentiment",
     "discord_alpha": "social_signal",
-    "telegram_pump_detect": "sentiment",
+    "telegram_pump_detect": "pump_dump_detect",
     "influencer_impact_score": "social_signal",
     "github_developer_activity": "social_signal",
 

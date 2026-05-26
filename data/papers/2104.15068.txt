@@ -1,0 +1,2751 @@
+DEFIRANGER: DETECTING PRICE MANIPULATION ATTACKS
+ON DEFI APPLICATIONS
+A PREPRINT
+Siwei Wu1, Dabao Wang1, Jianting He1, Yajin Zhou∗1, Lei Wu1, Xingliang Yuan2, Qinming He1, and Kui Ren1
+1Zhejiang University
+2Monash University
+May 3, 2021
+ABSTRACT
+The rapid growth of Decentralized Finance (DeFi) boosts the Ethereum ecosystem. At the same
+time, attacks towards DeFi applications (apps) are increasing. However, to the best of our knowl-
+edge, existing smart contract vulnerability detection tools cannot be directly used to detect DeFi
+attacks. That’s because they lack the capability to recover and understand high-level DeFi seman-
+tics, e.g., a user trades a token pair X and Y in a Decentralized EXchange (DEX).
+In this work, we focus on the detection of two types of new attacks on DeFi apps, including direct
+and indirect price manipulation attacks. The former one means that an attacker directly manipu-
+lates the token price in DEX by performing an unwanted trade in the same DEX by attacking the
+vulnerable DeFi app. The latter one means that an attacker indirectly manipulates the token price
+of the vulnerable DeFi app (e.g., a lending app). To this end, we propose a platform-independent
+way to recover high-level DeFi semantics by ﬁrst constructing the cash ﬂow tree from raw Ethereum
+transactions and then lifting the low-level semantics to high-level ones, including token trade, liq-
+uidity mining, and liquidity cancel. Finally, we detect price manipulation attacks using the patterns
+expressed with the recovered DeFi semantics.
+We have implemented a prototype named DEFIRANGER and applied it to more than 350 million
+transactions. It successfully detected 432 real-world attacks in the wild. We conﬁrm that they
+belong to four known security incidents and ﬁve zero-day ones. We reported our ﬁndings. Two
+CVEs have been assigned. We further performed an attack analysis to reveal the root cause of the
+vulnerability, the attack footprint, and the impact of the attack. Our work urges the need to secure
+the DeFi ecosystem.
+1
+Introduction
+The recent Decentralized Finance (DeFi) boom brings Ethereum a new climax, attracting 28 billion USD locked in
+DeFi apps up to 31st January 2021. With the rapid growth of the DeFi ecosystem, security issues are also emerg-
+ing. DeFi-related security issues have been reported, including front-running [47, 48, 75], Pump-and-Dump (P&D)
+scams [55, 72], and ﬂash loan attacks [61]. In addition, code and logic vulnerabilities in DeFi apps bring many security
+incidents [16–19, 21, 26, 28–30, 36, 38, 40].
+Existing detection tools [45, 49, 50, 52–54, 57, 62–65, 70, 71] mainly focus on the code vulnerability, such as the
+re-entrancy and the integer overﬂow. However, to the best of our knowledge, they cannot be directly used to detect
+DeFi attacks caused by logic vulnerabilities due to the lack of the capability to recover and understand high-level DeFi
+semantics, e.g., a user trades a token pair X and Y in a Decentralized EXchange (DEX).
+Among DeFi apps, decentralized exchanges and lending apps are the two most popular types of ones. According to the
+statistics [23], there are ﬁve DEXes and four lending apps in the top ten DeFi apps. Automated Market Maker (AMM)
+∗Corresponding author (yajin zhou@zju.edu.cn).
+arXiv:2104.15068v1  [cs.CR]  30 Apr 2021
+DEFIRANGER: Detecting Price Manipulation Attacks on DeFi Applications
+A PREPRINT
+is the most popular type of DEX that provides the cryptocurrency exchange service. Each pool in the AMM maintains
+two or more types of cryptocurrencies and leverages a price mechanism to decide the exchange rate. Besides, a user
+can borrow cryptocurrencies from a lending app by depositing the collateral (e.g., the USDC token) into the app. To
+determine how many cryptocurrencies that a user can borrow, the lending app needs to retrieve the current price of the
+collateral, e.g., from a pool in AMM.
+We observe that with the popularity of DEXes and lending apps, two types of new attacks are emerging, i.e., direct and
+indirect price manipulation attacks. As the name suggests, the former one means that an attacker directly manipulates
+the token2 price in a pool of an AMM. It is usually achieved through performing an unwanted trade in the same pool
+by attacking the vulnerable DeFi app. The latter one means that an attacker indirectly manipulates the token price
+of the vulnerable DeFi app (e.g., a lending app), whose price mechanism depends on the real-time status, e.g., the
+quotation and reserves of a token, in an AMM. An attacker can manipulate the status by making a trade in the AMM.
+For instance, the attacker can raise up the price of the collateral in the AMM pool that provides the price information
+to the lending app before borrowing loans. By doing so, the attacker can borrow much more tokens than a legitimate
+borrower can borrow with the same amount of collateral.
+Our work
+Our work aims to detect price manipulation attacks. It requires us to analyze transactions between
+multiple smart contracts and understand the high-level semantics of DeFi apps. There are two challenges in this
+process.
+• Challenge I: Complicated interactions.
+DeFi apps often consist of multiple smart contracts that interact with each
+other. For example, one attack transaction of the Harvest Hack incident [26] (explained in Section 5.6) involves
+1, 316 internal transactions. Fig. 8 shows part of the internal transaction graph. How to analyze the complicated
+interactions between smart contracts is the ﬁrst challenge.
+• Challenge II: Semantic Gap.
+There is a semantic gap between raw transactions that can be observed on Ethereum
+and high-level DeFi semantics that are deﬁned in DeFi apps. On Ethereum, we can only observe the ﬁeld values
+of these (external or internal) transactions, such as from, to, and input. However, we cannot get the high-level DeFi
+semantic such as there exists an account that trades 861.95 USDC for 0.5 Ether in the USDC-Ether pool using the
+Uniswap V2 protocol. This high-level DeFi semantic is critical to detect price manipulation attacks since the attack
+usually involves the trade of tokens.
+Our work solves the two challenges in the following way. First, our insight to solve the ﬁrst challenge is that though
+a DeFi-related transaction often triggers many internal transactions between smart contracts, not all of them are use-
+ful for our analysis. We can prune unnecessary ones. Second, we propose a platform-independent way to recover
+DeFi semantics. We name it semantic lifting since it lifts low-level semantics in raw transactions to high-level DeFi
+semantics.
+Speciﬁcally, we ﬁrst collect raw Ethereum transactions and then construct the cash ﬂow tree (CFT in short). This tree
+reﬂects the token transfer initialized by an external (or internal) transaction and the corresponding account. We call
+the token transfer as the basic DeFi action. After that, our system recovers the high-level DeFi semantics based on the
+token transfer behavior in CFT. In particular, our system can automatically recognize three types of advanced DeFi
+semantics, including the liquidity mining (depositing tokens into an DeFi app), liquidity cancel (withdrawing tokens
+from a DeFi app), and the trade (of different tokens in an AMM pool). Finally, we detect the price manipulation attacks
+using the detection patterns that are expressed with these recovered DeFi semantics.
+Evaluation
+We have implemented a prototype system called DEFIRANGER and evaluated its effectiveness from two
+perspectives. First, whether the proposed method can accurately recover DeFi semantics? Second, whether our system
+can detect real-world price manipulation attacks in the wild, including zero-day ones?
+To answer the ﬁrst question, we compare the result of recovered DeFi semantics with Etherscan [4]. Our comparison
+shows that DEFIRANGER can identify more DeFi semantics than Etherscan, with a lower false negative rate. What’s
+more important, until the writing of this paper in April 2021, Etherscan can identify none of the DeFi semantics of
+vulnerable DeFi apps that are detected by DEFIRANGER. This clearly shows the value of our system to recover DeFi
+semantics. Otherwise, none of the attacks can be detected.
+To answer the second question, we performed a large-scale price manipulation attack detection from 350, 823, 625
+transactions. As a result, DEFIRANGER detected 432 real-world attacks in the wild. We conﬁrm that they belong to
+four known security incidents and ﬁve zero-day ones, and they caused a total loss of around 39M USD. Note that, one
+security incident can have hundreds of attacks, thus the number of security incidents is less than the number of real
+2In this paper, we interchangeably use cryptocurrencies, assets, and tokens to denote Ether and ERC20 tokens.
+2
+DEFIRANGER: Detecting Price Manipulation Attacks on DeFi Applications
+A PREPRINT
+A transaction
+Externally 
+Owned Account 
+(EOA)
+Smart Contract 
+Account
+Launches an 
+external transaction
+Smart Contract 
+Account
+Launches an 
+internal transaction
+Figure 1: A transaction that consists of an external transaction and an internal transaction.
+attacks. We reported our ﬁndings, and two CVEs have been assigned 3. This result clearly shows that DEFIRANGER
+can effectively detect price manipulation attacks.
+Attack Analysis
+We further analyze the detected nine security incidents to understand the root cause of the vulner-
+ability, the attack footprint, and the ﬁnancial impact to the vulnerable DeFi apps. First, we ﬁnd that vulnerabilities
+are either due to insufﬁcient access control of critical interfaces in the smart contract or insecure price dependence.
+Second, we ﬁnd that attackers are becoming mature. They take a clean attack strategy to make the trace of attackers
+challenging. Third, security incidents have a direct impact on the market value of vulnerable DeFi apps, which urges
+the need to secure DeFi apps.
+Contributions
+We summarize our main contributions as below.
+• We ﬁrst propose two price manipulation attacks and elaborate the challenges to detect them in the wild. Then we
+propose a method to recover DeFi semantics to facilitate the detection. To the best of our knowledge, our work is the
+ﬁrst to systematically detect price manipulation attacks on DeFi apps.
+• We implement a prototype named DEFIRANGER and apply it to perform a large-scale price manipulation attack
+detection. It successfully detected 432 real-world attacks. These attacks contribute to four known security incidents
+and ﬁve zero-day ones. After reporting our ﬁndings to vulnerable DeFi apps, two CVEs have been assigned.
+• We perform detailed analysis on conﬁrmed security incidents to understand the root cause of the vulnerability, attack
+footprint, and ﬁnancial impact to victim DeFi apps. Our analysis urges a need to secure the DeFi ecosystem.
+To engage the community, we will release DEFIRANGER to the research community.
+2
+Background
+This section presents necessary background information to better understand our work.
+2.1
+Ethereum Accounts and Transactions
+Ethereum has two types of accounts, i.e., External Owned Account (EOA) and smart contract account. A transaction
+can be used to send Ether between accounts or to invoke APIs in smart contracts. There are two types of transactions,
+i.e., external transaction and internal transaction. The external transaction is triggered by an EOA, while the internal
+transaction is triggered by a smart contract. Speciﬁcally, an external transaction sent by an EOA can invoke functions
+inside a smart contract, which will further create an internal transaction. The internal transaction can take a similar
+way to invoke a smart contract and trigger other internal transactions. In the following of this paper, the usage of
+“transaction” without specifying “external” or “internal” implies that we take an external transaction and the triggered
+internal transactions as a whole, as shown in Fig. 1.
+2.2
+Ethereum Cryptocurrencies
+There are two types of cryptocurrencies in Ethereum: Ether and ERC20 token. Ether is the native token in Ethereum,
+and an ERC20 token is the third-party one that complies with the ERC20 standard. Every account, including EOA
+and the smart contract account, can own Ether and ERC20 tokens. Though there are many types of ERC20 tokens, the
+following two are related to our work.
+Stablecoins
+Stablecoins are a class of cryptocurrencies that guarantee price stability. Typically, stablecoins are either
+directly/indirectly backed or intervened through different stabilization mechanisms [46, 58]. The popular stablecoins
+include USDC [13] or USDT [7].
+3For the anonymity purpose, we do not include the CVE numbers in the paper.
+3
+DEFIRANGER: Detecting Price Manipulation Attacks on DeFi Applications
+A PREPRINT
+Liquidity Provider (LP) Tokens
+A DeFi app may issue LP tokens to motivate users to provide more liquidity (i.e.,
+depositing cryptocurrencies into that DeFi app). Users providing liquidity are called liquidity providers. Liquidity
+providers can use the LP tokens as certiﬁcates to withdraw their deposits or exchange for other cryptocurrencies in
+those decentralized exchanges (Section 2.3). In this paper, we interchangeably use cryptocurrencies, assets, and tokens
+to denote Ether and ERC20 tokens.
+2.3
+Decentralized Finance (DeFi)
+DeFi app usually consists of multiple smart contracts to implement its functionality, running on the blockchain. Some
+ﬁnancial services, such as lending, exchange and portfolio management, have emigrated in the DeFi ecosystem. As of
+this writing, more than 200 DeFi apps have been deployed on Ethereum.
+Decentralized EXchange (DEX)
+DEX is an exchange where users can trade different tokens in a decentralized way
+by interacting with the smart contract(s). Compared with the traditional centralized exchange, DEX possesses several
+distinct advantages, especially in privacy and capital management.
+There are two modes in DEX, including List of Booking (LOB) and Automated Market Maker (AMM). DEX using
+the LOB mode maintains an off-chain order book to record users’ bids and asks, namely,the matching of orders will
+be completed off-chain. Alternatively, the AMM mode achieves a full decentralized exchange. The market maker
+may put two or more tokens into a liquidity pool with an equivalent or a self-deﬁned weight. The trade rate between
+cryptocurrencies in the pool will be calculated automatically based on the pricing mechanism. AMM becomes the
+most popular mode in DEX due to its ﬂexible liquidity.
+Lending
+To borrow cryptocurrencies, borrowers are required to over-collateralize other cryptocurrencies for cover-
+ing the loan due to the pseudo-anonymity of Ethereum.
+For example, in MakerDAO [6], borrowing 100 DAI requires tokens that are worth 150 Ether as collateral. Moreover,
+once the collateral’s value falls below a ﬁxed threshold, it causes liquidation (the lending app will sell the collateral),
+as well as a designed penalty that will be applied to borrowers.
+Flash Loan
+Some DeFi apps [8] [35] [9] provide a type of non-collateral loan called ﬂash loan. A valid ﬂash
+loan ”generously” lends users a considerable amount of capital without any collateral. The security of the loan is
+guaranteed since the user needs to borrow and return the loan in a single transaction (with multiple following internal
+transactions). Otherwise, the lending transaction will be reverted by the loan provider.
+The ﬂash loan gives everyone the ability to temporarily own a large number of tokens. However, it can also be abused
+to launch attacks, and a number of such attacks have been observed in the wild [44, 61, 67].
+Portfolio Management
+As more and more DeFi apps motivate clients to provide liquidity, another kind of apps,
+known as portfolio management apps, debut to help users (liquidity providers) to invest their cryptocurrencies. In
+particular, they automatically ﬁnd the apps that provide the highest Annual Percentage Yields (APY) and then invest
+clients’ deposits to these apps.
+3
+Price Manipulation Attacks
+In this work, we aim to detect two types of price manipulation attacks, including the direct and the indirect ones. As
+the name suggests, the former one means that an attacker directly manipulates the token price in a liquidity pool of an
+AMM. It is usually achieved through performing an unwanted trade in the same pool by attacking the vulnerable DeFi
+app. The latter one means that an attacker indirectly manipulates the token price of the vulnerable DeFi app, whose
+price mechanism depends on the real-time status, e.g., the quotation and reserves of a token, in an AMM. An attacker
+can manipulate the status by making a trade in the AMM.
+In the following, we ﬁrst use the Uniswap V1 protocol [14] as an example to introduce the price mechanism of an
+AMM and then elaborate the two types of attacks.
+3.1
+Price Mechanism of the Uniswap Protocol
+A liquidity pool of Uniswap makes up reserves of two cryptocurrencies. Users can trade tokens with the price deter-
+mined by the pricing mechanism/formula of Uniswap, as follows:
+F(x) =
+997x ∗RY
+997x + 1000RX
+(1)
+4
+DEFIRANGER: Detecting Price Manipulation Attacks on DeFi Applications
+A PREPRINT
+Step I: Price manipulation 
+phase 1
+X Y
+Y
+X
+Y
+X
+X Y
+X Y
+Y
+X
+Y
+X
+1
+2
+3
+Step III: Cost redemption 
+and profiting
+Normal trade
+Direct price manipulation attack
+Step II: Price manipulation 
+phase 2
+A pool of the token pair 
+X and Y
+Exchange
+10 X 
+9.9 Y 
+Exchange
+900 X
+473 Y 
+Exchange
+Exchange
+10 X 
+2.75 Y
+473 Y
+905 X
+Abuse the exposed interface 
+Vulnerable
+DeFi app
+Figure 2: The direct price manipulation attack. The initial balances of the token pair are 1000. The vulnerable DeFi
+app exposes an interface that can be exploited by the attacker to sell tokens in the second step.
+Speciﬁcally, F(x) shows the amount of token Y that a user can trade with the token X in an amount of x. RX and
+RY are the balances of the token X and token Y in the liquidity pool, respectively. Since the exchange rate between
+the token pair depends on the pool’s reserve balances (or reserves), attackers who are capable of draining the pool
+can make a trade to inﬂate or reduce a token’s price, namely, manipulate the price deviating from the market price.
+Such a behavior is referred to as price manipulation. DeFi apps that interact with a manipulated pool may suffer from
+ﬁnancial losses.
+3.2
+Direct Price Manipulation Attack
+Some DeFi apps have interfaces to trade tokens in AMMs. However, if the interfaces are not properly protected, an
+attacker can abuse these interfaces to trade tokens on behalf of the vulnerable DeFi app, which affects the exchange
+rate of a token pair. Then the attacker can make another trade of his or her own token to gain proﬁts. Since the token
+price is directly manipulated by trading a token pair in an AMM, we call such an attack a direct price manipulation
+attack.
+Fig. 2 shows an example. Suppose the pool has the same initial reserves (1, 000) of a token pair X and Y. In a normal
+trade, a user can get 9.9 Y with 10 X, according to the formula (1). An attacker can use the following three steps to
+perform the direct price manipulation attack.
+Step I: Price manipulation phase one
+The attacker uses 900 X, that occupies a large proportion of the pool to
+exchange for the token Y, which breaks the balance of the token pair and lifts the token Y’s price in the pool.
+Step II: Price manipulation phase two
+The attacker invokes the public interface of the vulnerable DeFi app to sell
+10 X. However, the DeFi app only gets 2.75 Y after consuming 10 X. That’s because the previous step reduces the price
+of the token X. Besides, this trade further lifts the price of the token Y in the pool.
+Step III: Cost redemption and proﬁting
+The attacker sells 473 Y and gets 905 X with a reverse exchange. That’s
+because the token Y’s price has been raised in the second step. By doing so, the attacker can get a proﬁt of 5 X.
+Speciﬁcally, the ﬁrst step inﬂates token Y’s price and reduces token X’s price in the pool. This is an expected behavior
+according to the formula (1). However, the second step makes the vulnerable DeFi app sell its token X and further
+raises the price of the token Y. This is achieved by exploiting the exposed interface of the vulnerable DeFi app. As a
+result, the attacker can make a reverse exchange by selling the token Y and get more X (5 in the example). Compared
+with a normal trade (10 X with 9.9 Y), the victim DeFi app losses 7.15 Y (i.e., 7.15 = 9.9 −2.75).
+3.3
+Indirect Price Manipulation Attack
+Some DeFi apps need the token price for business purposes. For instance, a lending app is required to calculate the
+collateral’s price to decide how many tokens a borrower is eligible to borrow. If the price mechanism of the lending
+app is manipulable, a borrower might borrow more tokens than the outstanding principal balance of the collateral (i.e.,
+undercollateralization [15]).
+Fig. 3 gives an example. The lending app uses the real-time exchange rate of a token pair fetched from an AMM
+(through invoking the API exposed by the smart contract of the AMM) to determine the value of the collateral. Suppose
+the initial exchange rate between the token X and Y is 1:1. In the normal borrowing scenario, a user deposits 1.5 token
+5
+DEFIRANGER: Detecting Price Manipulation Attacks on DeFi Applications
+A PREPRINT
+X Y
+Y
+X
+1
+Step I: Price manipulation
+Lends 2 Y at a price of X : Y = 1 : 2
+Provide 
+price 
+Deposits 1.5 X as collateral 
+2
+Step II: Profiting
+Y
+X
+X Y
+3
+Step III: Cost redemption
+Deposits 1.5 X as collateral 
+Lends 1 Y at a price of X : Y = 1 : 1
+X Y
+Provide price 
+Normal borrowing
+Indirect price manipulation attack
+c
+AMM
+Exchange
+a Y
+b X 
+Exchange
+b X
+a Y 
+Vulnerable
+lending
+app
+Lending
+App
+Figure 3: The indirect price manipulation attack. The vulnerable lending app uses the AMM’s real-time token price
+to determine the number of tokens that the borrower can borrow. The collateral ratio of the lending app is 150%.
+ET
+IT1
+From: 0x7a250d56…; To: 0xa0b86991…; Value: 0 Ether; Input: 0x23b872dd…
+From: 0x8add7002…; To: 0x7a250d56… Value: 0 Ether; Input: 0x4a25d94a...
+IT2
+From: 0x7a250d56…; To: 0xb4e16d01…; Value: 0 Ether; Input: 0x022c0d9f…
+IT3
+From: 0xb4e16d01…; To: 0xb4e16d01…; Value: 0 Ether; Input: 0x022c0d9f…
+……
+……
+Trader: 0x8add7002…; Platform: Uniswap V2; Sell: 861.95 USDC; Get: 0.5 Ether
+Trade
+Raw transactions
+DeFi semantics
+Figure 4: This is a token trade in the USDC-Ether pool of the Uniswap V2. The trade triggers 11 internal transactions.
+This ﬁgure shows the gap between the raw transactions observed on Ethereum and the high-level Deﬁsemantic (the
+token trade).
+X to the lending app as the collateral and borrows 1 token Y, since the collateral ratio [1] of the lending app is 150%.
+An attacker is able to take the following steps to launch the indirect price manipulation attack.
+Step I: Price manipulation
+The attacker trades a tremendous amount of token Y for token X, draining out a large
+proportion of the token X in the pool, thus creating an inﬂated price for the token X. Since the lending app’s price
+mechanism depends on the AMM’s real-time quotation, the token X’s price is also inﬂated in the lending app.
+Step II: Proﬁting
+After manipulating the token X’s price, the attacker simply borrows the token Y using the token X
+as the collateral. In particular, he or she can borrow 2 Y rather than 1 Y with the same amount of the collateral (1.5 X)
+as in the normal borrowing scenario.
+Step III: Cost redemption
+The attacker only needs to redeem the cost of price manipulation by making a reverse
+exchange in the AMM pool.
+The root cause of this attack is that the vulnerable lending app leverages an AMM’s real-time quotation to decide the
+collateral’s price. As a result, the attacker can make a trade in the AMM’s pool to affect the token price (Step I) and
+then borrow an undercollateralized loan from the lending app (Step II). After that, the attacker makes a reverse trade
+to redeem the cost (Step III).
+Note that the previous steps of these two attacks are simpliﬁed for better illustration. In a real attack, the attacker may
+leverage the ﬂash loan [41, 44, 61, 67] to borrow a large number of tokens that are required in the ﬁrst step.
+6
+DEFIRANGER: Detecting Price Manipulation Attacks on DeFi Applications
+A PREPRINT
+Report
+Data 
+Collection
+CFT 
+Construction
+Semantic 
+Lifting
+Attack 
+Detection
+Raw 
+transactions
+Cash Flow 
+Tree
+DeFi
+Semantics
+Attack 
+Pattern
+Attack 
+Analysis
+DEFIRANGER
+Tr
+Tr
+Tr
+Tr
+Figure 5: The overview of our work.
+4
+Challenges and Solutions
+In this section, we present two challenges in detecting price manipulation attacks and then illustrate our methods to
+address these challenges.
+4.1
+Challenges
+The price manipulation attacks originate from logic vulnerabilities of DeFi apps, which makes it non-trivial to perform
+the detection. Namely, detecting such attacks requires us to analyze transactions between multiple smart contracts and
+understand the high-level semantics of DeFi apps.
+Challenge I: Complicated interactions
+DeFi apps tend to have complicated business logic and consist of multiple
+smart contracts that interact with each other. For instance, the average number of smart contract invocations triggered
+by each transaction before December 2019 is 1.19. From December 2019 to April 2021, the number becomes 2.40,
+due to the DeFi boom. Besides, DeFi-related transactions between multiple smart contracts are too complicated to be
+analyzed by existing tools [4, 34]. For example, one attack transaction of the Harvest Hack incident [26] (explained in
+Section 5.6) involves 1, 316 internal transactions. Fig. 8 shows part of the internal transaction graph. Obviously, it is
+challenging to analyze the complicated interactions between smart contracts.
+Challenge II: Semantic gap
+There exists a semantic gap between raw transactions that are observed on Ethereum
+and DeFi semantics that are deﬁned in DeFi apps. As shown in Fig. 4, the address 0x8add7002 launches an external
+transaction that uses the Uniswap V2 protocol to exchange tokens. This external transaction further triggers 11 internal
+transactions. On Ethereum, we can only observe the ﬁeld values of these (external or internal) transactions, such as
+from, to, and input. However, we cannot identify the high-level DeFi action that the address 0x8add7002 trades 861.95
+USDC for 0.5 Ether in the USDC-Ether pool using the Uniswap V2 protocol. This high-level DeFi semantic is critical
+to detect price manipulation attacks since they usually involve the trade of tokens.
+4.2
+Our Solutions
+Our work takes the following methods to address the two challenges.
+Method I: Pruning unnecessary transactions
+Our observation suggests that not all of the internal transactions
+triggered by a DeFi-related transaction are helpful for our analysis. As such, we can solve the ﬁrst challenge by
+pruning those unnecessary ones.
+For example, the transaction in Fig. 4 triggers 11 internal transactions. Only three of them are closely related to the
+token trade. The remaining ones are used for auxiliary operations, such as ﬁnding the suitable pool and checking token
+balances. Furthermore, we observe that the token transfer (including token minting and burning) is the primitive action
+in the DeFi ecosystem. Therefore, we simplify the interaction in DeFi-related transactions by removing transactions
+that are unrelated to the token transfer. We illustrate this process in Section 5.3.
+Method II: Recovering high-level semantics
+We recover high-level DeFi semantics from raw transactions to solve
+the second challenge. Note that, even though Etherscan [4] provides the recovered DeFi semantics on its website, the
+information is incomplete. The experimental result in Section 6.1 shows that Etherscan [4] has a higher false negative
+rate in identifying DeFi actions. Our work takes a platform-independent way to recover DeFi actions. We name it
+semantic lifting since it lifts low-level semantics in raw transactions to high-level DeFi semantics. We will illustrate
+the process in Section 5.4.
+7
+DEFIRANGER: Detecting Price Manipulation Attacks on DeFi Applications
+A PREPRINT
+CFT construction
+Semantic lifting
+ET
+IT1
+IT2
+…
+IT8
+E1
+E2
+E3
+E4
+E5
+Tr
+0
+0
+2
+3
+4
+8
+1
+2
+3
+5
+4
+5
+Matching
+Lifting
+LM
+0
+0
+2
+3
+4
+5
+Matching
+Lifting
+LM
+0
+LM
+0
+0
+5
+Tr
+Incorporating
+Incorporating
+LM
+0
+Tr
+Removing
+0
+0
+2 3 4
+8
+1 2 3 5
+4
+5
+6
+7
+1
+0
+0
+2 3 4
+8
+1
+2
+3 5
+4
+5
+Pruning
+Inserting & 
+replacing
+CFT with raw 
+transactions
+0
+2 3 4
+8
+5
+6
+7
+1
+Building
+Raw information of 
+a transaction
+CFT with DeFi
+semantics
+1
+2
+3
+4
+5
+4
+5
+4
+5
+4
+5
+4
+5
+4
+4
+5
+Figure 6: The whole process of the CFT construction and semantic lifting. ET: External transaction; IT: Internal
+transaction; E: Event; LM: Liquidity mining; Tr: Trade;
+: Transaction node; △: Event node;
+: Transfer node.
+5
+Methodology
+Fig. 5 shows the overview of our work. In particular, we ﬁrst propose a system called DEFIRANGER to detect
+price manipulation attacks. Then for the detected attacks, we perform further analysis from multiple perspectives,
+e.g., understanding the root cause of the vulnerability and the impact on the vulnerable DeFi apps. We elaborate
+DEFIRANGER in this section and attack analysis in Section 7, respectively.
+5.1
+Overview
+DEFIRANGER ﬁrst collects raw Ethereum transactions (Section 5.2), and then constructs the cash ﬂow tree (Sec-
+tion 5.3). After that, it recovers the DeFi semantics (Section 5.4) and then uses predeﬁned patterns expressed with
+DeFi actions to detect price manipulation attacks (Section 5.5).
+5.2
+Data Collection
+Though a few online services, including Google’s BigQuery Ethereum service, provide interfaces to query transac-
+tions, they are not enough to support the analysis of DEFIRANGER. For instance, the internal states of EVM when
+executing a smart contract are not available. To serve the need, we deploy an Ethereum full node with a modiﬁed
+Geth [5] client to collect the required data. First, we collect internal transactions’ metadata, including from, to, input,
+etc. Second, we collect the EVM depth when executing each internal transaction. This helps us recover the invoca-
+tion order of different functions in multiple smart contracts. Third, we collect the execution order between internal
+transactions and events. This can help us to retrieve the sequence of token transfers.
+5.3
+CFT Construction
+After collecting the Ethereum raw transactions, our system builds the cash ﬂow tree [42] (CFT for short). The CFT is
+used to convert raw transactions to token transfer, which lays a foundation to lift DeFi semantics (Section 5.4). For a
+better understanding, we use Fig. 6 as an example to illustrate the whole process. There are three types of nodes inside
+the tree.
+• Transaction node
+Both external and internal transactions are included in the tree. The directed edge between two
+(external or internal) transactions means that the child transaction is created by the parent transaction. For instance,
+the external transaction 0 creates an internal transaction 1 . Thus, there is a directed edge from 0 to 1 in the
+graph.
+• Event node
+Events are emitted by a smart contract during its execution for the logging purpose. A smart contract
+can selectively emit events. In the graph, events are child nodes of internal transactions since the event emitting is
+initialized by an internal transaction to execute a smart contract.
+8
+DEFIRANGER: Detecting Price Manipulation Attacks on DeFi Applications
+A PREPRINT
+Table 1: The deﬁnition of DeFi actions. Ff means the value of the ﬁeld f inside an (external or internal) transaction
+or an event that records a transfer of an ERC20 token.
+DeFi Action
+Symbol
+Attributes
+Condition
+Assignment
+Description
+Basic actions
+Ba
+Basic actions include the following three types
+of transfer: T, Tm, and Tb.
+Transfer(normal)
+T
+spender,
+recipient,
+amount,
+asset
+Fspender! = Frecipient
+and Fspender! = zeroaddress
+and Frecipient! = zeroaddress
+and Famount > 0
+spender = Fspender;
+recipient = Frecipient;
+asset = Fasset;
+amount = Famount
+An account (spender) transfers a certain
+amount (amount) of certain asset (asset) to
+another account (recipient).
+Transfer(minting)
+Tm
+spender,
+recipient,
+amount,
+asset
+Fspender == zeroaddress;
+and Famount > 0;
+spender = Fspender;
+recipient = Frecipient;
+asset = Fasset;
+amount = Famount
+An ERC20 token contract mints a certain
+amount (amount) of certain asset (asset) to an
+account (recipient).
+Transfer(burning)
+Tb
+spender,
+recipient,
+amount,
+asset
+Frecipient == zeroaddress
+and Famount > 0
+spender = Fspender;
+recipient = Frecipient;
+asset = Fasset;
+amount = Famount
+An account (spender) burns a certain amount
+(amount) of certain asset (asset).
+Advanced actions
+Aa
+Advanced actions include the below three ones:
+LM, LC, and Tr.
+Liquidity Mining
+LM
+operator,
+recipient,
+pool,
+asset in,
+asset out,
+amount in,
+amount out
+Exists T and Tm
+and T.asset! = Tm.asset
+operator = T.spender;
+recipient = Tm.recipient;
+pool = T.recipient;
+asset in = T.asset;
+asset out = Tm.asset;
+amount in = T.amount;
+amount out = Tm.amount
+An account (operator) of a liquidity provider
+deposits certain amount (amount in) of cer-
+tain asset (asset in) to provide liquidity in a
+liquidity pool (pool) of a DeFi app, which then
+mints certain amount (amount out) of its LP
+token (asset out) to an account (recipient)
+that is speciﬁed by the liquidity provider.
+Liquidity Cancel
+LC
+operator,
+recipient,
+pool,
+asset in,
+asset out,
+amount in,
+amount out
+Exists T and Tb
+and T.asset! = Tb.asset
+operator = Tb.spender;
+recipient = T.recipient;
+pool = T.spender;
+asset in = Tb.asset;
+asset out = T.asset;
+amount in = Tb.amount;
+amount out = T.amount
+An account (operator) of a liquidity provider
+burns a certain amount (amount in) of certain
+DeFi app’s LP token (asset in) to redeem de-
+posits, a pool (pool) of the app then transfers
+a certain amount (amount out) of certain as-
+set (asset out) to an account (recipient) that
+is speciﬁed by the liquidity provider.
+Trade
+Tr
+operator,
+recipient,
+pool,
+asset in,
+asset out,
+amount in,
+amount out
+(Exists two transfers(normal)
+T1 and T2
+and T1.asset! = T2.asset
+and T1.recipient == T2.spender)
+or (exists LM and LC
+and LM.recipient==LC.operator
+and LM.asset in! = LC.asset out
+and LM.asset out! = LC.asset in)
+operator = T1.spender or (LM.operator);
+recipient = T2.recipient or (LC.recipient);
+pool = T1.recipient or (LM.recipient);
+asset in = T1.asset or (LM.asset in);
+asset out = T2.asset or (LC.asset out);
+amount in = T1.amount or (LM.amount in);
+amount out = T2.amount or (LC.amount out)
+An account (operator) of a trader sells a
+certain amount (amount in) of certain asset
+(asset in) for a certain amount (amount out)
+of certain asset (asset out) in a liquidity pool
+(pool) of an AMM, and the trader speciﬁes an
+account (recipient) as recipient.
+• Transfer node
+Transfer node denotes the existence of Ether or ERC20 token transfer that is initiated by an external
+(or internal) transaction.
+Building the tree structure
+The ﬁrst step is to build a tree from raw transactions, including internal and external
+ones. This process is straightforward. We only need to append a child node to a parent node if the child transaction
+is created from the parent. For instance, ﬁve internal transactions (from 1 to 4 and 8 ) are created by one external
+transaction, thus they are the child nodes of the parent node 0 . Note that, we also append the event node in the graph
+as the child of the transaction node that creates the event. For instance, the event node △
+1 is the child of node 2 since
+it is created by this internal transaction.
+Inserting and replacing with transfer nodes
+With the tree structure built in the previous step, we need to append
+transfer nodes in the tree. That’s because the token transfer is the basis for recovering DeFi semantics. First, we
+append the Ether transfer node to the tree. We can easily retrieve such nodes since the Ether transfer has a non-zero
+Value ﬁeld of a transaction. We insert the Ether transfer node as the ﬁrst child of the corresponding transaction node,
+e.g., 1 in the ﬁgure. Second, we leverage the standard event Transfer to locate the transfer of ERC20 tokens. We
+replace Transfer event nodes with ERC20 token transfer nodes, e.g., replacing △
+1 to 2 . Note that, internal transaction
+2 creates two transfers, one is transferring Ether ( 1 ) and the other is transferring the ERC20 token ( 2 ).
+Pruning tree branches
+Our system traverses the tree and prunes all branches without a transfer node. That’s because
+such branches are not helpful to lift semantics. This can greatly remove unnecessary interactions to address the
+challenge I discussed in Section 4.1. For instance, it removes 94.23% (1, 241) transaction nodes for a real-world
+attack in Section 5.6. In Fig. 6, transaction nodes 1 , 6 and 7 are removed from the tree.
+5.4
+Semantic Lifting
+Based on the CFT, we can further recover DeFi semantics that are critical to detect price manipulation attacks. In this
+work, we ﬁrst deﬁne DeFi actions and then introduce the algorithm to lift the DeFi semantics from the CFT.
+9
+DEFIRANGER: Detecting Price Manipulation Attacks on DeFi Applications
+A PREPRINT
+Table 2: Patterns of DeFi actions to detect price manipulation attacks.
+Combination of DeFi actions
+Detection rules
+Description
+Direct price
+manipulation
+attack
+Tr1 →a Ba (or Tr3) →Tr2
+Exists a sequence of DeFi actions: Tr1, Ba (or
+Tr3), and Tr2
+and Tr1.operator == Tr1.recipient
+and Tr2.operator == Tr2.recipient
+and Tr1.operator == Tr2.operator
+and Tr1.pool == Tr2.pool
+and Tr1.asset in == Tr2.asset out
+and Tr1.asset out == Tr2.asset in
+and Tr1.amount out == Tr2.amount in
+and Tr1.amount in < Tr2.amount out
+and ((Ba.spender! = Tr1.operator
+and Ba.recipient == Tr1.pool
+and Ba.asset! = Tr1.asset out)
+or (Tr3.operator! = Tr1.operator
+and Tr3.pool == Tr1.pool
+and Tr3.asset out == Tr1.asset out))
+An attacker (Tr1.operator) inﬂates an as-
+set’s (Tr1.asset out) price in a liquidity
+pool (Tr1.pool) of an AMM via a trade
+(Tr1) and then abuses the exposed inter-
+face of a vulnerable app (Ba.spender or
+Tr3.operator) to further inﬂate the asset’s
+(Tr1.asset out) price in the pool on be-
+half of the vulnerable app. Finally, the at-
+tacker launches a reverse trade (Tr2) in
+the same pool (Tr1.pool) to gain proﬁts.
+Above three steps are consistent to the three
+steps in Section 3.2, but we extend the mid-
+dle step to transfer and trade for detecting
+more attacks.
+Indirect price
+manipulation
+attack
+Tr1 →Ba (or Aa) →Tr2
+Exists a sequence of DeFi actions: Tr1, Ba (or
+Aa), and Tr2
+and Tr1.operator == Tr1.recipient
+and Tr2.operator == Tr2.recipient
+and Tr1.operator == Tr2.operator
+and Tr1.pool == Tr2.pool
+and Tr1.asset in == Tr2.asset out
+and Tr1.asset out == Tr2.asset in
+and Tr1.amount out == Tr2.amount in
+and Tr1.amount in ==b Tr2.amount out
+and (Ba.recipient == Tr1.operator
+or (Aa.pool! = Tr1.pool
+and Aa.recipient == Tr1.operator))
+An attacker (Tr1.operator) leverages a
+trade (Tr1) to indirectly manipulate the
+price in a vulnerable app (Ba.spender or
+Aa.pool) and then proﬁts from the vulner-
+able DeFi app via certain DeFi action (Ba
+or Aa). Finally, the attacker launches a re-
+verse trade (Tr2) to redeem costs.
+Sim-
+ilarly, above three steps are consistent to
+the three steps in Section 3.3, but we ex-
+tend the middle step to any DeFi action that
+can proﬁt the attacker for detecting more at-
+tacks.
+Arbitrage
+Tr1 →Tr2 →Tr3 →... →Trn
+Exists a sequence of trades: Tr1, Tr2, ..., and
+Trn
+and Tr1.asset in == Trn.asset out
+and Tr1.asset out == Tr2.asset in
+and Tr2.asset out == Tr3.asset in
+and ......
+and Trn −1.asset out == Trn.asset in
+An arbitrager leverage a sequence of
+trades (Tr1, Tr2, ..., and Trn) to proﬁt
+from the price differences crossing multiple
+exchanges.
+a: →represents the execution order; b: for better illustration, we do not consider the fee charged by AMM.
+5.4.1
+DeFi actions
+In this work, we focus on the following four DeFi actions. More actions could be recovered if they are necessary in
+the future. Table 1 shows the deﬁnition.
+Transfer
+Transfer means a token (asset) is transferred from one address (spender) to another (recipient). Besides,
+ERC20 token standard [3] deﬁnes that when the spender ﬁeld is set to the zero address 4, it means a token mining,
+i.e., directly depositing tokens into the address (recipient). Similarly, if the recipient is set to the zero address, then the
+tokens are burning. They are denoted as T, Tm and Tb, respectively in Table 1.
+Liquidity Mining and Liquidity Cancel
+To get more liquidity, DeFi apps issue LP tokens to create incentives for
+users to provide liquidity (deposit cryptocurrencies), known as liquidity mining (LM). Besides, liquidity providers
+can redeem cryptocurrencies with the LP tokens as certiﬁcates, which is named liquidity cancel (LC). Accordingly,
+the liquidity mining consists of two components, i.e., depositing users’ liquidity (T) and minting DeFi app’s LP token
+(Tm). The liquidity cancel consists of burning LP tokens (Tb) and redeeming the deposited liquidity (T).
+Trade
+In the normal situation, a trade consists of two transfers. Therefore, we combine a pair of transfers, that
+transfer different assets and have a pivot address (T1.recipient or T2.spender) as a trade. We further assign the pivot
+address to the pool attribute of the trade. That’s because traders exchange their tokens through the liquidity pool (as
+the intermediary).
+4Zero address: 0x0000000000000000000000000000000000000000
+10
+DEFIRANGER: Detecting Price Manipulation Attacks on DeFi Applications
+A PREPRINT
+Algorithm 1: Lift the semantics of CFT
+Input: A CFT
+Output: A CFT with lifted semantics
+1 Function MergeSubtree(root):
+2
+newChildren = []
+3
+for child ∈root.children do
+4
+for len(newChildren) > 0 do
+5
+tailChild = newChildren.pop()
+6
+mergedChild, isMerge = MergeLeaves(tailChild, child)
+7
+if isMerge then
+8
+child = mergedChild
+9
+else
+10
+break
+11
+newChildren.append(child)
+12
+root.children = newChildren
+13
+if len(root.children) == 1 then
+14
+return root.children
+15
+return []{root}
+16 Function LiftLeaves(root):
+17
+if root has no child then
+18
+return []{root}
+19
+else
+20
+newChildren = []
+21
+for child ∈root.children do
+22
+newChildren.extend(LiftLeaves(child))
+23
+root.children = newChildren
+24
+return MergeSubtree(root)
+25 Function Main(CFT):
+26
+LiftLeaves(CFT.root)
+27
+RemoveRedundantEvents(CFT.root)
+28
+5.4.2
+Lifting algorithm
+With the well-deﬁned DeFi actions, we then propose an algorithm to lift CFT’s semantics. Algorithm 1 post-order
+traverses the CFT (LiftLeaves). For each non-leaf node, the function repeatedly merges its child nodes in pairs until
+they cannot be merged (line 3-11).
+The algorithm follows two guidelines to merge the nodes MergeLeaves (line 6). First, if two adjacent leaves match
+the conditions of a DeFi advanced action deﬁned in Table 1, they will be merged as the DeFi advanced action. This is
+called matching in this paper. For instance, transfer nodes 3 and 4 are merged into a Tr node.
+Second, if there exists a transfer chain in the two adjacent leaves, one will incorporate another one. For example, two
+transfers are “A transfers x Ether to B”, and “B transfers x Ether to C”, the former one will incorporate the latter one.
+This is called incorporating in this paper. For instance, transfer node 0 and transfer node 1 in the liquidity mining
+node constitute a transfer chain, then the LM node incorporates transfer node 0 .
+Besides, if a subtree consists of only one leaf, its parent node will be removed, and it will be lifted (line 13-14) to form
+more adjacent leaves. In the end, it will remove redundant events on the CFT (line 27). For a better understanding, we
+name them as lifting and removing in Fig.6. For instance, the subtree of the transaction node 2 consists of only one
+leaf (the LM node), then our algorithm removes the transaction node 2 and lifts its subtree. Besides, it also removes
+the redundant event node △
+4 .
+11
+DEFIRANGER: Detecting Price Manipulation Attacks on DeFi Applications
+A PREPRINT
+ET
+To EC
+Trade 1
+EC -> SushiSwap: 
+50.26 Ether
+SushiSwap -> EC: 
+18,398 USDC
+Trade 2
+EC -> Balancer:  
+18,398 USDC
+Balancer -> EC: 
+71.08 FARM
+Trade 3
+EC -> Uniswap V2: 
+71.08 FARM 
+Uniswap V2 -> EC: 
+18,838 USDC
+Trade 4
+EC -> SushiSwap: 
+18,838 USDC
+SushiSwap -> EC: 
+51.14 Ether
+Figure 7: An arbitrage transaction. ET: External Transaction, EC: Entry Contract.
+ExtTxn
+Id 0
+To EntryContract
+IntTxn 0
+Id 1
+To 0x0d4a11d5
+IntTxn 1
+Id 2
+To 0xd55ada00
+IntTxn 61
+Id 62
+To 0xa0b86991
+IntTxn 63
+Id 64
+To 0xd6ad7a67
+IntTxn 73
+Id 74
+To 0x45f783cc
+IntTxn 74
+Id 75
+To 0x0d4a11d5
+IntTxn 2
+Id 3
+To 0xf2b223eb
+IntTxn 3
+Id 4
+To 0xf2b223eb
+IntTxn 8
+Id 9
+To 0xfca4416d
+IntTxn 59
+Id 60
+To 0xa0b86991
+IntTxn 4
+Id 5
+To 0x2427da81
+IntTxn 7
+Id 8
+To 0xdf5e0e81
+IntTxn 5
+Id 6
+To 0xdf5e0e81
+IntTxn 6
+Id 7
+To 0xfa712ee4
+IntTxn 9
+Id 10
+To 0xbbc81d23
+IntTxn 10
+Id 11
+To 0x16de5909
+IntTxn 21
+Id 22
+To 0xd6ad7a67
+IntTxn 31
+Id 32
+To 0x83f798e9
+IntTxn 42
+Id 43
+To 0x73a05250
+IntTxn 52
+Id 53
+To 0x45f783cc
+IntTxn 53
+Id 54
+To 0x45f783cc
+IntTxn 54
+Id 55
+To 0xdf5e0e81
+IntTxn 55
+Id 56
+To 0x45f783cc
+IntTxn 56
+Id 57
+To 0x45f783cc
+IntTxn 57
+Id 58
+To 0x45f783cc
+IntTxn 58
+Id 59
+To 0x45f783cc
+IntTxn 11
+Id 12
+To 0x6b175474
+IntTxn 12
+Id 13
+To 0xfc1e690f
+IntTxn 15
+Id 16
+To 0x1e0447b1
+IntTxn 17
+Id 18
+To 0x493c57c4
+IntTxn 18
+Id 19
+To 0x5d3a536e
+IntTxn 13
+Id 14
+To 0x3dfd23a6
+IntTxn 14
+Id 15
+To 0x57660671
+IntTxn 16
+Id 17
+To 0x7538651d
+IntTxn 19
+Id 20
+To 0x5d3a536e
+IntTxn 20
+Id 21
+To 0xbb8be477
+IntTxn 22
+Id 23
+To 0xa0b86991
+IntTxn 24
+Id 25
+To 0x9ba00d68
+IntTxn 27
+Id 28
+To 0x1e0447b1
+IntTxn 29
+Id 30
+To 0xf013406a
+IntTxn 30
+Id 31
+To 0x39aa39c0
+IntTxn 23
+Id 24
+To 0xb7277a6e
+IntTxn 25
+Id 26
+To 0x3dfd23a6
+IntTxn 26
+Id 27
+To 0x57660671
+IntTxn 28
+Id 29
+To 0x7538651d
+IntTxn 32
+Id 33
+To 0xdac17f95
+IntTxn 33
+Id 34
+To 0x71fc860f
+IntTxn 36
+Id 37
+To 0x1e0447b1
+IntTxn 38
+Id 39
+To 0xf013406a
+IntTxn 39
+Id 40
+To 0xf650c3d8
+IntTxn 34
+Id 35
+To 0x3dfd23a6
+IntTxn 35
+Id 36
+To 0x57660671
+IntTxn 37
+Id 38
+To 0x7538651d
+IntTxn 40
+Id 41
+To 0xf650c3d8
+IntTxn 41
+Id 42
+To 0x976aa93c
+IntTxn 43
+Id 44
+To 0x00000000
+IntTxn 45
+Id 46
+To 0x4da9b813
+IntTxn 48
+Id 49
+To 0x1e0447b1
+IntTxn 50
+Id 51
+To 0x49f4592e
+IntTxn 51
+Id 52
+To 0x39aa39c0
+IntTxn 44
+Id 45
+To 0xffc40f39
+IntTxn 46
+Id 47
+To 0x3dfd23a6
+IntTxn 47
+Id 48
+To 0x57660671
+IntTxn 49
+Id 50
+To 0x7538651d
+IntTxn 60
+Id 61
+To 0xb7277a6e
+IntTxn 62
+Id 63
+To 0xb7277a6e
+IntTxn 64
+Id 65
+To 0xa0b86991
+IntTxn 66
+Id 67
+To 0x9ba00d68
+IntTxn 69
+Id 70
+To 0x1e0447b1
+IntTxn 71
+Id 72
+To 0xf013406a
+IntTxn 72
+Id 73
+To 0x39aa39c0
+IntTxn 65
+Id 66
+To 0xb7277a6e
+IntTxn 67
+Id 68
+To 0x3dfd23a6
+IntTxn 68
+Id 69
+To 0x57660671
+IntTxn 70
+Id 71
+To 0x7538651d
+IntTxn 75
+Id 76
+To 0xdac17f95
+IntTxn 76
+Id 78
+To EntryContract
+CashFlow 77
+IntTxnIndex 75
+0x0d4a11d5 -> EntryContract
+Amount:18989862.2
+Asset:Tether USD
+IntTxn 77
+Id 79
+To 0xb4e16d01
+IntTxn 78
+Id 80
+To 0xa0b86991
+IntTxn 80
+Id 83
+To EntryContract
+IntTxn 79
+Id 81
+To 0xb7277a6e
+CashFlow 82
+IntTxnIndex 79
+0xb4e16d01 -> EntryContract
+Amount:50000000
+Asset:USD Coin
+IntTxn 81
+Id 84
+To 0xd55ada00
+IntTxn 141
+Id 144
+To 0xa0b86991
+IntTxn 143
+Id 146
+To 0xd6ad7a67
+IntTxn 153
+Id 156
+To 0x45f783cc
+IntTxn 154
+Id 157
+To 0xa0b86991
+IntTxn 156
+Id 159
+To 0x45f783cc
+IntTxn 250
+Id 261
+To 0xa0b86991
+IntTxn 252
+Id 263
+To 0xf0358e8c
+IntTxn 82
+Id 85
+To 0xf2b223eb
+IntTxn 83
+Id 86
+To 0xf2b223eb
+IntTxn 88
+Id 91
+To 0xfca4416d
+IntTxn 139
+Id 142
+To 0xa0b86991
+IntTxn 84
+Id 87
+To 0x2427da81
+IntTxn 87
+Id 90
+To 0xdf5e0e81
+IntTxn 85
+Id 88
+To 0xdf5e0e81
+IntTxn 86
+Id 89
+To 0xfa712ee4
+IntTxn 89
+Id 92
+To 0xbbc81d23
+IntTxn 90
+Id 93
+To 0x16de5909
+IntTxn 101
+Id 104
+To 0xd6ad7a67
+IntTxn 111
+Id 114
+To 0x83f798e9
+IntTxn 122
+Id 125
+To 0x73a05250
+IntTxn 132
+Id 135
+To 0x45f783cc
+IntTxn 133
+Id 136
+To 0x45f783cc
+IntTxn 134
+Id 137
+To 0xdf5e0e81
+IntTxn 135
+Id 138
+To 0x45f783cc
+IntTxn 136
+Id 139
+To 0x45f783cc
+IntTxn 137
+Id 140
+To 0x45f783cc
+IntTxn 138
+Id 141
+To 0x45f783cc
+IntTxn 91
+Id 94
+To 0x6b175474
+IntTxn 92
+Id 95
+To 0xfc1e690f
+IntTxn 95
+Id 98
+To 0x1e0447b1
+IntTxn 97
+Id 100
+To 0x493c57c4
+IntTxn 98
+Id 101
+To 0x5d3a536e
+IntTxn 93
+Id 96
+To 0x3dfd23a6
+IntTxn 94
+Id 97
+To 0x57660671
+IntTxn 96
+Id 99
+To 0x7538651d
+IntTxn 99
+Id 102
+To 0x5d3a536e
+IntTxn 100
+Id 103
+To 0xbb8be477
+IntTxn 102
+Id 105
+To 0xa0b86991
+IntTxn 104
+Id 107
+To 0x9ba00d68
+IntTxn 107
+Id 110
+To 0x1e0447b1
+IntTxn 109
+Id 112
+To 0xf013406a
+IntTxn 110
+Id 113
+To 0x39aa39c0
+IntTxn 103
+Id 106
+To 0xb7277a6e
+IntTxn 105
+Id 108
+To 0x3dfd23a6
+IntTxn 106
+Id 109
+To 0x57660671
+IntTxn 108
+Id 111
+To 0x7538651d
+IntTxn 112
+Id 115
+To 0xdac17f95
+IntTxn 113
+Id 116
+To 0x71fc860f
+IntTxn 116
+Id 119
+To 0x1e0447b1
+IntTxn 118
+Id 121
+To 0xf013406a
+IntTxn 119
+Id 122
+To 0xf650c3d8
+IntTxn 114
+Id 117
+To 0x3dfd23a6
+IntTxn 115
+Id 118
+To 0x57660671
+IntTxn 117
+Id 120
+To 0x7538651d
+IntTxn 120
+Id 123
+To 0xf650c3d8
+IntTxn 121
+Id 124
+To 0x976aa93c
+IntTxn 123
+Id 126
+To 0x00000000
+IntTxn 125
+Id 128
+To 0x4da9b813
+IntTxn 128
+Id 131
+To 0x1e0447b1
+IntTxn 130
+Id 133
+To 0x49f4592e
+IntTxn 131
+Id 134
+To 0x39aa39c0
+IntTxn 124
+Id 127
+To 0xffc40f39
+IntTxn 126
+Id 129
+To 0x3dfd23a6
+IntTxn 127
+Id 130
+To 0x57660671
+IntTxn 129
+Id 132
+To 0x7538651d
+IntTxn 140
+Id 143
+To 0xb7277a6e
+IntTxn 142
+Id 145
+To 0xb7277a6e
+IntTxn 144
+Id 147
+To 0xa0b86991
+IntTxn 146
+Id 149
+To 0x9ba00d68
+IntTxn 149
+Id 152
+To 0x1e0447b1
+IntTxn 151
+Id 154
+To 0xf013406a
+IntTxn 152
+Id 155
+To 0x39aa39c0
+IntTxn 145
+Id 148
+To 0xb7277a6e
+IntTxn 147
+Id 150
+To 0x3dfd23a6
+IntTxn 148
+Id 151
+To 0x57660671
+IntTxn 150
+Id 153
+To 0x7538651d
+IntTxn 155
+Id 158
+To 0xb7277a6e
+IntTxn 157
+Id 160
+To 0x16de5909
+IntTxn 168
+Id 171
+To 0xd6ad7a67
+IntTxn 178
+Id 181
+To 0x83f798e9
+IntTxn 189
+Id 192
+To 0x73a05250
+IntTxn 199
+Id 202
+To 0xdac17f95
+IntTxn 200
+Id 204
+To 0xdac17f95
+IntTxn 201
+Id 206
+To 0x83f798e9
+IntTxn 223
+Id 230
+To 0xd6ad7a67
+IntTxn 246
+Id 255
+To 0xa0b86991
+IntTxn 248
+Id 257
+To 0xa0b86991
+Event 260
+IntTxn 158
+Id 161
+To 0x6b175474
+IntTxn 159
+Id 162
+To 0xfc1e690f
+IntTxn 162
+Id 165
+To 0x1e0447b1
+IntTxn 164
+Id 167
+To 0x493c57c4
+IntTxn 165
+Id 168
+To 0x5d3a536e
+IntTxn 160
+Id 163
+To 0x3dfd23a6
+IntTxn 161
+Id 164
+To 0x57660671
+IntTxn 163
+Id 166
+To 0x7538651d
+IntTxn 166
+Id 169
+To 0x5d3a536e
+IntTxn 167
+Id 170
+To 0xbb8be477
+IntTxn 169
+Id 172
+To 0xa0b86991
+IntTxn 171
+Id 174
+To 0x9ba00d68
+IntTxn 174
+Id 177
+To 0x1e0447b1
+IntTxn 176
+Id 179
+To 0xf013406a
+IntTxn 177
+Id 180
+To 0x39aa39c0
+IntTxn 170
+Id 173
+To 0xb7277a6e
+IntTxn 172
+Id 175
+To 0x3dfd23a6
+IntTxn 173
+Id 176
+To 0x57660671
+IntTxn 175
+Id 178
+To 0x7538651d
+IntTxn 179
+Id 182
+To 0xdac17f95
+IntTxn 180
+Id 183
+To 0x71fc860f
+IntTxn 183
+Id 186
+To 0x1e0447b1
+IntTxn 185
+Id 188
+To 0xf013406a
+IntTxn 186
+Id 189
+To 0xf650c3d8
+IntTxn 181
+Id 184
+To 0x3dfd23a6
+IntTxn 182
+Id 185
+To 0x57660671
+IntTxn 184
+Id 187
+To 0x7538651d
+IntTxn 187
+Id 190
+To 0xf650c3d8
+IntTxn 188
+Id 191
+To 0x976aa93c
+IntTxn 190
+Id 193
+To 0x00000000
+IntTxn 192
+Id 195
+To 0x4da9b813
+IntTxn 195
+Id 198
+To 0x1e0447b1
+IntTxn 197
+Id 200
+To 0x49f4592e
+IntTxn 198
+Id 201
+To 0x39aa39c0
+IntTxn 191
+Id 194
+To 0xffc40f39
+IntTxn 193
+Id 196
+To 0x3dfd23a6
+IntTxn 194
+Id 197
+To 0x57660671
+IntTxn 196
+Id 199
+To 0x7538651d
+CashFlow 203
+IntTxnIndex 199
+EntryContract -> 0x45f783cc
+Amount:17899912.89
+Asset:Tether USD
+Event 205
+IntTxn 202
+Id 207
+To 0xdac17f95
+IntTxn 203
+Id 208
+To 0x71fc860f
+IntTxn 206
+Id 211
+To 0x1e0447b1
+IntTxn 208
+Id 213
+To 0xf013406a
+IntTxn 209
+Id 214
+To 0xf650c3d8
+IntTxn 212
+Id 217
+To 0xdac17f95
+IntTxn 213
+Id 219
+To 0xdac17f95
+IntTxn 214
+Id 220
+To 0x71fc860f
+IntTxn 217
+Id 223
+To 0x1e0447b1
+IntTxn 219
+Id 225
+To 0xf013406a
+IntTxn 220
+Id 226
+To 0xf650c3d8
+CashFlow 229
+IntTxnIndex 201
+0x00000000 -> 0x45f783cc
+Amount:1.737346245e+13
+Asset:0x83f798e9
+IntTxn 204
+Id 209
+To 0x3dfd23a6
+IntTxn 205
+Id 210
+To 0x57660671
+IntTxn 207
+Id 212
+To 0x7538651d
+IntTxn 210
+Id 215
+To 0xf650c3d8
+IntTxn 211
+Id 216
+To 0x976aa93c
+CashFlow 218
+IntTxnIndex 212
+0x45f783cc -> 0x83f798e9
+Amount:17899912.89
+Asset:Tether USD
+IntTxn 215
+Id 221
+To 0x3dfd23a6
+IntTxn 216
+Id 222
+To 0x57660671
+IntTxn 218
+Id 224
+To 0x7538651d
+IntTxn 221
+Id 227
+To 0xf650c3d8
+IntTxn 222
+Id 228
+To 0x976aa93c
+IntTxn 224
+Id 231
+To 0xa0b86991
+IntTxn 226
+Id 233
+To 0x9ba00d68
+IntTxn 229
+Id 236
+To 0x1e0447b1
+IntTxn 231
+Id 238
+To 0xf013406a
+IntTxn 232
+Id 239
+To 0x39aa39c0
+IntTxn 233
+Id 240
+To 0xa0b86991
+CashFlow 242
+IntTxnIndex 223
+0x45f783cc -> 0x00000000
+Amount:1.537467371e+13
+Asset:0xd6ad7a67
+IntTxn 235
+Id 243
+To 0xa0b86991
+IntTxn 237
+Id 246
+To 0xa0b86991
+IntTxn 239
+Id 248
+To 0x9ba00d68
+IntTxn 242
+Id 251
+To 0x1e0447b1
+IntTxn 244
+Id 253
+To 0xf013406a
+IntTxn 245
+Id 254
+To 0x39aa39c0
+IntTxn 225
+Id 232
+To 0xb7277a6e
+IntTxn 227
+Id 234
+To 0x3dfd23a6
+IntTxn 228
+Id 235
+To 0x57660671
+IntTxn 230
+Id 237
+To 0x7538651d
+IntTxn 234
+Id 241
+To 0xb7277a6e
+IntTxn 236
+Id 244
+To 0xb7277a6e
+CashFlow 245
+IntTxnIndex 236
+0xd6ad7a67 -> 0x45f783cc
+Amount:17894722.16
+Asset:USD Coin
+IntTxn 238
+Id 247
+To 0xb7277a6e
+IntTxn 240
+Id 249
+To 0x3dfd23a6
+IntTxn 241
+Id 250
+To 0x57660671
+IntTxn 243
+Id 252
+To 0x7538651d
+IntTxn 247
+Id 256
+To 0xb7277a6e
+IntTxn 249
+Id 258
+To 0xb7277a6e
+CashFlow 259
+IntTxnIndex 249
+0x45f783cc -> EntryContract
+Amount:17894722.16
+Asset:USD Coin
+IntTxn 251
+Id 262
+To 0xb7277a6e
+IntTxn 253
+Id 264
+To 0x9b3be0cc
+IntTxn 254
+Id 265
+To 0xc95cbe4c
+IntTxn 255
+Id 266
+To 0x222412af
+IntTxn 256
+Id 267
+To 0xd55ada00
+IntTxn 308
+Id 319
+To 0xd55ada00
+IntTxn 257
+Id 268
+To 0xfca4416d
+IntTxn 258
+Id 269
+To 0xbbc81d23
+IntTxn 259
+Id 270
+To 0x16de5909
+IntTxn 270
+Id 281
+To 0xd6ad7a67
+IntTxn 280
+Id 291
+To 0x83f798e9
+IntTxn 291
+Id 302
+To 0x73a05250
+IntTxn 301
+Id 312
+To 0x45f783cc
+IntTxn 302
+Id 313
+To 0x45f783cc
+IntTxn 303
+Id 314
+To 0xdf5e0e81
+IntTxn 304
+Id 315
+To 0x45f783cc
+IntTxn 305
+Id 316
+To 0x45f783cc
+IntTxn 306
+Id 317
+To 0x45f783cc
+IntTxn 307
+Id 318
+To 0x45f783cc
+IntTxn 260
+Id 271
+To 0x6b175474
+IntTxn 261
+Id 272
+To 0xfc1e690f
+IntTxn 264
+Id 275
+To 0x1e0447b1
+IntTxn 266
+Id 277
+To 0x493c57c4
+IntTxn 267
+Id 278
+To 0x5d3a536e
+IntTxn 262
+Id 273
+To 0x3dfd23a6
+IntTxn 263
+Id 274
+To 0x57660671
+IntTxn 265
+Id 276
+To 0x7538651d
+IntTxn 268
+Id 279
+To 0x5d3a536e
+IntTxn 269
+Id 280
+To 0xbb8be477
+IntTxn 271
+Id 282
+To 0xa0b86991
+IntTxn 273
+Id 284
+To 0x9ba00d68
+IntTxn 276
+Id 287
+To 0x1e0447b1
+IntTxn 278
+Id 289
+To 0xf013406a
+IntTxn 279
+Id 290
+To 0x39aa39c0
+IntTxn 272
+Id 283
+To 0xb7277a6e
+IntTxn 274
+Id 285
+To 0x3dfd23a6
+IntTxn 275
+Id 286
+To 0x57660671
+IntTxn 277
+Id 288
+To 0x7538651d
+IntTxn 281
+Id 292
+To 0xdac17f95
+IntTxn 282
+Id 293
+To 0x71fc860f
+IntTxn 285
+Id 296
+To 0x1e0447b1
+IntTxn 287
+Id 298
+To 0xf013406a
+IntTxn 288
+Id 299
+To 0xf650c3d8
+IntTxn 283
+Id 294
+To 0x3dfd23a6
+IntTxn 284
+Id 295
+To 0x57660671
+IntTxn 286
+Id 297
+To 0x7538651d
+IntTxn 289
+Id 300
+To 0xf650c3d8
+IntTxn 290
+Id 301
+To 0x976aa93c
+IntTxn 292
+Id 303
+To 0x00000000
+IntTxn 294
+Id 305
+To 0x4da9b813
+IntTxn 297
+Id 308
+To 0x1e0447b1
+IntTxn 299
+Id 310
+To 0x49f4592e
+IntTxn 300
+Id 311
+To 0x39aa39c0
+IntTxn 293
+Id 304
+To 0xffc40f39
+IntTxn 295
+Id 306
+To 0x3dfd23a6
+IntTxn 296
+Id 307
+To 0x57660671
+IntTxn 298
+Id 309
+To 0x7538651d
+IntTxn 309
+Id 320
+To 0xf2b223eb
+IntTxn 310
+Id 321
+To 0xf2b223eb
+IntTxn 311
+Id 322
+To 0x2427da81
+IntTxn 314
+Id 325
+To 0xdf5e0e81
+IntTxn 312
+Id 323
+To 0xdf5e0e81
+IntTxn 313
+Id 324
+To 0xfa712ee4
+Figure 8: This CFT tree that describes the attack transaction in Harvest Hack [26]. The tree has 1, 317 transaction
+nodes, 58 transfer nodes and 21 event nodes. Due to the space limit, we only draw a quarter of the tree.
+: Transaction
+node; △: Event node;
+: Transfer node.
+5.5
+Attack Detection
+After recovering DeFi semantics, We detect price manipulation attacks by matching recovered semantics with attack
+patterns (or rules). We then manually conﬁrm the detected transactions. Table 2 shows the rules.
+Detecting direct price manipulation attacks
+The rule follows the attack ﬂow discussed in Section 3.2. Speciﬁcally,
+the ﬁrst step and the third step are identiﬁed by a pair of reverse trade (Tr1 and Tr2). The second step is a trade (Tr3)
+or a transfer (Ba including T, Tm, and Tb). That’s because a transfer can also inﬂuence the reserves of a liquidity pool
+of an AMM.
+Detecting indirect price manipulation attacks
+Similarly, the rule follows the ﬂow discussed in Section 3.3. Par-
+ticularly, we detect step I and step II by identifying a pair of reverse trades (Tr1 and Tr2). We extend the step II
+(proﬁting) from borrowing (that is often a transfer) to any action (Ba or Aa) that can proﬁt the attacker.
+Note that, the reverse trade pairs widely appear in arbitrages [74], which will cause false positives. We need to identify
+arbitrages and then remove them from the result. Our observation is that arbitrage bots often only hold one type of
+asset. They ﬁrst purchase the asset used for arbitrage and then sell it back for the original asset afterwards. As shown
+in Fig. 7, the arbitrage bot (EC) only holds Ether. It purchases the asset (USDC) used for arbitrage in trade 1 and
+gets Ether back in trade 4. The trade 1 and trade 4 constitute a pair of reverse trades. In addition, the trade 2 and
+trade 3, that capture the arbitrage opportunity also constitute a pair of reverse trades. The rules to detect arbitrages are
+presented in Table 2.
+5.6
+A Real Example
+We use a real attack transaction 5 in Harvest Hack [26] to show the entire process. The security incident made Harvest
+lose almost 24M USD.
+DEFIRANGER transforms raw transactions into a CFT with DeFi semantics via two steps, i.e., CFT construction and
+semantic lifting. During this process, it prunes branches in CFT to address challenge I (Section 4.1) and uses the
+semantic lifting to address challenge II (Section 4.1). The comparison of the transaction graph in Fig. 8 and the CFT
+with DeFi semantics in Fig. 9 shows the effectiveness of our system to solve the challenges.
+In the attack detection process, DEFIRANGER identiﬁes trade 1 and trade 2 in Fig 9 as a pair of reverse trades (Tr1 and
+Tr2), the entry contract (EC) as the attacker (Tr1.operator), and Curve as the manipulated pool (Tr1.pool). Further-
+more, in the liquidity mining, the attacker deposits 60.2m USDC to provide liquidity to the third-party app. Harvest
+50xb460b70f11a93364fecf1f3c3ec49f053aecd2d6d9912c01- 2170aa7a0de2d526
+12
+DEFIRANGER: Detecting Price Manipulation Attacks on DeFi Applications
+A PREPRINT
+Liquidity mining
+EC -> Harvest: 
+60.2m USDC
+Harvest -> EC: 
+69m fUSDC
+Transfer 3
+EC -> Uniswap V2: 
+50m USDC
+Trade 2
+EC -> Curve: 
+18m USDC
+Curve -> EC: 
+18m USDT
+Trade 1
+EC -> Curve: 
+18m USDT
+Curve -> EC: 
+18m USDC
+Liquidity cancel
+EC -> Harvest: 
+69m fUSDC
+Harvest -> EC: 
+60.6m USDC
+IT 80 
+To EC
+IT 77
+To Uniswap V2
+IT 76
+To Uniswap V2
+ET
+To EC
+IT 74
+To Uniswap V2
+Transfer 2
+Uniswap V2 -> EC:
+50m USDC
+Transfer 1
+Uniswap V2 -> EC:
+18m USDT
+Transfer 4
+EC -> Uniswap V2:
+18m USDT
+Repeat for 3 times
+……
+Figure 9: The CFT with DeFi semantics. The ﬁgure is converted from the tree in Fig. 8 via two steps: pruning branches
+(for challenge I) and semantic lifting (for challenge II). We change the shape of nodes to a box to facilitate the showing
+of node metadata. ET: External Transaction; IT: Internal Transaction; EC: Entry Contract.
+Identified by Etherscan: 29,201
+Identified by TOOL: 37,732
+A
+B
+C
+D
+Figure 10: Distribution of identiﬁed DeFi actions. A: Actions that Etherscan identiﬁes but DEFIRANGER misses;
+B: Actions that Etherscan and DEFIRANGER both identiﬁes; C: Actions that Etherscan misses but DEFIRANGER
+correctly identiﬁes; D: Actions that Etherscan misses but DEFIRANGER incorrectly identiﬁes.
+then mints 69m fUSDC to the attacker as certiﬁcates (LM.pool! = Tr1.pool, LM.recipient == Tr1.operator).
+Since the detection rule is satisﬁed, DEFIRANGER labels it as a suspicious indirect price manipulation attack.
+6
+Evaluation
+In this section, we evaluate DEFIRANGER from two perspectives: DeFi action identiﬁcation and price manipulation
+attack detection, i.e., whether it can accurately identify DeFi actions, and whether it can detect real price manipulation
+attacks.
+6.1
+DeFi Action Identiﬁcation
+To the best of our knowledge, there is no ground truth for labeled DeFi actions in Ethereum. Etherscan [4] is the only
+public online service that identiﬁes DeFi actions for each transaction. To evaluate the effectiveness of our method, we
+compare our result with that of Etherscan. In particular, we crawled 183, 363 transactions 6 from Etherscan. Then we
+apply our system on the downloaded transactions. Finally, we compare the identiﬁed actions with the labels reported
+by Etherscan.
+For the same 183, 363 transactions, Etherscan and DEFIRANGER identify 29, 201 and 37, 732 DeFi actions, as shown
+in the left and right oval in Fig. 10, respectively. The number of actions that are identiﬁed by both Etherscan and DEFI-
+RANGER is 25, 431 (B), while the number of actions that are identiﬁed by Etherscan but are missed by DEFIRANGER
+is 3, 770 (A). Besides, DEFIRANGER identiﬁes extra 12, 301 (C+D) DeFi actions. Among them, we manually conﬁrm
+that 1, 667 ones (D) are false positives.
+Accuracy =
+TP + TN
+TP + FP + TN + FN ∗100%
+(2)
+Table 3 shows the detailed result. Since we do not have the ground truth, all actions identiﬁed by Etherscan are treated
+as true positives (this assumption actually favors Etherscan). Then we use formula (2) to compute the accuracy.
+6All transactions were downloaded on January 30, 2021. Etherscan has a speed limit and anti-crawling mechanism. We did not
+crawl more transactions to honor these mechanisms.
+13
+DEFIRANGER: Detecting Price Manipulation Attacks on DeFi Applications
+A PREPRINT
+Table 3: Comparison between DEFIRANGER and Etherscan in identifying DeFi actions.
+# Identiﬁed
+actions
+# TP
+# FP
+# TN
+# FN
+FNR
+TPR
+Accuracy
+Etherscan
+29,201
+29,201
+0
+1,667
+10,634
+26.7%
+100%
+74.38%
+DEFIRANGER
+37,732
+36,065
+1,667
+0
+3,770
+9.46%
+95.58%
+86.9%
+Table 4: The overview of transactions involved in price manipulation attacks.
+# Total
+# Labeled
+True positives
+False positives
+# Unconﬁrmed
+transactions
+transactions
+# Successful Attacks
+# Failed Attacks
+# Arbitrages
+# Recognition errorsa
+transactions
+Indirect price manipulation attack
+350,823,625
+101
+41
+3
+51
+0
+6
+Direct price manipulation attack
+423
+391
+0
+0
+31
+1
+a: The recognition error represents false positives caused by misidentiﬁed DeFi actions.
+Speciﬁcally, the accuracy of DEFIRANGER (86.9%) is higher than Etherscan (74.38%). What’s more important, the
+false negative rate of DEFIRANGER (9.46%) is much lower than Etherscan (26.7%). This means DEFIRANGER can
+identify more actions that will be missed by Etherscan. Since the attack detection is based on identiﬁed DeFi actions,
+the miss of DeFi actions will lead to the miss of real-world attacks. Until the writing of this paper in April 2021,
+Etherscan can identify none of the DeFi actions for victim DeFi apps that are involved in the reported attacks by
+DEFIRANGER (Section 6.2 and Section 7).
+We summarize the advantages and disadvantages of our method to identify DeFi actions in the following.
+Advantages
+Our method to identify DeFi actions is platform-independent, which saves the manual efforts to under-
+stand every new DeFi protocol. Note that, DeFi apps tend to have their own protocols. Moreover, our system can
+detect more DeFi actions than Etherscan, which leads to the detection of real attacks (Section 6.2).
+Disadvantages
+DEFIRANGER misidentiﬁes actions in a few cases, such as the exchange of more than two types
+of tokens and adding multiple types of tokens to provide liquidity. This causes 1, 667 incorrect DeFi actions (with a
+false positive rate of 4.42%). Our system can tolerate such false positives since the detected attacks will be manually
+conﬁrmed.
+Summary: DEFIRANGER can identify more DeFi actions than Etherscan, with a lower false negative rate. The
+identiﬁed DeFi actions are critical to detect price manipulation attacks reported in Section 6.2 and analyzed in
+Section 7.
+6.2
+Price Manipulation Attack Detection
+We performed a large-scale detection on the 350, 823, 625 transactions from Nov. 25, 2019, to Dec. 17, 2020. As
+shown in Table 4, DEFIRANGER detected 524 attacks in total. We manually conﬁrmed that 432 of them are true
+positives. In total, nine security incidents are detected. Four of them are known [21, 26, 38, 40], while ﬁve of them are
+zero-day incidents. We reported our ﬁndings and two CVEs were assigned.
+The false positives consist of 51 transactions for arbitrage and 31 transactions with misidentiﬁed DeFi actions. First,
+our arbitrage detection strategy in Section 5.5 misses 51 arbitrage transactions. This can be improved with a more
+accurate pattern to identify arbitrage. Second, DEFIRANGER misidentiﬁes a borrow action of bZx [12] as a trade.
+As a result, it further misidentiﬁes a borrow-redeem pair as a pair of reverse trades, which causes the false positives.
+That’s because DEFIRANGER does not yet support the identiﬁcation of loan-related actions.
+In summary, DEFIRANGER not only detects four known security incidents [21, 26, 38, 40] but also reveals ﬁve zero-
+day incidents. In addition, DEFIRANGER is the ﬁrst tool to detect price manipulation attacks in Ethereum. Besides,
+DEFIRANGER ﬁnishes the large-scale experiment in 10 hours and consumes negligible memory during the process.
+Summary: The detected nine security incidents with 432 attacks shows the effectiveness of DEFIRANGER.
+Among them, ﬁve security incidents are zero-day ones (with 399 attacks in the wild.) To the best of our knowledge,
+DEFIRANGER is the ﬁrst tool that has the capability to detect price manipulation attacks in Ethereum.
+14
+DEFIRANGER: Detecting Price Manipulation Attacks on DeFi Applications
+A PREPRINT
+Table 5: The overview of security incidents detected by DEFIRANGER.
+Direct price manipulation attacks
+Date(s)
+(all in 2020)
+Incident
+# Attacks
+Proﬁt
+Victim app’s type
+Root cause
+CVE-ID
+Zero-day?
+Sep 30, 20 - Oct 15, 20
+LRC Incident
+91
+80.97 ETH a
+DEX
+Insufﬁcient access control
+CVE-2021-3xxx
+✓
+Oct 08, 20 - Dec 11, 20
+DRC Incident
+78
+25.05 ETH b
+Portfolio management
+Insufﬁcient access control
+-
+✓
+Nov 15, 20 - Dec 15, 20
+SEAL Incident
+24
+4.247K SEAL c
+Portfolio management
+Insufﬁcient access control
+CVE-2021-3xxx
+✓
+Nov 26, 19 - Oct 24, 20
+MET Incident
+198
+1.16 ETH d
+Auction
+Insufﬁcient access control
+-
+✓
+Indirect price manipulation attacks
+Oct 26, 20
+Harvest Hack [26]
+30
+24M stablecoins of USD
+Portfolio management
+Insecure price dependency
+×
+Oct 29, 20
+Plouto Hack
+8
+650K stablecoins of USD
+Portfolio management
+Insecure price dependency
+✓
+Nov 06, 20
+Cheese Bank Incident [21]
+1
+3.3M stablecoins of USD
+Lending
+Insecure price dependency
+×
+Nov 14, 20
+Value DeFi Incident [38]
+1
+7.4M stablecoins of USD
+Portfolio management
+Insecure price dependency
+×
+Dec 17, 20
+WarpFinance Incident [40]
+1
+3.81M stablecoins of USD
+Lending
+Insecure price dependency
+×
+a: 80.97 ETH was worth around 29K USD on Sep 30; b: 25.05 ETH was worth around 8.5K USD on Oct 8;
+c: 4.247K SEAL was worth around 306K USD on Nov 15; d: 1.16 ETH was worth around 603 USD on Nov 26.
+Table 6: Symbols used in formula (3), (4), and (5).
+Symbol
+Description
+AMasset
+The amount of the asset minted to a user.
+ABasset
+The amount of the asset burning by a user.
+ADasset
+The amount of the asset depositing by a user.
+ARasset
+The amount of the asset redeemed to a user.
+Rasset
+The current reserves of the asset in the pool.
+TSasset
+The total supply of the asset.
+UPasset
+The unit price of the asset.
+7
+Attack Analysis
+In this section, we present the analysis result on the conﬁrmed security incidents and insights to secure the DeFi
+ecosystem.
+7.1
+Vulnerability Root Cause Analysis
+After analyzing each security incident, we ﬁnd that the root causes of the vulnerabilities are falling into two categories,
+i.e., insufﬁcient access control of the smart contract’s APIs and insecure price dependency between DeFi apps.
+7.1.1
+Insufﬁcient access control
+Four DeFi apps, including Loopring [27], Dracula [24], Seal Finance [32], and Metronome [10], are susceptible to
+direct price manipulation attacks. The root cause of the vulnerability is the same: they do not properly enforce the
+access control to the function that may change the AMM’s reserves.
+The four vulnerable functions are sellTokenForLRC, drain, breed and closeAuction in these apps. The ﬁrst three
+could be exploited by an attacker to sell cryptocurrencies in a liquidity pool of an AMM. An attacker can manipulate the
+pool in advance to decrease related cryptocurrencies’ prices and then invoke these functions to sell them cheaply, which
+causes the vulnerable apps to suffer losses. After that, the attacker can make proﬁts by buying these cryptocurrencies
+at a relatively low price. The last one (closeAuction) directly deposits Ether into the Metronome’s AMM pool. Thus,
+an attacker ﬁrst swaps Ether for the MET token and then invokes closeAuction to increase the AMM’s Ether reserves,
+which lifts MET’s price. Finally, the attacker swaps the same amount of MET for more Ethers than that are used in
+the ﬁrst swap. As a result, the attacker can make proﬁts with each invocation of clouseAuction.
+Note that, Dracula [24] implemented an access control for the function drain in the latest version [25].
+Insight I: Insufﬁcient access control for functions that can change the AMM’s reserves makes the vulnerable
+DeFi apps susceptible to direct price manipulation attacks.
+15
+DEFIRANGER: Detecting Price Manipulation Attacks on DeFi Applications
+A PREPRINT
+7.1.2
+Insecure price dependency
+Two types of vulnerable apps are susceptible to the indirect price manipulation attack, including portfolio management
+apps and lending apps. The portfolio management apps leverage AMM’s real-time quotation to price clients’ deposits,
+and lending apps rely on AMM’s real-time reserves to price clients’ collaterals. Thus, an attacker can manipulate the
+real-time quotation and reserves in AMMs to attack vulnerable apps.
+Table 6 shows the symbols that will be used in the formula (3), formula (4), and formula (5).
+Depending on AMM’s real-time quotation
+Harvest [37], Plouto [31], and Value DeFi [37] are portfolio manage-
+ment apps. They provide the same ﬁnancial services and share a similar price mechanism. We use Harvest as a
+representative example.
+The attack ﬂow of the Harvest Hack [26] has been described in Section 5.6. We focus on its insecure price dependency.
+After receiving a user’s stablecoins, such as USDC, Harvest automatically deposits stablecoins to a DeFi app with the
+highest Annual Percentage Yield (APY). In short, Harvest acts as an account manager that helps users (clients) to
+invest their stablecoins.
+One of Harvest’s investment strategies is to deposit clients’ USDC into Curve Y pool [22] to provide liquidity. During
+the process, clients get fUSDC (Harvest’s LP token) from Harvest as certiﬁcates, and Harvest gets yCrv (Y pool’s LP
+token) from Y pool as certiﬁcates. Formula 3 describes the number of fUSDC tokens that Harvest should mint and
+send to clients after receiving clients’ deposits (USDC), and the number of USDC that Harvest should refund to clients
+after receiving and burning clients’ fUSDC.
+AMfUSDC =
+ADUSDC
+RUSDC + T oUSDC(RyCrv) ∗TSfUSDC
+ARUSDC = ABfUSDC
+TSfUSDC
+∗(RUSDC + T oUSDC(RyCrv))
+(3)
+According to the formula (3), the amount of minted fUSDC equals the product of the deposited USDC’s share and
+the total supply of fUSDC. The amount of refunded USDC equals the product of burned fUSDC’s share and the Total
+Value Locked (TVL). Since Harvest invests part of USDC into Curve, the TVL consists of the reserves of USDC and
+yCrv. To unify the unit, Harvest leverages the real-time price provided by the Curve Y pool (ToUSDC). However,
+the real-time price of the AMM (Curve) can be manipulated. Therefore, attackers can make proﬁts through increasing
+the amount of refunded USDC by manipulating the Curve Y pool, as shown in the Harvest Hack Section (Section 5.6).
+To the best of our knowledge, using the average price over a period of time can mitigate the indirect price manipulation
+attack. In fact, Curve has the interface (virtual price) that provides the average token price. However, Harvest does
+not use this interface in its smart contract.
+Depending on AMM’s real-time reserves
+Cheese Bank [20] and WarpFinance [39] are lending apps. They support
+Uniswap V2’s LP token as the collateral. Since Uniswap does not provide its LP tokens’ price, two lending apps
+implement their own pricing mechanism for Uniswap’s LP tokens.
+UPLP token = RET H ∗2 ∗UPET H
+TSLP token
+(4)
+Each Uniswap V2 pool maintains a pair of cryptocurrencies. Cheese Bank only supports the LP tokens of a limited
+number of Ether-related pools, e.g, Ether-USDT, Ether-USDC, Ether-CHEESE, and Ether-DAI. As shown in for-
+mula (4), it takes twice the value of Ether reserves in the pool as the pool’s TVL, which decides the LP token’s unit
+price.
+UPLP token = UPtoken0 ∗Rtoken0 + UPtoken1 ∗Rtoken1
+TSLP token
+(5)
+Formula (5) shows how WarpFinance prices Uniswap V2’s LP token. Differ from Cheese Bank, WarpFinance takes
+the value of all reserves in an Uniswap V2’s pool as the pool’s TVL. Then, it takes a pool’s TVL divided by the total
+supply of the pool’s LP token as the unit price of the LP token.
+The two price mechanisms are vulnerable because they both depend on the real-time reserves of Uniswap V2’s pools
+(RET H, Rtoken0, and Rtoken1). Therefore, attackers can lift the collateral’s price by manipulating the related Uniswap
+16
+DEFIRANGER: Detecting Price Manipulation Attacks on DeFi Applications
+A PREPRINT
+Deploy
+Attack operator
+Malicious contract
+Step1: prepare a malicious contract
+Transfer profits
+Attack operator
+Step3: Launder profits
+Launderer
+Mixing app
+Cross-chain app
+Launder profits
+Step2: attack the victim DeFi app
+Victim 
+app
+Flashloan
+app
+Borrow flashloan as 
+attack cost
+1
+Attack
+2
+Malicious 
+contract
+Attack operator
+Launch attack
+Withdraw profit
+4
+Repay flashloan
+3
+Figure 11: Attack footprint. The attack operator and token launderer both are EOAs.
+V2’s pool in advance. After collateralizing the “expensive collaterals”, attackers can borrow out more valuable stable-
+coins. They will, of course, not redeem their collaterals.
+Insight II: The insecure price dependency is the root cause of vulnerable apps that are susceptible to indirect
+price manipulation attacks.
+7.2
+Footprint analysis
+Attackers have used similar steps to launch the attack. We summarize the attack footprint in Fig. 11.
+• Prepare a malicious contract: The attacker uses an EOA, i.e., the attack operator, to deploy a malicious contract.
+• Attack the vulnerable apps: The attack operator invokes the malicious contract to launch the attack. Note that, the
+attacker usually leverages the ﬂash loan to get a large number of tokens that are needed during the attack.
+• Launder proﬁts: The attack operator then transfers proﬁts to another EOA, i.e., the token launderer. The token
+launderer leverages the mixing application, such as tornoda [33], or a cross-chain application, such as Ren [11], to
+launder the proﬁts.
+Furthermore, we check whether a malicious contract has other callers or whether a malicious contract’s creator has
+deployed other smart contracts. The result is interesting. There are almost no other transactions except for the ones
+that are used for attacks. This clean attack strategy makes tracing attackers more challenging.
+Insight III: Attackers are becoming mature. They leverage the mixing service and cross-chain apps to launder
+the proﬁts, and hide their traces by using a clean attack strategy.
+7.3
+Impact Analysis
+We analyze the impact on vulnerable DeFi apps’ market value after the security incidents. As shown in Fig. 12, we
+use the unit price and market capacity (in USD) to describe the market value of ﬁve vulnerable apps’ protocol tokens
+(tokens issued by DeFi apps). The price is retrieved from CoinGecko [2].
+The market value of Harvest and Value dropped sharply on the day of the related incidents. We suspect that they
+are caused by the security incidents. In addition, the market value of Loopring, Dracula, and Seal Finance is also
+falling after the day of the related incidents. However, we cannot simply conclude that they are affected by related
+security incidents due to two main reasons. First, the market values are declining before related incidents. Second,
+LRC incident, DRC incident, and SEAL incident are zero-day. The lack of visibility limits their follow-up impacts.
+17
+DEFIRANGER: Detecting Price Manipulation Attacks on DeFi Applications
+A PREPRINT
+10-21
+26
+31
+100
+200
+FARM's price (USD)
+10-21
+26
+31
+2.5
+5.0
+1e7
+FARM's market capacity (USD)
+11-09
+14
+19
+2.0
+2.5
+VALUE's price (USD)
+11-09
+14
+19
+5
+6
+1e6
+VALUE's market capacity (USD)
+09-25
+30
+10-15
+25
+0.175
+0.200
+0.225
+LRC's price (USD)
+09-25
+30
+10-15
+25
+2.0
+2.5
+1e8
+LRC's market capacity (USD)
+10-13
+12-11
+21
+0.1
+0.2
+0.3
+DRC's price (USD)
+10-13
+12-11
+21
+1
+2
+1e6
+DRC's market capacity (USD)
+11-09 15
+12-15
+25
+0
+50
+SEAL's price (USD)
+11-09 15
+12-15
+25
+1
+2
+3
+1e5
+SEAL's market capacity (USD)
+Figure 12: The market value trend of vulnerable DeFi applications around the day of the related security incidents.
+The price is fetched from CoinGecko [2]. It does not store the DRC’s token price before Oct 13. Lines refer to the day
+of incidents shown in Table 5; FARM is the protocol token of Harvest.
+Insight IV: Security incidents have direct impact on the market value of vulnerable DeFi apps, especially for the
+publicly known attacks.
+8
+Discussion
+In this section, we discuss DEFIRANGER’s limitations and future improvements.
+Identify more DeFi actions
+Currently, DEFIRANGER cannot identify a few DeFi actions, such as loan-related
+actions. For example, among 3, 770 missed actions compared with Etherscan (Section 6.1), 2, 182 of them are loan-
+related actions. We will extend DEFIRANGER’s capability to identify more DeFi actions as one of the future work.
+Detect more types of DeFi attacks
+Currently, DEFIRANGER only focuses on two types of price manipulation
+attacks. In fact, with the recovered DeFi semantics, DEFIRANGER is able to detect more types of DeFi attacks, if the
+detection patterns can be developed. To secure the Ethereum DeFi ecosystem, we will design more attack patterns
+and extend DEFIRANGER’s detection ability. This process might be coupled with the extension of DeFi semantics
+identiﬁcation.
+9
+Related Work
+9.1
+Ethereum DeFi ecosystem
+The wave of DeFi brings many traditional ﬁnancial applications to Ethereum, which attempt to use the openness
+and transparency of the blockchain technology to evolve ﬁnance from opaque to transparency. Werner et al. [69]
+summarize DeFi’s current development, including DeFi basic knowledge, popular DeFi protocols, and DeFi security
+issues. Particularly, Clark et al. [46], Pernice et al. [60], and Moin et al. [58] perform the empirical study about current
+stablecoins’ protocol design and provide the comprehensive taxonomy of stablecoins with their insights. Wang [68]
+studies mathematical models of AMMs. Bartoletti et al. [43] study various implementations of existing lending apps.
+Furthermore, Perez et al. [59] provide the ﬁrst in-depth empirical study for liquidations on protocols for loanable funds
+(PLFs), such as lending apps. Liu et al. [56] present the ﬁrst measurement for DeFi price oracles. The knowledge of
+these studies can help better understand the DeFi ecosystem.
+18
+DEFIRANGER: Detecting Price Manipulation Attacks on DeFi Applications
+A PREPRINT
+9.2
+DeFi security
+9.2.1
+Off-chain security issues
+Front-running and Pump-and-Dump are two typical threats for DeFi security. They mainly focus on are off-chain
+activities.
+Front-running
+In traditional ﬁnance, front-running often refers to a broker prioritizing his trade ahead of his clients’
+market-moving order to beneﬁt himself. Front-runners prioritize their transactions ahead of others by lifting transac-
+tion fees 7. Eskandari et al. [48] analyze the front-running issues across the top 25 DeFi apps in Ethereum and present
+the evidence of abnormal miners’ behaviors of purchasing cryptocurrencies for front-running. Daian et al. [47] study
+bots’ arbitrage strategies and reveal the situation of front-running between bots. Zhou et al. [75] formalize the sand-
+wich attack combining front- and back-running actions and present an empirical evaluation on it.
+Pump-and-Dump (P&D)
+P&D often refers to a scheme that boosts the price of a stock by misleading information.
+The perpetrator of this scheme purchases a lot of these stocks in advance and sells them after the price has been driven
+up. Recently, this type of scheme also appears on the Ethereum DeFi ecosystem. Kamps et al. [55] construct a group
+of patterns by analyzing existing P&D schemes and deﬁne a set of identifying criteria, which can detect suspected
+P&D behaviors. Xu et al. [72] aggregate 412 P&D schemes in telegram channels and build a machine learning model
+that can predict the likelihood of a cryptocurrency being pumped.
+9.2.2
+On-chain security issues
+Various DeFi protocols are arising but with many security issues. Particularly, Flash loan is a nascent service that
+can lend any unsecured cryptocurrencies to clients. With this temporary funding capacity, some security issues have
+surfaced. Gudgeon et al. [51] demonstrated a simulated governance attack with the ﬂash loan on the MakerDao [6].
+Qin et al. [61] analyze two existing ﬂash loan attacks and propose an optimization strategy that can increase the
+attacker’s beneﬁt to 2.37 and 1.73 times the previous. Wang et al. [66] implement a preliminary work on automatically
+hunting for DeFi attacks.
+Our work is different from them and aims to detect two new types of DeFi attacks.
+9.3
+Smart Contract Code Vulnerability
+Ethereum smart contracts suffer from code vulnerabilities, such as re-entrancy and integer overﬂow. Many systems
+have been proposed to detect vulnerable smart contracts [53, 54, 57, 63–65, 71] or real-world attacks [45, 49, 50, 62,
+70, 73]. For instance, Oyente [57] applies the symbolic execution technique to detect code vulnerabilities. eThor [63]
+leverages formal veriﬁcation to reveal code vulnerabilities in smart contracts. TXSPECTOR [73] and EthScope [70]
+focus on uncovering historical attacks caused by code vulnerabilities in Ethereum. These systems cannot be directly
+applied to detect price manipulation attacks since they lack the capability to recover DeFi semantics.
+10
+Conclusion
+In this work, we aim to detect two types of price manipulation attacks on DeFi apps. To this end, we present a
+new approach to automatically recover DeFi semantics from raw transactions. Then we detect attacks based on the
+recovered DeFi semantics. We implemented our approach in a tool named DEFIRANGER. The evaluation result shows
+that our system can accurately recover DeFi semantics, and effectively detect DeFi attacks. In total, it revealed 432
+real real-world attacks that involve four known security incidents and ﬁve zero-day security incidents. Our work urges
+the need to secure the DeFi ecosystem.
+References
+[1] Dictionary of law insider: collateral rate. https://www.lawinsider.com/dictionary/collateral-rate,
+2010. [Online; accessed April-2021].
+[2] Coingecko. https://www.coingecko.com/en, 2014. [Online; accessed December-2020].
+[3] ERC20 Token Standard.
+https://eips.ethereum.org/EIPS/eip-20, 2015.
+[Online; accessed March-
+2020].
+7Miners tend to pack transactions with higher transaction fee.
+19
+DEFIRANGER: Detecting Price Manipulation Attacks on DeFi Applications
+A PREPRINT
+[4] Etherscan. https://etherscan.io/, 2015. [Online; accessed Jan-2021].
+[5] Go ethereum. https://geth.ethereum.org/, 2015. [Online; accessed Feb-2021].
+[6] Makerdao. https://makerdao.com/zh-CN/, 2015. [Online; accessed December-2020].
+[7] Tether: Fiat currencies on the bitcoin blockchain. https://tether.to/wp-content/uploads/2016/06/
+TetherWhitePaper.pdf, 2016. [Online; accessed December-2020].
+[8] Aave. https://aave.com/, 2017. [Online; accessed December-2020].
+[9] dydx. https://dydx.exchange/, 2017. [Online; accessed December-2020].
+[10] Metronome. https://www.metronome.io/, 2017. [Online; accessed Jan-2021].
+[11] Ren. https://renproject.io/, 2017. [Online; accessed Jan-2021].
+[12] bzx. https://bzx.network/, 2018. [Online; accessed December-2020].
+[13] Centre: Centre whitepaper. https://www.centre.io/pdfs/centre-whitepaper.pdf, 2018. [Online; ac-
+cessed December-2020].
+[14] Uniswap v1. https://uniswap.org/docs/v1/, 2018. [Online; accessed December-2020].
+[15] Wiktionary: undercollateralized. https://en.wiktionary.org/wiki/undercollateralized, 2019. [On-
+line; accessed April-2021].
+[16] 88mph incident. https://peckshield.medium.com/88mph-incident-root-cause-analysis-ce477e00a74d,
+2020. [Online; accessed December-2020].
+[17] Akropolis incident. https://peckshield.medium.com/akropolis-incident-root-cause-analysis-c11ee59e05d4,
+2020. [Online; accessed December-2020].
+[18] bzx
+hack
+i.
+https://peckshield.medium.com/bzx-hack-full-disclosure-with-detailed-proﬁt-analysis-
+e6b1fa9b18fc, 2020. [Online; accessed December-2020].
+[19] bzx
+hack
+ii.
+https://peckshield.medium.com/bzx-hack-ii-full-disclosure-with-detailed-proﬁt-analysis-
+8126eecc1360, 2020. [Online; accessed December-2020].
+[20] Cheese bank. https://cheesebank.io/, 2020. [Online; accessed December-2020].
+[21] Cheese bank incident. https://peckshield.medium.com/cheese-bank-incident-root-cause-analysis-d076bf87a1e
+2020. [Online; accessed December-2020].
+[22] Curve.ﬁy pool. https://curve.fi/iearn, 2020. [Online; accessed April-2020].
+[23] Deﬁpulse: Deﬁapp rank list. https://defipulse.com/, 2020. [Online; accessed December-2020].
+[24] Dracula. https://dracula.sucks/, 2020. [Online; accessed December-2020].
+[25] Dracula protocol v2,
+the lastest commit id is 137186a9c06acb05d879df90faa62a63af48e712 at the
+time of writing.
+https://github.com/Dracula-Protocol/contracts-v2/blob/main/contracts/
+MasterVampire.sol, 2020. [Online; accessed March-2021].
+[26] Harvest ﬁnance attack.
+https://www.coindesk.com/harvest-ﬁnance-24m-attack-triggers-570m-bank-run-in-
+latest-deﬁ-exploit, 2020. [Online; accessed December-2020].
+[27] Loopring. https://loopring.org/, 2020. [Online; accessed December-2020].
+[28] Opyn incident. https://peckshield.medium.com/opyn-hacks-root-cause-analysis-c65f3fe249db,
+2020. [Online; accessed December-2020].
+[29] Origin incident. https://peckshield.medium.com/origin-dollar-incident-root-cause-analysis-f27e11988c90,
+2020. [Online; accessed December-2020].
+[30] Pickle incident. https://peckshield.medium.com/pickle-incident-root-cause-analysis-5d73496ebc9f,
+2020. [Online; accessed December-2020].
+[31] Plouto ﬁnance. http://plouto.finance/, 2020. [Online; accessed Jan-2021].
+[32] Seal ﬁnance. https://seal.finance/, 2020. [Online; accessed December-2020].
+[33] tornado cash. https://tornado.cash/, 2020. [Online; accessed Jan-2021].
+[34] Transaction decoder. https://ethtx.info/, 2020. [Online; accessed Jan-2021].
+[35] Uniswap v2. https://uniswap.org/, 2020. [Online; accessed December-2020].
+[36] Uniswap/lendf.me
+hacks.
+https://peckshield.medium.com/uniswap-lendf-me-hacks-root-cause-and-loss-
+analysis-50f3263dcc09, 2020. [Online; accessed December-2020].
+20
+DEFIRANGER: Detecting Price Manipulation Attacks on DeFi Applications
+A PREPRINT
+[37] Value deﬁ. https://valuedefi.io/, 2020. [Online; accessed December-2020].
+[38] Value deﬁincident. https://peckshield.medium.com/value-defi-incident-root-cause-analysis-fbab71faf373,
+2020. [Online; accessed December-2020].
+[39] Warp ﬁnance. https://warp.finance/, 2020. [Online; accessed December-2020].
+[40] Warpﬁnance incident. https://peckshield.medium.com/warpfinance-incident-root-cause-analysis-581a4869ee0
+2020. [Online; accessed December-2020].
+[41] Coindesk: What is a ﬂash loan?
+https://www.coindesk.com/what-is-a-flash-loan, 2021. [Online;
+accessed April-2021].
+[42] Wikipedia: cash ﬂow. https://en.wikipedia.org/wiki/Cash_flow, 2021. [Online; accessed April-2021].
+[43] Massimo Bartoletti, James Hsin-yu Chiang, and Alberto Lluch-Lafuente. Sok: Lending pools in decentralized
+ﬁnance. arXiv preprint arXiv:2012.13230, 2020.
+[44] Yixin Cao, Chuanwei Zou, and Xianfeng Cheng. Flashot: A snapshot of ﬂash loan attack on deﬁecosystem.
+arXiv preprint arXiv:2102.00626, 2021.
+[45] Ting Chen, Rong Cao, Ting Li, Xiapu Luo, Guofei Gu, Yufei Zhang, Zhou Liao, Hang Zhu, Gang Chen, Zheyuan
+He, et al. Soda: A generic online detection framework for smart contracts. In 27th Ann. Network and Distributed
+Systems Security Symp. The Internet Society, 2020.
+[46] Jeremy Clark, Didem Demirag, and Seyedehmahsa Mahsa Moosavi. Sok: Demystifying stablecoins. Communi-
+cations of the ACM, Forthcoming, 2019.
+[47] Philip Daian, Steven Goldfeder, Tyler Kell, Yunqi Li, Xueyuan Zhao, Iddo Bentov, Lorenz Breidenbach, and
+Ari Juels. Flash boys 2.0: Frontrunning in decentralized exchanges, miner extractable value, and consensus
+instability. In 2020 IEEE Symposium on Security and Privacy (SP), pages 910–927. IEEE, 2020.
+[48] Shayan Eskandari, Seyedehmahsa Moosavi, and Jeremy Clark. Sok: Transparent dishonesty: front-running
+attacks on blockchain. In International Conference on Financial Cryptography and Data Security, pages 170–
+189. Springer, 2019.
+[49] Christof Ferreira Torres, Mathis Baden, Robert Norvill, Beltran Borja Fiz Pontiveros, Hugo Jonker, and Sjouke
+Mauw.
+Ægis: Shielding vulnerable smart contracts against attacks.
+In Proceedings of the 15th ACM Asia
+Conference on Computer and Communications Security, pages 584–597, 2020.
+[50] Shelly Grossman, Ittai Abraham, Guy Golan-Gueta, Yan Michalevsky, Noam Rinetzky, Mooly Sagiv, and Yoni
+Zohar. Online detection of effectively callback free objects with applications to smart contracts. Proceedings of
+the ACM on Programming Languages, 2(POPL):1–28, 2017.
+[51] Lewis Gudgeon, Daniel Perez, Dominik Harz, Arthur Gervais, and Benjamin Livshits. The decentralized ﬁnan-
+cial crisis: Attacking deﬁ. arXiv preprint arXiv:2002.08099, 2020.
+[52] Jingxuan He, Mislav Balunovi´c, Nodar Ambroladze, Petar Tsankov, and Martin Vechev. Learning to fuzz from
+symbolic execution with application to smart contracts. In Proceedings of the 2019 ACM SIGSAC Conference
+on Computer and Communications Security, pages 531–548, 2019.
+[53] Bo Jiang, Ye Liu, and WK Chan. Contractfuzzer: Fuzzing smart contracts for vulnerability detection. In 2018
+33rd IEEE/ACM International Conference on Automated Software Engineering (ASE), pages 259–269. IEEE,
+2018.
+[54] Sukrit Kalra, Seep Goel, Mohan Dhawan, and Subodh Sharma. Zeus: Analyzing safety of smart contracts. In
+Ndss, pages 1–12, 2018.
+[55] Josh Kamps and Bennett Kleinberg. To the moon: deﬁning and detecting cryptocurrency pump-and-dumps.
+Crime Science, 7(1):1–18, 2018.
+[56] Bowen Liu and Pawel Szalachowski. A ﬁrst look into deﬁoracles. arXiv preprint arXiv:2005.04377, 2020.
+[57] Loi Luu, Duc-Hiep Chu, Hrishi Olickel, Prateek Saxena, and Aquinas Hobor. Making smart contracts smarter. In
+Proceedings of the 2016 ACM SIGSAC conference on computer and communications security, pages 254–269,
+2016.
+[58] Amani Moin, Emin G¨un Sirer, and Kevin Sekniqi. A classiﬁcation framework for stablecoin designs. arXiv
+preprint arXiv:1910.10098, 2019.
+[59] Daniel Perez, Sam M Werner, Jiahua Xu, and Benjamin Livshits. Liquidations: Deﬁon a knife-edge. arXiv
+preprint arXiv:2009.13235, 2020.
+21
+DEFIRANGER: Detecting Price Manipulation Attacks on DeFi Applications
+A PREPRINT
+[60] Ingolf GA Pernice, Sebastian Henningsen, Roman Proskalovich, Martin Florian, Hermann Elendner, and Bj¨orn
+Scheuermann. Monetary stabilization in cryptocurrencies–design approaches and open questions. In 2019 Crypto
+Valley Conference on Blockchain Technology (CVCBT), pages 47–59. IEEE, 2019.
+[61] Kaihua Qin, Liyi Zhou, Benjamin Livshits, and Arthur Gervais. Attacking the deﬁecosystem with ﬂash loans
+for fun and proﬁt. arXiv preprint arXiv:2003.03810, 2020.
+[62] Michael Rodler, Wenting Li, Ghassan O Karame, and Lucas Davi. Sereum: Protecting existing smart contracts
+against re-entrancy attacks. arXiv preprint arXiv:1812.05934, 2018.
+[63] Clara Schneidewind, Ilya Grishchenko, Markus Scherer, and Matteo Maffei. ethor: Practical and provably sound
+static analysis of ethereum smart contracts. In Proceedings of the 2020 ACM SIGSAC Conference on Computer
+and Communications Security, pages 621–640, 2020.
+[64] Christof Ferreira Torres, Julian Sch¨utte, and Radu State. Osiris: Hunting for integer bugs in ethereum smart
+contracts. In Proceedings of the 34th Annual Computer Security Applications Conference, pages 664–676, 2018.
+[65] Petar Tsankov, Andrei Dan, Dana Drachsler-Cohen, Arthur Gervais, Florian Buenzli, and Martin Vechev. Se-
+curify: Practical security analysis of smart contracts. In Proceedings of the 2018 ACM SIGSAC Conference on
+Computer and Communications Security, pages 67–82, 2018.
+[66] Bin Wang, Han Liu, Chao Liu, Zhiqiang Yang, Qian Ren, Huixuan Zheng, and Hong Lei. Blockeye: Hunting
+for deﬁattacks on blockchain. arXiv preprint arXiv:2103.02873, 2021.
+[67] Dabao Wang, Siwei Wu, Ziling Lin, Lei Wu, Xingliang Yuan, Yajin Zhou, Haoyu Wang, and Kui Ren. Towards
+understanding ﬂash loan and its applications in deﬁecosystem. arXiv preprint arXiv:2010.12252, 2020.
+[68] Yongge Wang. Automated market makers for decentralized ﬁnance (deﬁ). arXiv preprint arXiv:2009.01676,
+2020.
+[69] Sam M Werner, Daniel Perez, Lewis Gudgeon, Ariah Klages-Mundt, Dominik Harz, and William J Knottenbelt.
+Sok: Decentralized ﬁnance (deﬁ). arXiv preprint arXiv:2101.08778, 2021.
+[70] Lei Wu, S. Wu, Yajin Zhou, Runhuai Li, Zongguo Wang, X. Luo, C. Wang, and K. Ren. Time-travel investigation:
+Towards building a scalable attack detection framework on ethereum. arXiv: Cryptography and Security, 2020.
+[71] Valentin W¨ustholz and Maria Christakis. Harvey: A greybox fuzzer for smart contracts. In Proceedings of the
+28th ACM Joint Meeting on European Software Engineering Conference and Symposium on the Foundations of
+Software Engineering, pages 1398–1409, 2020.
+[72] Jiahua Xu and Benjamin Livshits. The anatomy of a cryptocurrency pump-and-dump scheme. In 28th {USENIX}
+Security Symposium ({USENIX} Security 19), pages 1609–1625, 2019.
+[73] Mengya Zhang, Xiaokuan Zhang, Yinqian Zhang, and Zhiqiang Lin. {TXSPECTOR}: Uncovering attacks in
+ethereum from transactions. In 29th {USENIX} Security Symposium ({USENIX} Security 20), pages 2775–2792,
+2020.
+[74] Liyi Zhou, Kaihua Qin, Antoine Cully, Benjamin Livshits, and Arthur Gervais. On the just-in-time discovery of
+proﬁt-generating transactions in deﬁprotocols. arXiv preprint arXiv:2103.02228, 2021.
+[75] Liyi Zhou, Kaihua Qin, Christof Ferreira Torres, Duc V Le, and Arthur Gervais. High-frequency trading on
+decentralized on-chain exchanges, 2020.
+22

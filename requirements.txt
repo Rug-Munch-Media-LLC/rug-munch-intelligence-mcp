@@ -26,3 +26,4 @@ slowapi
 feedparser>=6.0.11
 sentry-sdk>=2.0.0
 docker>=7.0.0
+sentence-transformers>=3.0.0

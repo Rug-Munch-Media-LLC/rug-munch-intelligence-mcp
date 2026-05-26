@@ -1686,7 +1686,7 @@ async def get_intel_leaderboard(request: Request, period: str = "daily"):
     import glob
     from datetime import datetime, timezone, timedelta
     
-    scan_dir = "/root/.hermes/scans"
+    scan_dir = "/app/scans"
     now = datetime.now(timezone.utc)
     
     # Time window
@@ -1782,7 +1782,7 @@ async def get_intel_digest(request: Request):
     """Latest intelligence digest from accumulated scan data."""
     import glob
     
-    scan_dir = "/root/.hermes/scans"
+    scan_dir = "/app/scans"
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     digest_file = f"{scan_dir}/intel_digest_{today}.json"
     

@@ -1,0 +1,246 @@
+# **A STUDY OF SOME GENERALIZED CENTRAL SETS THEOREM NEAR ZERO ALONG PHULARA’S WAY** 
+
+## JYOTIRMOY PODDAR, SUJAN PAL 
+
+Abstract. The Central Sets Theorem near zero was originally proved by Hindman and Leader. Later a version of Central Sets Theorem was proved by De, Hindman and Strauss known to be the stronger Central Sets Theorem. Subsequently many other versions of Central Sets Theorem came, among which Dev Phulara proved the theorem for a sequence of central sets instead of taking one set. In this paper, we provide a more general version of the theorem along Dev Phulara’s way near zero. 
+
+## 1. Introduction 
+
+Ramsey theory is a very enriched branch of combinatorics which deals with the question that when a set with some particular structure, is partitioned into finitely many cells, then whether one of the cells also have that structure. This can be approached through many ways, like Ergodic theory and topological dynamical system, algebra or often using elementary combinatorics. An age old theorem in this area is the following, known as the celebrated van der Wearden’s theorem, which we state for a simple motivation. 
+
+**Theorem 1.1** (van der Wearden’s Theorem[12]) **.** Let l, r ∈ N. If we have an r colouring of N then if we are given a length l, there exists two numbers a, d ∈ N so that 
+
+**==> picture [98 x 11] intentionally omitted <==**
+
+is monochromatic. 
+
+After a long period, in late seventies, Furstenberg, in his famous work introduced a very interesting set dynamically, known as the central set [5] and proved that central sets have rich combinatorial structure, which is known as the Central Sets Theorem. 
+
+**Theorem 1.2** (Original Central Sets Theorem[5, Proposition 8.21]) **.** Let C be a central subset of N, let k ∈ N, and for each i ∈{1, 2, . . ., k}, let ⟨yi,n⟩n[∞] =1[be][a] sequence in Z. There exist sequences ⟨an⟩[∞] n=1[in][Z][and][⟨][H][n][⟩][∞] n=1[in][P][f][ (][N][)][such] that 
+
+(1) For each n ∈ N, max Hn< min Hn+1 , and 
+
+**==> picture [242 x 47] intentionally omitted <==**
+
+Key words and phrases. Central sets, Central Sets Theorem, algebra of Stone-Čech compactification of descrete semigroup, Ultrafilter near zero. 
+
+1 
+
+2 
+
+SOME GENERALIZED CENTRAL SETS THEOREM ALONG PHULARA’S WAY 
+
+Later in nineties, Hindman and Bergelson took a giant leap in this area by studying central sets with the help of algebraic structure of Stone-Čech compactification of natural numbers [2], which we will discuss in the next section. One of the advantages of the definition by Bergelson and Hindman over the earlier one is that from this definition it can be stated easily that a super set of a central set is again central. From the origin of Furstenberg’s Central Sets Theorem following extensions of Central Sets Theorem has been established. Hindman, Maleki and Strauss proved a version of Central Sets Theorem in [8], taking countably infinitely many sequences and De, Hindman and Strauss proved a version of Central Sets Theorem in [3], taking all sequences at a time. The key focus of our work is also in this direction, where we will provide several versions of Central Sets Theorem. 
+
+In case of βN it may be observed that idempotents live only at infinity, but if we turn our attention to dense subsemigroups of (R, +) then idempotents live also near 0. The idea first appeared in [7]. They showed that there are localized minimal idempotents near 0 all of whose members satisfy some localized Central Sets Theorem conclusion. 
+
+**Definition 1.3.** Let S be a dense subsemigroup of ((0, ∞) , +). Then we define the following, 
+
+**==> picture [295 x 25] intentionally omitted <==**
+
+**Theorem 1.4** (Central Sets Theorem near 0) **.** Let S be a dense subsemigroup of ((0, ∞) , +) and let A be a central set near 0. If we take Y = ⟨⟨yi,t⟩[∞] t=1[⟩][∞] i=1[∈Z][,] then there exist sequences ⟨an⟩[∞] n=1[in][S][and][⟨][H][n][⟩][∞] n=1[in][P][f][ (][N][)][such][that] (a) for each n ∈ N, an < n[1][and][max H][n][< min H][n][+1][and] (b) for each f ∈{f | f : N → N and for all n ∈ N, f (n) ≤ n}, 
+
+**==> picture [150 x 31] intentionally omitted <==**
+
+Proof. [7, Theorem 4.11]. 
+
+**==> picture [9 x 8] intentionally omitted <==**
+
+In [1] the authors extended this theorem for general semigroups. The above idea has been generalized in [11] to get notions of largeness with respect to filters. Following [11] a version of Central Sets Theorem was proved in [6]. 
+
+In recent days Dev Phulara provided a very much generalized form of the Central Sets Theorem in [10], not merely for a single central set but for a sequence of central sets. This work extended the work of De, Hindman and Strauss of [3], and this is the key motivation of our work and so we mention that theorem here. Some notations used in the following theorem are new and will be defined in the next section. 
+
+**Theorem 1.5.** Let (S, ·) be a semigroup and r be an idempotent in J (S) and let ⟨Cn⟩[∞] n=1[be][a][sequence][of][members][of][r][.][Then][there][exist][functions] N m : Pf � S� → N, α ∈×F ∈Pf (NS)S[m][(][F][ )+1] and τ ∈×F ∈Pf (NS)Jm(F ) such that (1) if F, G ∈Pf �NS� and G ⊊ F , then τ (G) (m (G))< τ (F ) (1) and 
+
+3 
+
+SOME GENERALIZED CENTRAL SETS THEOREM ALONG PHULARA’S WAY 
+
+N (2) when n ∈ N, G1, G2, . . . , Gn ∈Pf � S�, G1 ⊊ G2 ⊊ . . . ⊊ Gn, and for each i ∈{1, 2, . . . , n}, fi ∈ Gi, and l =| G1 | one has 
+
+**==> picture [360 x 55] intentionally omitted <==**
+
+The importance of Phulara’s version over the previous ones is that for all the members of the sequence ⟨Cn⟩[∞] n=1[of][members][of][the][idempotent][r][there][exists] single 
+
+**==> picture [278 x 15] intentionally omitted <==**
+
+But we have to pay a price for that, as the sequence G1 ⊊ G2 ⊊ . . . ⊊ Gn of Pf �NS� starts from the position of the central set of consideration. The paper has been organised as follows. In the next section we are going to discuss many important definitions and required preliminary ideas for the understanding of the paper, namely some algebra of the Stone-Čech compactification and concepts of idempotents near 0. In section 3 we will prove the Central Sets Theorem near zero along the idea of Phulara and a consequence. 
+
+## 2. Definitions and Preliminaries 
+
+We now give a brief review about the Stone-Čech compactification of a discrete semigroup. Let (S, ·) be any discrete semigroup and denote its Stone-Čech compactification byidentified with the principal ultrafilters.βS. βS is the set of all ultrafiltersThe basis for the topology ison S, where the points�A¯ : Aof ⊆S Sare�, where A[¯] = {p ∈ βS : A ∈ p}. The operation of S can be extended to βS making (βS, ·) a compact, right topological semigroup with S contained in its topological center. That is, for all p ∈ βS, the function ρp : βS → βS is continuous, where ρp (q) = q · p and for all x ∈ S, the function λx : βS → βS is continuous, where λx (q) = x · q. For p, q ∈ βS and A ⊆ S, A ∈ p · q if and only if �x ∈ S : x[−][1] A ∈ q� ∈ p, where x[−][1] A = {y ∈ S : x · y ∈ A}. Since βS is a compact Hausdorff right topological semigroup, it has a smallest two sided ideal denoted by K (βS), which is the union of all of the minimal right ideals of S, as well as the union of all of the minimal left ideals of S. Every left ideal of βS contains a minimal left ideal and every right ideal of βS contains a minimal right ideal. The intersection of any minimal left ideal and any minimal right ideal is a group, and any two such groups are isomorphic. Any idempotent p in βS is said to be minimal if and only if p ∈ K (βS). Though Central sets was defined dynamically, there is an algebraic counterpart of this definition, was established by V. Bergelson and N. Hindman in [2] as mentioned in the introduction. 
+
+**Definition 2.1.** Let S be a discrete semigroup. Then a subset A of S is called central if and only if there is some minimal idempotent p such that A ∈ p. 
+
+In this context we now need to define a few combinatorially rich sets which arises now and then in Ramsey theory, later we will also give these definitions in other settings according as our requirement. 
+
+**Definition 2.2.** Let (S, ·) be a semigroup and A ⊆ S, then 
+
+4 
+
+SOME GENERALIZED CENTRAL SETS THEOREM ALONG PHULARA’S WAY 
+
+- (1) The set A is thick if and only if for any F ∈Pf (S), there exists an element x ∈ S such that F · x ⊆ A. For example one can see[�] n∈N[[2][n][,][ 2][n][ +][ n][]][is][a] thick set in N. 
+
+- (2) The set A is called syndetic if and only if there exists a finite subset G of S such that[�] t∈G[t][−][1][A][ =][ S][.][For][example the][set of even and odd numbers] are both syndetic in N. 
+
+- (3) T = S[N] = {f |f : N → S}. 
+
+- (4) For m ∈ N, Jm = {(t (1) , . . . , t (m)) ∈ N[m] : t (1) < . . . < t (m)} . 
+
+- (5) Given m ∈ N, a ∈ S[m][+1] , t ∈Jm and f ∈ F , 
+
+**==> picture [214 x 37] intentionally omitted <==**
+
+where the terms in the product[�] are arranged in increasing order. 
+
+- (6) A ⊆ S is called a J-set iff for each F ∈Pf (T ), there exists m ∈ N, a ∈ S[m][+1] , t ∈Jm such that, for each f ∈T , 
+
+**==> picture [76 x 11] intentionally omitted <==**
+
+(7) If the semigroup S is commutative, the definition is rather simple. In that case, a set A ⊆ S is a J-set if and only if whenever F ∈Pf �NS�, there exist a ∈ S and H ∈Pf (N), such that for each f ∈ F , a +[�] t∈H[f][(][t][)][ ∈][A][.] 
+
+It shouldbe noted that a set is thick if it contains a translation of any finite subset. Also with a finite translation, if the set covers the entire semigroup, then it will be called a Syndetic set. 
+
+We next define the notion of idempotents near zero, originally introduced by Hindman and Leader in [7]. 
+
+We work with S = ((0, ∞) , +). We have been considering those semigroups which are dense in S with respect to the natural topology of S. When we want to discuss the Stone-Čech compactification of such a semigroup S, we have to shift to Sd, the set S with the discrete topology. 
+
+**Definition 2.3.** Let S be a dense subset of ((0, ∞) , +). Then 
+
+**==> picture [192 x 12] intentionally omitted <==**
+
+We now have to recall the notions of combinatorially rich sets near zero from the literature. 
+
+**Definition 2.4.** Let S be a dense subsemigroup of ((0, ∞) , +). and let A ⊆ S. 
+
+- (1) A is a central set near zero if and only if there exists an idempotent p in the smallest ideal of 0[+] (S) with A ∈ p. 
+
+- (2) A subset A of (0, 1) is Syndetic near 0 if and only if ∀ǫ > 0 there exists F ∈Pf (0, ǫ) and δ > 0 such that (0, δ) ⊆[�] t∈F[(][−][t][ +][ A][)][.] 
+
+- (3) We say that f : N → S is near zero if lim (f (N)) = 0. The collection of all sequences that is near zero is denoted by T0. 
+
+- (4) A subset A of (0, 1) is called J-set near 0 iff whenever F ∈Pf (T0) and δ > 0 , there exists a ∈ S ∩ (0, δ) and H ∈Pf (N) such that for each f ∈ F , a +[�] t∈H[f][ (][t][)][ ∈][A][.] 
+
+- (5) J0 (S) = {p ∈ 0[+] : ∀A ∈ p, A is a J-set near 0}. 
+
+5 
+
+SOME GENERALIZED CENTRAL SETS THEOREM ALONG PHULARA’S WAY 
+
+## 3. Central Sets Theorem Near Zero Along Phulara’s Way 
+
+In this section we will show that the Central Sets Theorem near 0 can be modified in the direction of Dev Phulara, i.e we show that the conclusion of the theorem is true if we take a sequence of central sets instead of a single central set. But before that we need to state a lemma 
+
+**Lemma 3.1.** Let, S be a dense subsemigroup of ((0, ∞) , +) and A ⊆ S is a J−set near zero. Whenever m ∈ N and F ∈Pf (T0) and δ > 0, there exist a ∈ S ∩ (0, δ) and H ∈Pf (N) such that min H > m and for each f ∈ F , a +[�] t∈H[f][ (][t][)][ ∈][A][.] Proof. [1, Lemma 3.3]. □ 
+
+Now we are in a position to prove our required version. 
+
+**Theorem 3.2.** Let S be a dense subsemigroup of ((0, ∞) , +), let p be an idempotent in J0 (S), and let ⟨Cn⟩n[∞] =1[be][a][sequence][of][members][of][p][.][Then][for][each][δ][∈][(0][,][ 1)][ ,] there exists αδ : Pf (T0) → S and Hδ : Pf (T0) →Pf (N)such that 
+
+1. αδ (F ) < δ for each F ∈Pf (T0); 
+
+2. if F, G ∈Pf (T0) , F ⊊ G, then maxHδ (F ) < minHδ (G) and 
+
+3. if m ∈ Nand G1, G2, ..., Gm ∈Pf (T0) , G1 ⊊ G2 ⊊ . . . ⊊ Gm, fi ∈ Gi for each i = 1, 2, . . ., m, and |G1| = r, then 
+
+**==> picture [162 x 36] intentionally omitted <==**
+
+Proof. We may assume that ⟨Cn⟩n[∞] =1[to][be][decreasing.] For each n, let Cn[∗][=] {x ∈ Cn : −x + Cn ∈ p}. Then Cn[∗][∈][p][and][by][[9,][Corollary][4.14],][for][each][x][ ∈][C] n[∗][,] −x + Cn[∗][∈][p][.] 
+
+Let δ ∈ (0, 1) be given. We define αδ ∈ S and Hδ ∈Pf (N) for F ∈Pf (T0) by induction on | F | so that 
+
+(1) αδ (F ) < δ. 
+
+(2) if F, G ∈Pf (T0) , G ⊊ F , then maxHδ (G) < minHδ (F ) . 
+
+(3) if m ∈ Nand ∅̸= G1 ⊊ G2 ⊊ . . . ⊊ Gm = F , fi ∈ Gi,for each i = 1, 2, . . . , m, and |G1| = r, then 
+
+**==> picture [162 x 36] intentionally omitted <==**
+
+Let f ∈T0 and let F = {f }. Since C1 ∈ p and p ∈ J0 (S), C1[⋆][is][J-set][near][zero,] so for given δ > 0,pick a ∈ S ∩ (0, δ) and L ∈Pf (N) such that a +[�] t∈L[f][ (][t][)][ ∈][C] 1[⋆][.] Let αδ (F ) = a and Hδ (F ) = L. Then thehypotheses are satisfied, (2) is vacuously true. 
+
+Now assume that F ∈Pf (T0), | F |= n > 0, and αδ (G) and Hδ (G) have been defined for all proper subsets G of F , satisfying the induction hypotheses. Let Kδ =[�] {Hδ (G) : ∅̸= G ⊊ F } and let d = max Kδ. For r ∈{1, 2, . . ., n − 1}, let 
+
+**==> picture [284 x 43] intentionally omitted <==**
+
+6 
+
+SOME GENERALIZED CENTRAL SETS THEOREM ALONG PHULARA’S WAY 
+
+Then eachMδ[r][is][finite][and][by][hypothesis][(3),][M][ r] δ[⊆][C] r[⋆][.][Let] 
+
+**==> picture [136 x 33] intentionally omitted <==**
+
+Then, A ∈ p,and so A is a J-set near zero. By 3.1 pick a ∈ S ∩ (0, δ) and L ∈Pf (N) such that min L > d and for each f ∈ F , a +[�] t∈L[f][ (][t][)][∈][A][.][Let] αδ (F ) = a and Hδ (F ) = L. Hypothesis (1) holds directly and since min L > d, hypothesis (2) holds. 
+
+To verify hypothesis (3) let ∅̸= G1 ⊊ G2 ⊊ . . . ⊊ Gm = F , let f1, f2, . . . , fm be given such that each fi ∈ Gi, and let r =| G1 |. and let for each i ∈ {1, 2, . . . , s} ,fi ∈ Gi. Assume first that m = 1. Then hypothesis (3) holds because αδ (F ) +[�] t∈Hδ (F )[f][ (][t][)][ ∈][A][ ⊆][C] n[∗][.] 
+
+Now assume that m > 1, and let r =| G1 |. Let x =[�][m] i=1[−][1] �αδ (Gi) +[�] t∈Hδ (Gi)[f][i][ (][t][)] �. Then x ∈ Mδ[r][,][and][α][δ][ (][F][) +][ �] t∈Hδ (F )[f][m][ (][t][)][ ∈][A][ ⊆][(][−][y][ +][ C] r[⋆][)][as][required.] □ 
+
+We now discuss a combinatorial result which is classic but we generalize together for near zero and along a sequence of central sets. 
+
+**Theorem 3.3.** Let S be a dense subsemigroup of ((0, ∞) , +). Let (Cn)[∞] n=1[be][a] sequence of central subsets belonging to an idempotent p ∈ J0 (S). Let k ∈ N and for each l ∈{1, 2, . . . , k} let ⟨yl,n⟩[∞] n=1[be][a][sequence][in][T][0][.][Then][there][exists][a][sequence] ⟨an⟩[∞] n=1[in][T][0][and][a][sequence][ ⟨][H][n][⟩][∞] n=1[in][P][f][ (][N][)][such that][max][ H][n][<][ min][ H][n][+1][for] each n ∈ N and such that for each l ∈{1, 2, . . . , k}and F ∈Pf (N) with min F = m, we have 
+
+**==> picture [122 x 32] intentionally omitted <==**
+
+Proof. We may assume that (Cn)[∞] n=1[is][downward][directed.][Pick][α][δ][and][H][δ][as] guaranteed by 3.2. Now choose ⟨γu⟩[∞] u=1[in][this][manner.][Let] 
+
+**==> picture [204 x 13] intentionally omitted <==**
+
+which is due to the non-triviality of S. For u ∈ N, pick 
+
+**==> picture [306 x 13] intentionally omitted <==**
+
+This choiceis possible due to the fact that T0 is Now 
+
+Gu = �⟨y1,n⟩[∞] n=1[,][ ⟨][y][2][,n][⟩][∞] n=1[, . . . ,][ ⟨][y][k,n][⟩][∞] n=1� ∪{γ1, γ2, . . . , γu} . Let a[u] δ[=][α][δ][ (][G][u][)][and][H] δ[u][=][H][δ][ (][G][u][)][.][Let][l][∈{][1][,][ 2][, . . . , k][}][and][let][F][∈P][f][ (][N][)] which is enumerated as {n1, n2, . . . , ns} so that m = n1. Then we have 
+
+**==> picture [136 x 10] intentionally omitted <==**
+
+Also we have that for each i ∈{1, 2, . . . , s}, ⟨yl,t⟩[∞] t=1[∈][G][n][i][,][and][|][ G][n][1][|][=][ m][ +][ k][.][So] we have, 
+
+**==> picture [337 x 55] intentionally omitted <==**
+
+7 
+
+SOME GENERALIZED CENTRAL SETS THEOREM ALONG PHULARA’S WAY 
+
+**Acknowledgment:** The second author acknowledges the Grant CSIR-UGC NET fellowship with file No. 09/106(0199)/2019-EMR-I of CSIR-UGC NET. 
+
+## References 
+
+- [1] E. Bayatmanesh, M. Akbari Tootkaboni, Central sets theorem near zero, Topology and its Applications 210(2016) 70-80. 
+
+- [2] V. Bergelson, N. Hindman, Nonmetrizable topological dynamics and Ramsey theory, Trans. Amer. Math. Soc. 320 (1990), 293-320. 
+
+- [3] D. De, N. Hindman and D. Strauss, A new and stronger Central Sets Theorem, Fundamenta Mathematicae 199 (2008), 155-175. 
+
+- [4] D. De, N. Hindman and D. Strauss, Sets central with respect to certain subsemigroups of βSd, Topology Proceedings 33 (2009), 55-79. 
+
+- [5] H. Furstenberg, Recurrence in ergodic theory and combinatorial number theory, Princeton University Press, Princeton, New Jersey, (1981) 
+
+- [6] S. Goswami , J. Poddar, Central Sets Theorem along filters and some combinatorial consequences, Indagationes Mathematicae 33 (2022), 1312-1325. 
+
+- [7] N. Hindman, I. Leader, The semigroup of ultrafilters near 0, Semigroup Forum 59 (1999), 33-55. 
+
+- [8] N. Hindman, A. Maleki and D. Strauss, Central sets and their combinatorial characterization, J. Comb. Theory (Series A) 74 (1996), 188-208. 
+
+- [9] N.Hindman, D.Strauss, Algebra in the Stone-Čech Compactifications: theory and applications, second edition, de Gruyter, Berlin, 2012. 
+
+- [10] D.Phulara, A generalized Central Sets Theorem and applications, Topology and its Applications 196(2015) 92-105. 
+
+- [11] O. Shuungula,Y. Zelenyuk and Y. Zelenyuk, The closure of the smallest ideal of an ultrafilter semigroup, Semigroup Forum 79 (2009) , 531-539. 
+
+- [12] B. van der Waerden, Beweis einer Baudetschen Vermutung, Nieuw Arch. Wiskunde 19 (1927), 212-216. 
+
+Department of Mathematics, Techno India University, Saltlake Sector V, Kolkata700091, West Bengal, India 
+
+Email address: poddarjyotirmoy5@gmail.com 
+
+- Department of Mathematics, University of Kalyani, Kalyani, Nadia-741235, West 
+
+- Bengal, India 
+
+   - Email address: sujan2016pal@gmail.com 
+

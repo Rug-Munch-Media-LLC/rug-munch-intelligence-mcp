@@ -1,0 +1,515 @@
+**EQUIBIND: Geometric Deep Learning for Drug Binding Structure Prediction** 
+
+**Hannes St¨ark**[* 1] **Octavian-Eugen Ganea**[* 1] **Lagnajit Pattanaik**[1] **Regina Barzilay**[1] **Tommi Jaakkola**[1] 
+
+## **Abstract** 
+
+Predicting how a drug-like molecule binds to a specific protein target is a core problem in drug discovery. An extremely fast computational binding method would enable key applications such as fast virtual screening or drug engineering. Existing methods are computationally expensive as they rely on heavy candidate sampling coupled with scoring, ranking, and fine-tuning steps. We challenge this paradigm with EQUIBIND, an SE(3)-equivariant geometric deep learning model performing direct-shot prediction of both i) the receptor binding location (blind docking) and ii) the ligand’s bound pose and orientation. EquiBind achieves significant speed-ups and better quality compared to traditional and recent baselines. Further, we show extra improvements when coupling it with existing fine-tuning techniques at the cost of increased running time. Finally, we propose a novel and fast fine-tuning model that adjusts torsion angles of a ligand’s rotatable bonds based on closed-form global minima of the von Mises angular distance to a given input atomic point cloud, avoiding previous expensive differential evolution strategies for energy minimization. 
+
+## **1. Introduction** 
+
+Drug discovery is an expensive process, e.g., a single drug costs around 1 billion dollars and takes 10 years of development and testing before potentially being FDA approved. Moreover, this process can fail at any point, e.g., due to unforeseen side effects or experimental disproof of the promised therapeutic efficacy. Worse, there are 10[60] possible drug-like molecules (Reymond & Awale, 2012), going far beyond current experimental capabilities. 
+
+> *Equal contribution 1Massachusetts Institute of Technology, MIT, Cambridge, MA, USA. Correspondence to: Hannes Stark¨ _<_ hstark@mit.edu _>_ . 
+
+_Proceedings of the 39[th] International Conference on Machine Learning_ , Baltimore, Maryland, USA, PMLR 162, 2022. Copyright 2022 by the author(s). 
+
+Accurate computational methods, e.g., deep learning (DL) based, can drastically reduce the molecular search space, but need to be extremely fast to scan the vast biological and chemical spaces for both desired and unexpected effects. For instance, a novel drug that inactivates an important cancer protein might negatively inhibit other essential proteins in the human body, potentially resulting in life-threatening side effects. Given that the human proteome contains up to 100 000 protein types, the current hope is to scan for these interactions in a computational manner before bringing a few promising candidates to _in vitro_ and _in vivo_ testing. 
+
+A core problem in drug discovery is understanding how drug-like molecules (ligands) interact and form complexes with target proteins (receptors) – _drug binding_ – which is a prerequisite for virtual screening. This is a difficult problem with different facets and constraints: binding kinetics, conformational changes (internal molecular flexibility), and chemical and geometrical atomic interaction types are part of the domain knowledge describing ligand-protein binding mechanisms (Du et al., 2016). For instance, classical models for molecular complex formation are ”lock-and-key”, ”induced fit”, and ”conformational selection”, while hydrophobic, hydrogen-bonding, and _π_ -stacking are the most frequent atomic binding interactions, but other types often occur during binding (de Freitas & Schapira, 2017). 
+
+Current _in silico_ approaches for (3D) structural drug binding achieve high quality at a significant computational cost: in our experiments the GNINA method (McNutt et al., 2021) takes on average 146 seconds for a single ligand-receptor pair, while the popular commercial software Glide (Halgren et al., 2004) is up to 9 times slower. This is caused by the common strategy employed by all previous binding methods: first, a large set of candidate complexes (e.g., millions) is generated via thorough sampling of possible binding locations and poses (Hassan et al., 2017); then, scoring and ranking steps are used to retrieve the most promising instances; finally, an energy-based fine-tuning method is employed to best fit the ligand in the respective pocket locations. 
+
+Here, we introduce EQUIBIND, a novel geometric & graph deep learning model for structural drug binding – Figure 1. Inspired by Ganea et al. (2021a), we exploit graph matching networks (GMN) (Li et al., 2019) and E(3)-equivariant graph neural networks (E(3)-GNN) (Satorras et al., 2021) 
+
+**EQUIBIND: Geometric Deep Learning for Drug Binding Structure Prediction** 
+
+_Figure 1._ High-level overview of the structural drug binding problem tackled by EQUIBIND. 
+
+to perform a direct prediction of the ligand-receptor complex structure without relying on heavy sampling as prior work, thus achieving **significant inference time speed-ups** . Moreover, since 3D structural data suffers from scarcity (e.g., only around 19K experimental complexes are publicly available in the PDBbind database), it is crucial to inject the right physical, chemical, or biological _inductive biases_ into DL models to avoid learning these priors from insufficient amounts of data and to create trustable models. Towards this goal, EQUIBIND: 
+
+- guarantees independence to the initial 3D placements and orientations of the two molecules, i.e., the exact same complex is always predicted for the same input unbound structures, 
+
+- incorporates an efficient mechanism for biologically plausible ligand flexibility by only altering torsion angles of rotatable bonds while keeping local structures (bond angles and lengths) fixed, 
+
+- utilizes a non-intersection loss to prevent steric clashes or unrealistic van der Waals interactions. 
+
+We focus on the _blind docking_ scenario, i.e., zero knowledge of the protein’s binding site or pocket. However, our method can easily be adapted to situations where the approximate binding location is known. Similar to (Zhang et al., 2020), we argue that errors in the ground truth binding pocket conformation heavily affect traditional docking methods that are conditioned on the receptor active site (Lang et al., 2009; Trott & Olson, 2010). In practice, the ground truth 3D locations of the binding atoms might be low-resolution, might not be known at all (e.g., for novel antigens), or we might be interested in discovering new druggable locations on a protein’s surface that were previously thought to be undruggable (e.g. exploring allosteric binding locations rather than orthosteric sites). 
+
+Empirically, we investigate two settings: re-docking (i.e., taking the bound ligand structure out of a complex and asking the model to dock it) and flexible self-docking (i.e., ligands have no bound structure knowledge prior to docking). We assume a rigid receptor, but we model ligand flexibility by first predicting an atomic point cloud of the deformed 
+
+molecule and then employing a fast algorithm to extract internal changes of rotatable bonds’ torsion angles that would match the point cloud as well as possible. Instead of minimizing the root-mean-square deviation (RMSD) using expensive optimization strategies (e.g., differential evolution approaches (Mendez-Lucio et al.´ , 2021)), we maximize the log-likelihood of a von Mises distribution that fits the torsion angles, proving closed-form expressions of the global optimum. Experimentally, we show improved quality in various metrics over popular and recent state-of-the-art baselines at a fraction of the running time. Finally, we show the power of combining EquiBind with existing energy-based methods to realize a hybrid DL approach. Indeed, we believe the future of computational drug discovery will follow the paradigm demonstrated here. 
+
+## **2. Related Work** 
+
+**Protein and molecular structure prediction.** Obtaining experimental 3D structural data of molecules and proteins is a highly expensive process. However, very recent DL models have produced a breakthrough in computational protein folding (Jumper et al., 2021b; Baek et al., 2021) and fast generation of small molecule low-energy conformation ensembles (Ganea et al., 2021b; Luo et al., 2021; Xu et al., 2020; Shi et al., 2021; Du et al., 2022). These methods aim to accelerate discovering structures and complement experimental data in various applications such as drug discovery. 
+
+**Protein representations (for DL-based molecular interactions).** To be useful for predicting molecular interactions, proteins must be modeled in specific ways to account for different views: backbone & side-chains, protein surface, atomic point cloud, or amino-acid sequence. Somnath et al. (2021) create a hierarchical representation of proteins and prove its utility in binding and function prediction. Gainza et al. (2020); Sverrisson et al. (2021) leverage geometric deep learning and mesh convolutional neural networks (CNN) to embed protein surface patches into fingerprints and allow for fast scanning and binding site identification, removing the need for handcrafted or expensive pre-computed features. However, these methods do not perform the full structural blind docking task that in- 
+
+**EQUIBIND: Geometric Deep Learning for Drug Binding Structure Prediction** 
+
+volves prediction of the binding site, of the orientations and placements of the two molecular structures, and of the internal conformational deformations during binding. Various other protein representations have been proposed for (graph) DL methods for individual structure prediction (Jing et al., 2020), protein-protein interactions (Dai & Bailey-Kellogg, 2021; Eismann et al., 2020; Townshend et al., 2019), or protein function prediction (Gligorijevi´c et al., 2021). 
+
+**Druggable binding site identification.** Traditional computational methods for scanning proteins for their most ”druggable” areas have leveraged various views such as utilizing the protein’s 3D structure or/and residue sequence, extracting geometric features, building large template libraries, or relying on energy-based models (Macari et al., 2019). Recently, DL changed this paradigm, e.g., using 3D CNNs (Aggarwal et al., 2021; Jimenez et al.´ , 2017; Torng & Altman, 2019b) or sequence models (Sankararaman et al., 2010). 
+
+**Popular and more recent drug binding models.** Representative docking software for drug-like molecules are AutoDock Vina (Trott & Olson, 2010) and its various extensions for improving speed (Trott & Olson, 2010), scoring (Koes et al., 2013) or for blind docking (Hassan et al., 2017). As mentioned in Section 1, these methods employ a multi-stage strategy based on heavy candidate sampling, scoring, ranking, and fine-tuning. Various subsequent methods improved parts of this pipeline (Zhang et al., 2020; Mohammad et al., 2021; McNutt et al., 2021; Francoeur et al., 2020), such as scoring functions (see below) or by incorporating prior knowledge of the ligand and receptor when bound to other molecules (Lam et al., 2018; 2019). 
+
+**GNNs and CNNs for binding scoring functions and binding affinity prediction.** Deep learning on 3D voxel images (via 3D CNNs) or interaction graphs (via GNNs) have improved the traditional hand-designed scoring function used in AutoDock Vina, enabling better fine-tuning of predicted docked poses, as well as direct binding affinity prediction from the 3D complex (McNutt et al., 2021; Francoeur et al., 2020; Ragoza et al., 2017; Wallach et al., 2015; Lim et al., 2019; Morrone et al., 2020; Jiang et al., 2021; Shen et al., 2021; Jastrzebski et al., 2020; Bao et al., 2021; Torng & Altman, 2019a; Li et al., 2021). However, some methods (Karimi et al., 2019; Gao et al., 2018) have found that using the protein sequence and the drug SMILES string already provide competitive predictions for binding affinity without the need for 3D structural data. 
+
+Closer to our approach, Mendez-Lucio´ et al. (2021) has shown that optimizing the ligand’s global 3D position and orientation and the torsion angles of rotatable bonds to minimize a GNN based scoring function improves fine-tuning of the ligand into the active site and its predicted bound pose. However, they employ differential evolution for this 
+
+optimization, and we find it to be slow in practice (e.g., 29 sec for a 5-rotatable bond molecule and 50 min for a 44rotatable bond molecule). Instead, our proposed EQUIBIND optimizes in closed form a ligand’s torsion angles to match a predicted atomic point cloud in less than 1 sec. 
+
+**Applications of drug binding methods.** Computational docking methods are employed for various facets of drug discovery, e.g., fast virtual screening (Gniewek et al., 2021; Jastrzebski et al., 2020) or de novo binder generation (Masuda et al., 2020; Imrie et al., 2021; Drot´ar et al., 2021). 
+
+**Deep learning for protein-protein docking.** A related problem is _protein-protein docking_ in which recent methods have performed direct prediction of the complex structure from the two concatenated input sequences using evolutionary information (Evans et al., 2021), or have leveraged geometric deep learning to model rigid body docking (Ganea et al., 2021a) or side-chains structures (Jindal et al., 2021). 
+
+**Incorporating Euclidean symmetries into GNNs.** Injecting Euclidean 3D transformations into geometric DL models has become possible using equivariant message passing layers (Cohen & Welling, 2016; Thomas et al., 2018; Fuchs et al., 2020; Satorras et al., 2021; Brandstetter et al., 2021; Batzner et al., 2021). Our method follows Ganea et al. (2021a) to incorporate SE(3) pairwise equivariance into message passing neural networks for the drug binding problem. However, different from this method, we go beyond rigid docking and model ligand conformational flexibility. 
+
+## **3. EQUIBIND Model** 
+
+We describe our EQUIBIND model, highlighted in Figure 1 and detailed in Figure 2. It takes as input a ligand molecular graph with a random associated unbound 3D conformer (e.g., generated using RDKit/ETKDG (Riniker & Landrum, 2015)), as well as a receptor-bound structure. As previously noted, we only model ligand flexibility in this work, assuming a rigid protein conformation. 
+
+**K-NN graph representations.** We represent both input molecules as spatial k-nearest neighbor (k-NN) graphs. The ligand graph _G_ = ( _V, E_ ) uses atoms as nodes with their respective 3D coordinates from the unbound conformer denoted as **X** _∈_ R[3] _[×][n]_ , and initial features **F** _∈_ R _[d][×][n]_ (e.g., atom type). Edges include all atom pairs within a distance cutoff of 4 A. The receptor graph[˚] _G[′]_ = ( _V[′] , E[′]_ ) has residues as nodes and their 3D coordinates **X** _[′] ∈_ R[3] _[×][m]_ are given by the _α_ -carbon locations. Each node is connected in the graph to the closest 10 other nodes at less than 30 A distance.[˚] The receptor node features **F** _[′] ∈_ R _[d][×][m]_ and the ligand features are detailed in Appendix C. 
+
+**Independent E(3)-equivariant transformations.** Similar to (Ganea et al., 2021a), an important geometric induc- 
+
+**EQUIBIND: Geometric Deep Learning for Drug Binding Structure Prediction** 
+
+_Figure 2._ EQUIBIND model architecture. 
+
+tive bias is to predict the same binding complex no matter how the initial molecules are positioned and oriented in space. This is especially needed for data-scarce problems such as structural drug binding. Towards this goal, we use _Independent E(3)-Equivariant Graph Matching Network_ (IEGMN) (Ganea et al., 2021a) which combines Graph Matching Networks (Li et al., 2019) and E(3)-Equivariant Graph Neural Networks (Satorras et al., 2021). This architecture jointly transforms both features and 3D coordinates to perform _intra_ and _inter_ neural graph message passing. Formally, IEGMN( **X** _,_ **F** _,_ **X** _[′] ,_ **F** _[′]_ ) = **Z** _∈_ R[3] _[×][n] ,_ **H** _∈_ R _[d][×][n] ,_ **Z** _[′] ∈_ R[3] _[×][m] ,_ **H** _[′] ∈_ R _[d][×][m]_ , where **Z** _,_ **Z** _[′]_ are transformed coordinates, while **H** _,_ **H** _[′]_ are feature embeddings. The core property of IEGMNs is that stacking any number of such layers guarantees that any independent rotation and translation of the original input structures will be exactly reflected in the outputs, i.e., IEGMN( **UX** + **b** _,_ **F** _,_ **U** _[′]_ **X** _[′]_ + **b** _[′] ,_ **F** _[′]_ ) = **UZ** + **b** _,_ **H** _,_ **U** _[′]_ **Z** _[′]_ + **b** _[′] ,_ **H** _[′]_ for any orthogonal matrices **U** _,_ **U** _[′] ∈_ **SO** (3) and translation vectors **b** _,_ **b** _[′] ∈_ R[3] . In practice, the **Z** _,_ **H** _,_ **Z** _[′] ,_ **H** _[′]_ outputs shown in Figure 2 are obtained by stacking several IEGMN layers. Our choice for a single _l_ -th layer is: 
+
+**==> picture [237 x 75] intentionally omitted <==**
+
+**==> picture [238 x 85] intentionally omitted <==**
+
+where _aj→i_ are SE(3)-invariant attention coefficients derived from **H** embeddings, _N_ ( _i_ ) are the graph neighbors of node _i_ , **W** is a parameter matrix, and the various _ϕ_ functions are modeled using shallow neural networks, with _ϕ[x]_ outputting a scalar and others a d-dimensional vector. 
+
+When modeling ligand flexibility, we found it useful to incorporate additional geometric constraints on transformed coordinates through Ψ models described in Section 3.2.1. 
+
+**The role of Z.** The output of the coordinate E(3)-equivariant transformations denoted as **Z** and **Z** _[′]_ will be used in different roles: to identify the rigid body transformation and the binding site, as well as to model ligand flexibility by training **Z** to represent the deformed atomic point cloud. We detail both steps below. 
+
+## **3.1. Rigid transformation through binding keypoints** 
+
+To identify the rigid SE(3) transformation to dock the ligand in the right position and orientation, we follow (Ganea et al., 2021a) and compute ligand and receptor keypoints of size _K_ using an SE(3)-equivariant multi-head attention mech- _n m_ anism defined as **y** _k_ := _i_ =1 _[α] i[k]_ **[z]** _[i][,]_ **y** _k[′]_[:=] _j_ =1 _[β] j[k]_ **[z]** _[′] j_ where _αi[k]_[=] _[ softmax][i]_[(] ~~_√_~~[1] _d_ **[h]** 1 _[⊤] i_ **[U]** _[µ]_[(] _[ϕ]_[(] **[H]**[2][)))][ and similarly] defined _βj[k]_[are attention coefficients, with] **[ U]**[ a parametric] learnable matrix. These keypoints are trained to match the ground truth binding pocket points using an optimal transport loss that recovers their alignment (detailed in (Ganea et al., 2021a)). In our case, ground truth binding pocket points are defined as midpoints of segments connecting ligand atoms to receptor atoms (e.g., from side-chains) that are closer than 4 A . For models incorporating ligand flexibility,[˚] these pocket points are defined as all ligand atoms that are closer than 4 A to any receptor atom.[˚] When the ligand and receptor are separated, we seek to identify the corresponding binding sites, and their exact matching using the two pre- 
+
+**EQUIBIND: Geometric Deep Learning for Drug Binding Structure Prediction** 
+
+dicted keypoint sets **Y** _,_ **Y** _[′] ∈_ R[3] _[xK]_ . If predicted perfectly, the SE(3) transformation to superimpose **Y** and **Y** _[′]_ would precisely correspond to the binding SE(3) transformation to perform ligand docking. 
+
+## **3.2. Modeling Chemically Plausible Ligand Flexibility** 
+
+It has previously been assumed that the most flexible parts of drug-like molecules are rotatable bonds, while _local atomic structures (LAS)_ (bond lengths and adjacent bond angles) or small rings are mostly rigid (Trott & Olson, 2010; Zsoldos et al., 2007; Huang, 2018; Mendez-Lucio et al.´ , 2021). We here follow this hypothesis in two different ways as below. 
+
+We model ligand flexibility through **Z** , which will represent a good approximation of the deformed atomic point cloud of the original conformer (i.e., into its bound structure). We train our model with two extra loss function terms: ligandRMSD (Root-mean-square deviation) and Kabsch-RMSD[1] . 
+
+## 3.2.1. DISTANCE GEOMETRIC CONSTRAINTS 
+
+Our first goal is to enforce LAS distance constraints in the IEGMN layers after each coordinate transformation, i.e., through a tailored differentiable function Ψ, which we call _”LAS distance geometry (DG) projection.”_ While a hard constraint might be difficult to impose exactly, we find the following soft strategy to work well. Formally, the transformed coordinates **Z** satisfy the LAS DG constraints if they are a global minimum of the following function for a fixed (random low-energy unbound) conformer **X** : 
+
+**==> picture [221 x 84] intentionally omitted <==**
+
+where _d_ **X** ( _i, j_ ) = _∥xi − xj∥_ . Thus, our definition of Ψ is hard-coding a fixed number (T) of gradient descent layers that aim to minimize _S_ : 
+
+**==> picture [236 x 11] intentionally omitted <==**
+
+which is easy since gradients of _S_ have a simple closed-form expression. A similar approach can be employed for modeling various other rigid substructures such as aromatic rings. T and the correction step size _η_ are model hyperparameters chosen as described in Appendix C. 
+
+## 3.2.2. FAST POINT CLOUD LIGAND FITTING 
+
+However, while helpful for model training, the previous gradient descent-based projection is not guaranteed to en- 
+
+1RMSD after superimposition, or RMSD of atomic positions. 
+
+force hard LAS DG constraints and, thus, might produce implausible conformers in practice as we show in Figure 6. 
+
+To address this issue, we only change the torsion angles of the initial (RDKit) unbound conformer **X** to match **Z** as well as possible while keeping LAS fixed and, thus, hardguaranteeing chemically plausible output bound conformers. The output will be a new conformer **C** _∈_ R[3] _[xn]_ with _S_ ( **C** _,_ **X** ) = 0. First, **C** is initialized as **X** , and only its rotatable bonds’ torsion angles are changed. 
+
+A choice is to optimize **C** for minimizing Kabsch-RMSD( **Z** _,_ **C** ). However, such an approach requires an iterative optimization strategy of all torsion angles of rotatable bonds, which can be done using a differential evolution algorithm as in Mendez-Lucio et al.´ (2021), or other local random search strategies. This is computationally expensive (e.g., 51 minutes for a single 44 rotatable bond molecule) and might fail to find a good local minimum. A gradient-based method could better capture the various molecular interactions, but computing the gradients of a point cloud w.r.t. its bonds’ torsion angles is non-trivial given the geometric dependencies between dihedral angles, i.e., Equation (2). 
+
+We present a much cheaper alternative for which a closed form solution exists (does not require optimization): we compute the dihedral angles of rotatable bonds of **C** as maximum likelihood estimates of von Mises distributions on dihedral angles of **Z** . Formally, this reduces to the following maximization: 
+
+**==> picture [234 x 36] intentionally omitted <==**
+
+where ∠ **Z** ( _kij, ijl_ ) are the dihedral angles[2] of **Z** , and ∠( _kij, ijl_ ) are the dihedrals of **C** that we seek to optimize. 
+
+However, we have to explicitly take into account that _all the dihedral angles for the same rotatable bond (i,j) are coupled_ by the following constraint (Ganea et al., 2021b): 
+
+**==> picture [237 x 27] intentionally omitted <==**
+
+**==> picture [13 x 10] intentionally omitted <==**
+
+where ∠( _kij, k[′] ij_ ) and ∠( _ijl[′] , ijl_ ) depend only on the local structures of nodes _i_ and _j_ , respectively, thus will not change if the torsion angle of bond (i,j) changes. 
+
+To minimize Equation (1), we can simply do it independently per each rotatable bond ( _i, j_ ) _∈E_ . Let us fix one such bond ( _i, j_ ) and use the notations: ∆ _kl_ = ∠( _kij, ijl_ ) and _βkk′l′l_ = ∠( _kij, k[′] ij_ ) + ∠( _ijl[′] , ijl_ ). Additionally, for cos( _α_ ) _−_ sin( _α_ ) any angle _α_ , we define: **A** _α_ := and �sin( _α_ ) cos( _α_ ) � 
+
+2We use clockwise angles following the chemistry convention. 
+
+**EQUIBIND: Geometric Deep Learning for Drug Binding Structure Prediction** 
+
+cos( _α_ ) **s** _α_ := . Thus, we rewrite the constraint in Equa�sin( _α_ )� tion (2) as **s** ∆ _kl_ = **A** _βkk′ l′l_ **s** ∆ _k′ l′ , ∀k, k[′] ∈Ni, ∀l, l[′] ∈Nj_ . Equation (1) is then rewritten for bond (i,j), up to a constant: 
+
+**==> picture [174 x 25] intentionally omitted <==**
+
+Choosing any fixed _k_ 0 _∈Ni_ , _l_ 0 _∈Nj_ , the above becomes 
+
+**==> picture [223 x 24] intentionally omitted <==**
+
+where **v** :=[�] _k∈Ni_ � _l∈Nj_ **[A]** _[⊤] βkk_ 0 _l_ 0 _l_ **[s]** ∆ _[∗] kl_[.][This][has][the] closed form solution **s** ∆ _k_ 0 _l_ 0 = _∥_ **vv** _∥_[, which finally gives all] dihedral angles ∆ _kl_ in closed form. One can easily verify that the choice of _k_ 0 _∈Ni_ and _l_ 0 _∈Nj_ will not affect the values of the predicted dihedrals ∆ _kl_ , _∀k ∈Ni, ∀l ∈Nj_ . In a practical example, the above solution recovers all 44 rotatable bond torsion angles of a randomly modified conformer in 0.04 seconds as opposed to 3143 seconds needed by a differential evolution method. 
+
+## **4. Experiments** 
+
+## **4.1. Data** 
+
+We provide a new time-based dataset split and preprocessing pipeline for DL drug binding methods[3] . We use proteinligand complexes from PDBBind (Liu et al., 2017), which is a subset of the Protein Data Bank (PDB) (Berman et al., 2003) that provides 3D structures of individual proteins and complexes. The newest version, PDBBind v2020, contains 19 443 protein-ligand complexes with 3890 unique receptors and 15 193 unique ligands. Histograms for individual receptor and ligand data frequencies are in Figure 16 and we describe our preprocessing to remove pathologies of the data in Appendix B. 
+
+**Motivation for new test set and time split.** Docking methods are often evaluated using the PDBBind core set, which contains 285 hand-curated high-resolution complexes. However, this might not reflect the performance in real-world applications where data might not be of similar high quality. Due to the differences in resolution and the average ligand size (32 heavy atoms in PDBBind versus 24 in the core set), the complexes of the core set can be considered easier to predict than the average complex. Moreover, some of the previous methods might have been validated or trained on a subset of the core set and thus, report optimistic quality numbers. To better reflect the average complex encountered in applications, we employ a test set that only contains com- 
+
+3We make this data and associated scripts available at https: //github.com/HannesStark/EquiBind. 
+
+plexes that were discovered in 2019 or later, while the train and validation sets only use strictly older complexes. 
+
+**Dataset split.** Of the 19 119 preprocessed complexes, 1512 were discovered in 2019 or later. From these, we randomly sample 125 unique proteins and collect all new complexes containing them (363) to create the final test set. The low number of test samples is chosen to make it feasible to compare with time-consuming classical physics-based docking methods. From the remaining complexes that are older than 2019, we remove those with ligands contained in the test set, giving 17 347 complexes for training and validation. These are divided into 968 validation complexes, which share no ligands with the remaining 16 379 train complexes. Results when only testing on new receptors are in Appendix A. 
+
+## **4.2. Evaluation Setup** 
+
+**Baselines.** Quick Vina-W (QVina-W) is a classical docking program specifically developed for ”wide” or blind docking. SMINA (Koes et al., 2013) builds on AutoDock Vina by designing an improved and empirical scoring function. GNINA (McNutt et al., 2021; Francoeur et al., 2020) further develops a DL scoring function using CNNs and a gridbased featurization scheme. GLIDE (Halgren et al., 2004) is a popular commercial docking software of which we use the 2021-4 release. We run GLIDE, GNINA, and SMINA with their default settings and for QVina-W we increase the exhaustiveness (parameter controlling the search time) to 64 with which it is still faster than the other baselines. 
+
+**EquiBind models.** Our model can be applied in various scenarios, see caption of Table 1. First, the EQUIBIND-U model generates an uncorrected ligand point cloud **Z** that does not necessarily have valid bond angles and lengths. The standard EQUIBIND takes this output and applies our fast point cloud ligand fitting in Section 3.2.2 to obtain a realistic molecular structure. The model EQUIBIND-R treats the ligand as a rigid body, being trained with no flexibility loss terms. The fine-tuning model EQUIBIND + Q builds on top of this output by searching refined conformations using Quick Vina 2 in a 5 A bounding box around the ligand[˚] predicted by EQUIBIND-R. The instantiations EQUIBIND + Q2 does the same with two times as many sampled ligand positions, and EQUIBIND + S as well as EQUIBIND-R + S instead use SMINA for fine-tuning. 
+
+**Evaluation Metrics.** We use the ligand root mean square deviation (L-RMSD), the centroid distance, and the KabschRMSD. We calculate all metrics after hydrogens are removed. The _centroid distance_ measures the ability of the model to find the correct binding pocket (for a given ligand) via the distance between the averaged coordinates of the predicted and true bound ligand atoms. _Kabsch RMSD_ is the lowest possible RMSD that can be obtained by SE(3) transformation of the ligand (i.e., RMSD after superimposition 
+
+**EQUIBIND: Geometric Deep Learning for Drug Binding Structure Prediction** 
+
+_Table 1._ **Flexible blind self-docking.** All methods receive a random RDKit conformer of the ligand molecule as input and are tasked to find its binding site and the right orientation + conformation in which it binds. EQUIBIND-U refers to uncorrected ligands **Z** that are not necessarily chemically plausible. EQUIBIND corrects them with our fast conformer fitting corrections – see Section 3.2.2. EQUIBIND+Q predicts an approximate ligand position and fine-tunes it using QuickVina 2. EQUIBIND+Q2 samples more candidate positions, and EQUIBIND+S uses SMINA for fine-tuning. Standard deviations are in Appendix Table 5. *GLIDE runtime details in Appendix C. 
+
+|AVG.<br>SEC.<br>AVG.<br>SEC.<br>**METHODS**<br>16-CPU GPU|PERCENTILES_↓_<br>% BELOW<br>THRESHOLD_↑_<br>PERCENTILES_↓_<br>% BELOW<br>THRESH. _↑_<br>RMSD_↓_<br> MEAN 25TH 50TH 75TH 5 ˚A<br>2 ˚A<br>MEAN 25TH 50TH 75TH 5 ˚A<br>2 ˚A MEAN MED.|PERCENTILES_↓_<br>% BELOW<br>THRESHOLD_↑_<br>PERCENTILES_↓_<br>% BELOW<br>THRESH. _↑_<br>RMSD_↓_<br> MEAN 25TH 50TH 75TH 5 ˚A<br>2 ˚A<br>MEAN 25TH 50TH 75TH 5 ˚A<br>2 ˚A MEAN MED.|PERCENTILES_↓_<br>% BELOW<br>THRESHOLD_↑_<br>PERCENTILES_↓_<br>% BELOW<br>THRESH. _↑_<br>RMSD_↓_<br> MEAN 25TH 50TH 75TH 5 ˚A<br>2 ˚A<br>MEAN 25TH 50TH 75TH 5 ˚A<br>2 ˚A MEAN MED.|
+|---|---|---|---|
+|QVINA-W<br>49<br>-<br>GNINA<br>247<br>146<br>SMINA<br>146<br>-<br>GLIDE(C.)<br>1405*<br>-|13.6<br>2.5<br>7.7<br>23.7 40.2<br>20.9<br>13.3<br>2.8<br>8.7<br>22.1 37.1<br>21.2<br>12.1<br>3.8<br>8.1<br>17.9 33.9<br>13.5<br>16.2<br>2.6<br>9.3<br>28.1 33.6<br>21.8|11.9<br>0.9<br>3.7<br>22.9 54.6 41.0<br>11.5<br>1.0<br>4.5<br>21.2 52.0 36.0<br>9.8<br>1.3<br>3.7<br>16.2 55.9 38.0<br>14.4<br>**0.8**<br>5.6<br>26.9 48.7 36.1|**2.1**<br>1.9<br>2.2<br>1.8<br>2.2<br>1.9<br>2.2<br>1.9|
+|EQUIBIND<br>**0.16**<br>**0.04**<br>EQUIBIND+Q<br>8<br>8<br>EQUIBIND+Q2<br>15<br>15<br>EQUIBIND+S<br>146<br>146|**8.2**<br>3.8<br>6.2<br>**10.3** 39.1<br>5.5<br>8.4<br>2.6<br>6.6<br>11.1 38.0<br>18.7<br>8.7<br>2.6<br>6.8<br>11.1 40.7<br>21.6<br>8.3<br>**2.1**<br>**5.6**<br>10.5 **46.4**<br>**24.6**|**5.6**<br>1.3<br>2.6<br>7.4<br>67.5 40.0<br>5.9<br>1.0<br>2.5<br>6.4<br>68.7 44.6<br>6.0<br>1.0<br>2.4<br>6.6<br>70.1 42.7<br>6.0<br>0.9<br>**2.0**<br>**6.2**<br>**71.0 50.6**|2.6<br>2.3<br>2.3<br>1.9<br>2.2<br>**1.6**<br>**2.1**<br>1.8|
+|EQUIBIND-U<br>0.14<br>0.02|7.8<br>3.3<br>5.7<br>9.7<br>42.4<br>7.2|5.6<br>1.3<br>2.6<br>7.4<br>67.5 40.0|2.1<br>1.8|
+
+
+
+with the Kabsch algorithm). _L-RMSD_ is the mean squared error between the atoms of the predicted and bound ligands. All RMSDs are calculated using OpenBabel’s symmetry corrected and atom order invariant RMSD tool obrms. Next to the mean and cumulative distributions, we report the percent of predictions below a given error threshold. 
+
+Finally, we show the average number of seconds needed to make a prediction for a test complex, given the receptor and the initial ligand structure. The receptor preparation time is excluded (mainly an additional 393 sec for GLIDE) since this step is commonly only performed once before docking many ligands to the same receptor. We ran all runtime measurements on the same machine using 16 logical CPU cores (except for GLIDE, which does not support multithreading – detailed in Appendix C), once with and once without access to a 6GB GTX 1060 GPU. 
+
+**Implementation Details.** We optimize our model using Adam (Kingma & Ba, 2014) and do early stopping with patience of 150 epochs based on the percentage of predicted validation set complexes with an RMSD better than 2 A. All[˚] hyperparameters and the employed ligand and node features are described in Appendix C. Code to reproduce results or perform fast docking with the provided model weights is available at https://github.com/HannesStark/ EquiBind. 
+
+_Figure 3._ **Flexible blind self-docking.** Cumulative density histogram of the L-RMSD (top) and centroid distance (bottom) of EQUIBIND with and without SMINA for fine-tuning. 
+
+## **4.3. Results** 
+
+**Blind self-docking.** This set of experiments reflects the performance that can be expected in the most typical applications where the true ligand bond angles and distances (which are used in re-docking) are unknown. An initial approximate conformer has to be obtained from a 2D molecular graph for which we use a random RDKit conformer. 
+
+The results in Table 1 show that vanilla EQUIBIND performs well at identifying the approximate binding location and outperforms the baselines in metrics other than the 25th RMSD percentile and the fraction of predictions with and RMSD better than 2 A. The fine-tuning extensions of E[˚] QUIBIND such as EQUIBIND + Q outperform or match the baselines in all metrics, while EQUIBIND + Q and EQUIBIND + Q2 also retain significant inference speed-ups, making our 
+
+**EQUIBIND: Geometric Deep Learning for Drug Binding Structure Prediction** 
+
+_Table 2._ **Blind re-docking.** The input is the bound ligand structure at a random location. The methods are tasked to find the binding site and the right binding location + orientation. EQUIBIND-R’s and GLIDE’s Kabsch RMSD is 0 since they treat the ligand as a rigid body while the other methods can only be run in a flexible mode where torsion angles are changed. *GLIDE runtime details in Appendix C. 
+
+|AVG.<br>SEC.<br>AVG.<br>SEC.<br>**METHODS**<br>16-CPU GPU|PERCENTILES_↓_<br>% BELOW<br>THRESHOLD_↑_<br>PERCENTILES_↓_<br>% BELOW<br>THRESH. _↑_<br>RMSD_↓_<br> MEAN 25TH 50TH 75TH 5 ˚A<br>2 ˚A<br>MEAN 25TH 50TH 75TH 5 ˚A<br>2 ˚A MEAN MED.|PERCENTILES_↓_<br>% BELOW<br>THRESHOLD_↑_<br>PERCENTILES_↓_<br>% BELOW<br>THRESH. _↑_<br>RMSD_↓_<br> MEAN 25TH 50TH 75TH 5 ˚A<br>2 ˚A<br>MEAN 25TH 50TH 75TH 5 ˚A<br>2 ˚A MEAN MED.|PERCENTILES_↓_<br>% BELOW<br>THRESHOLD_↑_<br>PERCENTILES_↓_<br>% BELOW<br>THRESH. _↑_<br>RMSD_↓_<br> MEAN 25TH 50TH 75TH 5 ˚A<br>2 ˚A<br>MEAN 25TH 50TH 75TH 5 ˚A<br>2 ˚A MEAN MED.|
+|---|---|---|---|
+|QVINA-W<br>49<br>-<br>GNINA<br>247<br>146<br>SMINA<br>146<br>-<br>GLIDE<br>1405*<br>-|13.4<br>1.6<br>7.9<br>24.1 39.0<br>27.7<br>12.2<br>1.3<br>6.1<br>22.9 46.8<br>32.2<br>10.3<br>1.4<br>6.2<br>15.2 46.7<br>30.1<br>15.7<br>**0.5**<br>8.3<br>29.5 45.7<br>**43.4**|11.8<br>0.9<br>3.8<br>23.2 55.4 40.4<br>10.9<br>0.7<br>2.8<br>22.1 58.4 43.8<br>8.5<br>0.8<br>2.6<br>12.7 63.5 45.3<br>14.8<br>**0.3**<br>4.9<br>28.5 50.4 45.4|1.8<br>1.5<br>1.7<br>1.4<br>1.7<br>1.4<br>0<br>0|
+|EQUIBIND-R<br>**0.14**<br>**0.02**<br>EQUIBIND-R+S<br>146<br>146|7.4<br>2.0<br>5.1<br>9.8<br>49.0<br>25.1<br>**7.0**<br>1.0<br>**3.4**<br>**9.6**<br>**57.0**<br>41.1|5.8<br>1.4<br>2.6<br>7.3<br>66.9 40.8<br>**5.3**<br>0.7<br>**1.4**<br>**4.7**<br>**76.0 59.2**|0<br>0<br>1.5<br>1.1|
+
+
+
+method _suitable for extremely high-throughput applications such as virtual screening over databases of hundred million molecules, e.g., ZINC_ . Thus, practitioners can combine our method with previous fine-tuning baselines and trade quality over runtime depending on the downstream task of interest. 
+
+Figure 3 shows the same trend for the **RMSD** . EQUIBIND, which is three orders of magnitude faster than the fastest baseline, improves over the baselines for the predictions in the _>_ 4 A regime.[˚] EQUIBIND does better for complexes that are hard to predict (e.g., due to ligand size) and also outperforms the baselines in the low RMSD regime when using fine-tuning (EQUIBIND+S). For the **centroid distances** , the exact conformer is less crucial, and the methods mainly have to find the correct binding pocket location. Here, EQUIBIND is already able to match the baselines in the low error regime without fine-tuning. Histograms for EQUIBIND + Q and EQUIBIND + Q2 are in Appendix Figure 7. 
+
+The **main observations** are that EQUIBIND is much faster than the baselines, has fewer predictions that are far off from the true conformer, and can use fast fine-tuning for very lowRMSD final predictions. The benefits through fine-tuning can be expected considering the difficulty of predicting the correct torsions jointly with the binding location and orientation in a single forward pass. 
+
+**Blind re-docking.** In these experiments, the bound ligand is extracted from the binding pocket, placed in a random location, and the methods have to re-dock it into the correct conformation. Thus the methods have access to the ground truth structure of the ligand, and all predictions will have the correct bond lengths and angles. EQUIBIND-R treats the ligand as a completely rigid body and only predicts a translation and rotation. Rigid re-docking results are of practical relevance for docking strategies where large amounts of conformations are generated for a single molecule and then rigidly docked to the receptor before using an additional scoring function to rank the predictions. 
+
+In Table 2 we can observe that EQUIBIND-R can be particularly impactful for this strategy due to its much faster 
+
+inference time. This is while outperforming the baselines in the metrics other than the 25th percentiles and the fraction of predictions with an error below 2 A. For practical rigid re-[˚] docking applications, this could potentially be remedied by docking 10 times as many conformers while still retaining a 10 times speed-up over the fastest baseline. 
+
+_Figure 4._ Histogram of the standard deviations of the L-RMSDs of EQUIBIND’s predictions when using different initial conformers. 
+
+**Sensitivity to initial conformer.** EQUIBIND’s predictions depend on the initial conformer’s torsion angles, bond angles, and bond lengths (the baselines only depend on initial bond angles and lengths). In Figure 4 we investigate the risk of an ”unlucky” initial conformer leading to a high L- RMSD. For 363 complexes, we generate 30 different initial RDKit conformers. EQUIBIND predicts a binding structure using each of them, and we obtain 30 L-RMSD values of which we calculate the standard deviation. We find a low sensitivity to the initial conformer, with the majority of predictions having a smaller standard deviation than 0 _._ 5 
+
+**Visualizations.** EQUIBIND’s predictions are rarely far off from the true ligand, but there are cases where it struggles to find the exact torsion angles and, therefore, the right atom configurations in the ligand. Examples of this are in Figure 5 and show two cases where GNINA performs worse and produces a prediction that is far off while EQUIBIND 
+
+**EQUIBIND: Geometric Deep Learning for Drug Binding Structure Prediction** 
+
+exploration of this strategy for future work. These results are in line with prior protein modeling techniques such as AlphaFold2, (Jumper et al., 2021a) which successfully predicts side chains based on only residue level information. 
+
+## **5. Conclusion** 
+
+_Figure 5._ Two cherry-picked example predictions where EQUIBIND has better RMSD than GNINA (top) and two where EQUIBIND performs worse than GNINA (bottom). The ground truth ligand is in cyan, EQUIBIND in pink, and GNINA in yellow. 
+
+is able to find the binding location. The other two cases, where GNINA is better, display how the baseline more exactly finds the true structure, but EQUIBIND still finds the correct approximate location. Further visualizations of predictions are in Appendix Figure 14. 
+
+**Fast point cloud fitting.** In Figure 6 we visualize our novel fast point cloud ligand fitting described in Section 3.2.2. The point clouds produced by the uncorrected flexible EQUIBIND-U are not realistic molecules. The corrections use a conformer with valid bond lengths and angles and change its torsions to most closely match the point cloud. 
+
+_Figure 6._ Left: in green are two uncorrected pseudo-molecules predicted by EQUIBIND-U. Right: the final output of EQUIBIND with corrections using our fast flexible conformer fitting applied to produce a conformer with realistic bond angles and lengths. 
+
+**Limitations.** One drawback of EQUIBIND is that it only implicitly models the atom positions of side chains. This is done via the local frame encoding features of Jumper et al. (2021a) that we employ in the _α_ -carbon graph of the receptor. Explicitly representing these atoms might improve precise docking. We experimented with surface atoms and fine-tuning approaches that use an atom subgraph of the receptor with results in Appendix A. However, this yielded only small or no improvements while adding considerable computational complexity. We leave further 
+
+The promising ability of deep neural networks to predict protein structures has sparked a large amount of research in computational drug discovery. Here, we proposed EQUIBIND, a deep neural model which relies on SE(3)equivariant graph neural networks to predict bound proteinligand conformations in a single shot. Our model shows strong empirical performance against state-of-the-art baselines, and we demonstrate its potential in a hybrid workflow by combining it with existing fine-tuning methods. We expect that EQUIBIND and similar models will progress the adoption of deep learning in drug discovery. 
+
+## **6. Acknowledgments** 
+
+We dedicate this paper to the late first author OctavianEugen Ganea (1987-2022), a brilliant researcher and a generous mentor. Over the course of his career Octavian already made multiple significant contributions to geometric ML and molecular modeling. He had a promising, bright future of stellar discoveries ahead of him. 
+
+The authors thank Bruno Correia, Gabriele Corso, Simon Batzner, Miguel Garc´ıa-Ortegon,´ Vignesh Ram Somnath, Stiefl Nikolaus, Arne Schneuing, Julia Buhmann, David Ryan Koes, Patrick Walters, Michael Heinzinger, Tian Xie, Xiang Fu, and Jeremy Wohlwend for insightful discussions and valuable feedback. 
+
+Octavian Ganea was funded by the Machine Learning for Pharmaceutical Discovery and Synthesis (MLPDS) consortium, the Abdul Latif Jameel Clinic for Machine Learning in Health, the DTRA Discovery of Medical Countermeasures Against New and Emerging (DOMANE) threats program, and the DARPA Accelerated Molecular Discovery program. Lagnajit Pattanaik is funded by the MLPDS consortium and the MIT-Takeda Fellowship. Regina Barzilay and Tommi Jaakkola also acknowledge support from NSF Expeditions grant (award 1918839): Collaborative Research: Understanding the World Through Code. 
+
+## **References** 
+
+- Aggarwal, R., Gupta, A., Chelur, V., Jawahar, C., and Priyakumar, U. Deeppocket: Ligand binding site detection and segmentation using 3d convolutional neural networks, 2021. 
+
+Baek, M., DiMaio, F., Anishchenko, I., Dauparas, J., 
+
+**EQUIBIND: Geometric Deep Learning for Drug Binding Structure Prediction** 
+
+- Ovchinnikov, S., Lee, G. R., Wang, J., Cong, Q., Kinch, L. N., Schaeffer, R. D., et al. Accurate prediction of protein structures and interactions using a three-track neural network. _Science_ , 373(6557):871–876, 2021. 
+
+- Bao, J., He, X., and Zhang, J. Z. Deepbsp—a machine learning method for accurate prediction of protein–ligand docking structures. _Journal of Chemical Information and Modeling_ , 2021. 
+
+- Batzner, S., Musaelian, A., Sun, L., Geiger, M., Mailoa, J. P., Kornbluth, M., Molinari, N., Smidt, T. E., and Kozinsky, B. Se (3)-equivariant graph neural networks for data-efficient and accurate interatomic potentials. _arXiv preprint arXiv:2101.03164_ , 2021. 
+
+- Berman, H., Henrick, K., and Nakamura, H. Announcing the worldwide Protein Data Bank. _Nat Struct Biol_ , 10 (12):980, Dec 2003. 
+
+- Brandstetter, J., Hesselink, R., van der Pol, E., Bekkers, E., and Welling, M. Geometric and physical quantities improve e (3) equivariant message passing. _arXiv preprint arXiv:2110.02905_ , 2021. 
+
+- Cohen, T. and Welling, M. Group equivariant convolutional networks. In _International conference on machine learning_ , pp. 2990–2999. PMLR, 2016. 
+
+- Dai, B. and Bailey-Kellogg, C. Protein interaction interface region prediction by geometric deep learning. _Bioinformatics_ , 2021. 
+
+- de Freitas, R. F. and Schapira, M. A systematic analysis of atomic protein–ligand interactions in the pdb. _MedChemComm_ , 8(10):1970–1981, 2017. 
+
+- Drotar, P., Jamasb, A. R., Day, B., Cangea, C., and Li´ o, P.` Structure-aware generation of drug-like molecules. _arXiv preprint arXiv:2111.04107_ , 2021. 
+
+- Du, X., Li, Y., Xia, Y.-L., Ai, S.-M., Liang, J., Sang, P., Ji, X.-L., and Liu, S.-Q. Insights into protein–ligand interactions: mechanisms, models, and methods. _International journal of molecular sciences_ , 2016. 
+
+- Du, Y., Fu, T., Sun, J., and Liu, S. Molgensurvey: A systematic survey in machine learning models for molecule design. _arxiv_ , 2022. 
+
+- Eismann, S., Townshend, R. J., Thomas, N., Jagota, M., Jing, B., and Dror, R. O. Hierarchical, rotation-equivariant neural networks to select structural models of protein complexes. _Proteins: Structure, Function, and Bioinformatics_ , 2020. 
+
+- Evans, R., O’Neill, M., Pritzel, A., Antropova, N., Senior, A. W., Green, T., Z[ˇ] ´ıdek, A., Bates, R., Blackwell, S., Yim, 
+
+- J., Ronneberger, O., Bodenstein, S., Zielinski, M., Bridgland, A., Potapenko, A., Cowie, A., Tunyasuvunakool, K., Jain, R., Clancy, E., Kohli, P., Jumper, J., and Hassabis, D. Protein complex prediction with alphafold-multimer. _birxiv_ , 2021. 
+
+- Francoeur, P. G., Masuda, T., Sunseri, J., Jia, A., Iovanisci, R. B., Snyder, I., and Koes, D. R. Three-dimensional convolutional neural networks and a cross-docked data set for structure-based drug design. _Journal of Chemical Information and Modeling_ , 60(9):4200–4215, 2020. 
+
+- Fuchs, F. B., Worrall, D. E., Fischer, V., and Welling, M. Se(3)-transformers: 3d roto-translation equivariant attention networks. _arXiv preprint arXiv:2006.10503_ , 2020. 
+
+- Gainza, P., Sverrisson, F., Monti, F., Rodola, E., Boscaini, D., Bronstein, M., and Correia, B. Deciphering interaction fingerprints from protein molecular surfaces using geometric deep learning. _Nature Methods_ , 17(2):184– 192, 2020. 
+
+- Ganea, O.-E., Huang, X., Bunne, C., Bian, Y., Barzilay, R., Jaakkola, T., and Krause, A. Independent se(3)equivariant models for end-to-end rigid protein docking. _arXiv preprint arXiv:2111.07786_ , 2021a. 
+
+- Ganea, O.-E., Pattanaik, L., Coley, C. W., Barzilay, R., Jensen, K. F., Green, W. H., and Jaakkola, T. S. Geomol: Torsional geometric generation of molecular 3d conformer ensembles. _arXiv preprint arXiv:2106.07802_ , 2021b. 
+
+- Gao, K. Y., Fokoue, A., Luo, H., Iyengar, A., Dey, S., and Zhang, P. Interpretable drug target prediction using deep neural representation. In _IJCAI_ , volume 2018, pp. 3371– 3377, 2018. 
+
+- Gligorijevic, V., Renfrew, P. D., Kosciolek, T., Leman, J. K.,´ Berenberg, D., Vatanen, T., Chandler, C., Taylor, B. C., Fisk, I. M., Vlamakis, H., et al. Structure-based protein function prediction using graph convolutional networks. _Nature communications_ , 2021. 
+
+- Gniewek, P., Worley, B., Stafford, K., Bedem, H. v. d., and Anderson, B. Learning physics confers pose-sensitivity in structure-based virtual screening. _arXiv preprint arXiv:2110.15459_ , 2021. 
+
+- Halgren, T. A., Murphy, R. B., Friesner, R. A., Beard, H. S., Frye, L. L., Pollard, W. T., and Banks, J. L. Glide: a new approach for rapid, accurate docking and scoring. 2. enrichment factors in database screening. _Journal of medicinal chemistry_ , 2004. 
+
+- Hassan, N. M., Alhossary, A. A., Mu, Y., and Kwoh, C.K. Protein-ligand blind docking using quickvina-w with inter-process spatio-temporal integration. _Scientific reports_ , 7(1):1–13, 2017. 
+
+**EQUIBIND: Geometric Deep Learning for Drug Binding Structure Prediction** 
+
+- Huang, S.-Y. Comprehensive assessment of flexible-ligand docking algorithms: current effectiveness and challenges. _Briefings in bioinformatics_ , 19(5):982–994, 2018. 
+
+- Imrie, F., Hadfield, T. E., Bradley, A. R., and Deane, C. M. Deep generative design with 3d pharmacophoric constraints. _bioRxiv_ , 2021. 
+
+- Jastrzebski, S., Szymczak, M., Pocha, A., Mordalski, S., Tabor, J., Bojarski, A. J., and Podlewska, S. Emulating docking results using a deep neural network: a new perspective for virtual screening. _Journal of Chemical Information and Modeling_ , 2020. 
+
+- Jiang, D., Hsieh, C.-Y., Wu, Z., Kang, Y., Wang, J., Wang, E., Liao, B., Shen, C., Xu, L., Wu, J., et al. Interactiongraphnet: A novel and efficient deep graph representation learning framework for accurate protein–ligand interaction predictions. _Journal of medicinal chemistry_ , 2021. 
+
+- Jimenez, J., Doerr, S., Mart´ ´ınez-Rosell, G., Rose, A. S., and De Fabritiis, G. Deepsite: protein-binding site predictor using 3d-convolutional neural networks. _Bioinformatics_ , 2017. 
+
+- Jindal, A., Kotelnikov, S., Padhorny, D., Kozakov, D., Zhu, Y., Chowdhury, R., and Vajda, S. Side-chain packing using se (3)-transformer. In _PACIFIC SYMPOSIUM ON BIOCOMPUTING 2022_ , pp. 46–55, 2021. 
+
+- Jing, B., Eismann, S., Suriana, P., Townshend, R. J. L., and Dror, R. Learning from protein structure with geometric vector perceptrons. In _International Conference on Learning Representations_ , 2020. 
+
+- Jumper, J., Evans, R., Pritzel, A., Green, T., Figurnov, M., Ronneberger, O., Tunyasuvunakool, K., Bates, R., Z[ˇ] ´ıdek, A., Potapenko, A., Bridgland, A., Meyer, C., Kohl, S. A. A., Ballard, A. J., Cowie, A., Romera-Paredes, B., Nikolov, S., Jain, R., Adler, J., Back, T., Petersen, S., Reiman, D., Clancy, E., Zielinski, M., Steinegger, M., Pacholska, M., Berghammer, T., Bodenstein, S., Silver, D., Vinyals, O., Senior, A. W., Kavukcuoglu, K., Kohli, P., and Hassabis, D. Highly accurate protein structure prediction with alphafold. _Nature_ , 2021a. 
+
+- Jumper, J., Evans, R., Pritzel, A., Green, T., Figurnov, M., Ronneberger, O., Tunyasuvunakool, K., Bates, R., Z[ˇ] ´ıdek, A., Potapenko, A., et al. Highly accurate protein structure prediction with alphafold. _Nature_ , 596(7873):583–589, 2021b. 
+
+- Karimi, M., Wu, D., Wang, Z., and Shen, Y. Deepaffinity: interpretable deep learning of compound–protein affinity through unified recurrent and convolutional neural networks. _Bioinformatics_ , 35(18):3329–3338, 2019. 
+
+- Kingma, D. P. and Ba, J. Adam: A method for stochastic optimization. _arXiv preprint arXiv:1412.6980_ , 2014. 
+
+- Koes, D. R., Baumgartner, M. P., and Camacho, C. J. Lessons learned in empirical scoring with smina from the csar 2011 benchmarking exercise. _Journal of chemical information and modeling_ , 53(8):1893–1904, 2013. 
+
+- Lam, P. C.-H., Abagyan, R., and Totrov, M. Ligandbiased ensemble receptor docking (ligbend): a hybrid ligand/receptor structure-based approach. _Journal of Computer-Aided Molecular Design_ , 32(1):187–198, Jan 2018. 
+
+- Lam, P. C.-H., Abagyan, R., and Totrov, M. Hybrid receptor structure/ligand-based docking and activity prediction in icm: development and evaluation in d3r grand challenge 3. _Journal of Computer-Aided Molecular Design_ , Jan 2019. 
+
+- Landrum, G. Rdkit: Open-source cheminformatics software, 2016. 
+
+- Lang, P. T., Brozell, S. R., Mukherjee, S., Pettersen, E. F., Meng, E. C., Thomas, V., Rizzo, R. C., Case, D. A., James, T. L., and Kuntz, I. D. Dock 6: Combining techniques to model rna–small molecule complexes. _Rna_ , 2009. 
+
+- Li, S., Zhou, J., Xu, T., Huang, L., Wang, F., Xiong, H., Huang, W., Dou, D., and Xiong, H. Structure-aware interactive graph neural networks for the prediction of protein-ligand binding affinity. In _Proceedings of the 27th ACM SIGKDD Conference on Knowledge Discovery & Data Mining_ , pp. 975–985, 2021. 
+
+- Li, Y., Gu, C., Dullien, T., Vinyals, O., and Kohli, P. Graph matching networks for learning the similarity of graph structured objects. In _International Conference on Machine Learning_ , pp. 3835–3845. PMLR, 2019. 
+
+- Lim, J., Ryu, S., Park, K., Choe, Y. J., Ham, J., and Kim, W. Y. Predicting drug–target interaction using a novel graph neural network with 3d structure-embedded graph representation. _Journal of chemical information and modeling_ , 59(9):3981–3988, 2019. 
+
+- Liu, Z., Su, M., Han, L., Liu, J., Yang, Q., Li, Y., and Wang, R. Forging the basis for developing protein–ligand interaction scoring functions. _Accounts of Chemical Research_ , 50(2):302–309, 2017. 
+
+- Luo, S., Shi, C., Xu, M., and Tang, J. Predicting molecular conformation via dynamic graph score matching. _NeurIPS_ , 2021. 
+
+**EQUIBIND: Geometric Deep Learning for Drug Binding Structure Prediction** 
+
+- Macari, G., Toti, D., and Polticelli, F. Computational methods and tools for binding site recognition between proteins and small molecules: from classical geometrical approaches to modern machine learning strategies. _Journal of computer-aided molecular design_ , 2019. 
+
+- Masuda, T., Ragoza, M., and Koes, D. R. Generating 3d molecular structures conditional on a receptor binding site with deep generative models. _arXiv preprint arXiv:2010.14442_ , 2020. 
+
+- McNutt, A. T., Francoeur, P., Aggarwal, R., Masuda, T., Meli, R., Ragoza, M., Sunseri, J., and Koes, D. R. Gnina 1.0: molecular docking with deep learning. _Journal of cheminformatics_ , 13(1):1–20, 2021. 
+
+- Mendez-Lucio,´ O., Ahmad, M., del Rio-Chanona, E. A., and Wegner, J. K. A geometric deep learning approach to predict binding conformations of bioactive molecules. _Nature Machine Intelligence_ , 3(12):1033–1039, 2021. 
+
+- Mohammad, T., Mathur, Y., and Hassan, M. I. Instadock: A single-click graphical user interface for molecular docking-based virtual high-throughput screening. _Briefings in Bioinformatics_ , 22(4):bbaa279, 2021. 
+
+- Morrone, J. A., Weber, J. K., Huynh, T., Luo, H., and Cornell, W. D. Combining docking pose rank and structure with deep learning improves protein–ligand binding mode prediction over a baseline docking approach. _Journal of chemical information and modeling_ , 2020. 
+
+- Open Babel development team. Open babel, 2005. URL http://openbabel.org/wiki/Main_Page. 
+
+- Ragoza, M., Hochuli, J., Idrobo, E., Sunseri, J., and Koes, D. R. Protein–ligand scoring with convolutional neural networks. _Journal of chemical information and modeling_ , 2017. 
+
+- Reymond, J.-L. and Awale, M. Exploring chemical space for drug discovery using the chemical universe database. _ACS chemical neuroscience_ , 2012. 
+
+- Riniker, S. and Landrum, G. A. Better informed distance geometry: using what we know to improve conformation generation. _Journal of chemical information and modeling_ , 2015. 
+
+- Sankararaman, S., Sha, F., Kirsch, J. F., Jordan, M. I., and Sjolander, K.¨ Active site prediction using evolutionary and structural information. _Bioinformatics_ , 26(5):617– 624, 2010. 
+
+- Satorras, V. G., Hoogeboom, E., and Welling, M. E(n)equivariant graph neural networks. _arXiv preprint arXiv:2102.09844_ , 2021. 
+
+- Shen, C., Hu, X., Gao, J., Zhang, X., Zhong, H., Wang, Z., Xu, L., Kang, Y., Cao, D., and Hou, T. The impact of cross-docked poses on performance of machine learning classifier for protein–ligand binding pose prediction. _Journal of cheminformatics_ , 13(1):1–18, 2021. 
+
+- Shi, C., Luo, S., Xu, M., and Tang, J. Learning gradient fields for molecular conformation generation. _arXiv preprint arXiv:2105.03902_ , 2021. 
+
+- Somnath, V. R., Bunne, C., and Krause, A. Multi-scale representation learning on proteins. _NeurIPS_ , 34, 2021. 
+
+- Sverrisson, F., Feydy, J., Correia, B. E., and Bronstein, M. M. Fast end-to-end learning on protein surfaces. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_ , pp. 15272–15281, 2021. 
+
+- Thomas, N., Smidt, T., Kearnes, S., Yang, L., Li, L., Kohlhoff, K., and Riley, P. Tensor field networks: Rotation-and translation-equivariant neural networks for 3d point clouds. _arXiv preprint arXiv:1802.08219_ , 2018. 
+
+- Torng, W. and Altman, R. B. Graph convolutional neural networks for predicting drug-target interactions. _Journal of chemical information and modeling_ , 2019a. 
+
+- Torng, W. and Altman, R. B. High precision protein functional site detection using 3d convolutional neural networks. _Bioinformatics_ , 2019b. 
+
+- Townshend, R., Bedi, R., Suriana, P., and Dror, R. End-toend learning on 3d protein structure for interface prediction. _NeurIPS_ , 32:15642–15651, 2019. 
+
+- Trott, O. and Olson, A. J. Autodock vina: improving the speed and accuracy of docking with a new scoring function, efficient optimization, and multithreading. _Journal of computational chemistry_ , 2010. 
+
+- Wallach, I., Dzamba, M., and Heifets, A. Atomnet: a deep convolutional neural network for bioactivity prediction in structure-based drug discovery. _arXiv preprint arXiv:1510.02855_ , 2015. 
+
+- Xu, M., Luo, S., Bengio, Y., Peng, J., and Tang, J. Learning neural generative dynamics for molecular conformation generation. In _International Conference on Learning Representations_ , 2020. 
+
+- Zhang, W., Bell, E. W., Yin, M., and Zhang, Y. Edock: blind protein–ligand docking by replica-exchange monte carlo simulation. _Journal of cheminformatics_ , 12:1–17, 2020. 
+
+- Zsoldos, Z., Reid, D., Simon, A., Sadjad, S. B., and Johnson, A. P. ehits: a new fast, exhaustive flexible ligand docking system. _Journal of Molecular Graphics and Modelling_ , 26(1):198–212, 2007. 
+
+**EQUIBIND: Geometric Deep Learning for Drug Binding Structure Prediction** 
+
+## **A. Additional Results** 
+
+_Figure 7._ **Flexible blind self-docking.** Left: Cumulative histogram of the L-RMSD. Right: Cumulative histogram of the centroid distance. 
+
+_Figure 8._ **Sensitivity to initial conformer.** Left: Histogram of the standard deviations of the L-RMSDs of EQUIBIND’s and EQUIBINDU’s predictions when using 30 different initial conformers. Right: Scatter-plot with a point for each complex showing the mean L-RMSD and standard deviation of EQUIBIND’s or EQUIBIND-U’s 30 predictions from 30 different initial input conformers. 
+
+In Table 3 we compare EQUIBIND which only implicitly uses atom level locations with approaches that explicitly use atoms as nodes in the processed graph. EQUIBIND-SA uses the surface atoms of the receptor, which are found using the MSMS tool. This additional step does not impact inference runtime, which we measure without preprocessing as explained in Section 4.2. EQUIBIND-A makes a prediction using EQUIBIND-R and uses an all-atom subgraph in a 10 A radius around[˚] the predicted ligand to further refine the prediction. This additional step significantly impacts inference runtime. Both methods require around 2-3 times more GPU RAM than EQUIBIND. 
+
+In Figure 11 we can again observe that EQUIBIND struggles to produce many predictions in the low L-RMSD range. When adding an additional fine-tuning step such as with EQUIBINDS, the model is able to match or outperform the baselines in all L-RMSD ranges. Thus predictions speed can be traded off for additional accuracy via fine-tuning EQUIBIND’s predictions with classical physics-based methods. Above the 3.8 A cutoff, the vanilla E[˚] QUIBIND starts outperforming the baselines even without fine-tuning. 
+
+**EQUIBIND: Geometric Deep Learning for Drug Binding Structure Prediction** 
+
+_Table 3._ **Flexible blind self-docking.** All methods receive a random RDKit conformer of the ligand as input and are tasked to find the binding site and the correct binding structure. Comparison of EQUIBIND-SA which additionally uses surface atoms of the receptor and EQUIBIND-A, which makes a prediction using EQUIBIND-R and refines it using an all-atom subgraph in a 10 A radius around the[˚] predicted ligand. The methods have to be compared with EQUIBIND-U as corrections would still need to be applied. Additionally shown is EQUIBIND W/O DG which refers to EQUIBIND without the LAS-DG regularization. 
+
+|AVG.<br>SEC.<br>AVG.<br>SEC.<br>**METHODS**<br>16-CPU GPU|_↓_<br>_↓_<br>PERCENTILES_↓_<br>% BELOW<br>THRESHOLD_↑_<br>PERCENTILES_↓_<br>% BELOW<br>THRESH. _↑_<br>RMSD_↓_<br> MEAN 25TH 50TH 75TH 5 ˚A<br>2 ˚A<br>MEAN 25TH 50TH 75TH 5 ˚A<br>2 ˚A MEAN MED.|_↓_<br>_↓_<br>PERCENTILES_↓_<br>% BELOW<br>THRESHOLD_↑_<br>PERCENTILES_↓_<br>% BELOW<br>THRESH. _↑_<br>RMSD_↓_<br> MEAN 25TH 50TH 75TH 5 ˚A<br>2 ˚A<br>MEAN 25TH 50TH 75TH 5 ˚A<br>2 ˚A MEAN MED.|_↓_<br>_↓_<br>PERCENTILES_↓_<br>% BELOW<br>THRESHOLD_↑_<br>PERCENTILES_↓_<br>% BELOW<br>THRESH. _↑_<br>RMSD_↓_<br> MEAN 25TH 50TH 75TH 5 ˚A<br>2 ˚A<br>MEAN 25TH 50TH 75TH 5 ˚A<br>2 ˚A MEAN MED.|
+|---|---|---|---|
+|EQUIBIND-SA<br>0.14<br>0.02<br>EQUIBIND-A<br>5.56<br>5.44<br>EQUIBIND-U<br>0.14<br>0.02<br>EQUIBIND W/ODG<br>0.16<br>0.04|8.6<br>3.6<br>6.1<br>11.4 41.3<br>3.8<br>8.2<br>3.8<br>6.0<br>10.2 43.0<br>3.3<br>7.8<br>3.3<br>5.7<br>9.7<br>42.4<br>7.2<br>8.7<br>3.9<br>6.1<br>11.3 39.1<br>4.1|6.1<br>1.4<br>2.7<br>7.3<br>66.6 40.5<br>6.1<br>1.7<br>3.3<br>7.0<br>63.3 30.3<br>5.6<br>1.3<br>2.6<br>7.4<br>67.5 40.0<br>6.1<br>1.3<br>2.7<br>7.4<br>67.6 39.3|2.4<br>2.0<br>3.0<br>2.7<br>2.1<br>1.8<br>2.6<br>2.3|
+
+
+
+_Figure 9._ **Performance correlation with molecule size.** Left: Scatter-plot showing the L-RMSD and the number of ligand atoms for each prediction of EQUIBIND and GNINA. Right: The same for the number of rotatable bonds in the ligand. 
+
+_Table 4._ **Flexible blind self-docking new receptors.** Results when removing all complexes from the time split based test set whose receptor was present in a complex that is older than 2019. 144 complexes remain. The run times are still averaged over all test complexes. All methods receive a random RDKit conformer of the ligand molecule as input and are tasked to find its binding site and the right orientation + conformation in which it binds. EQUIBIND-U refers to the model producing uncorrected atomic point clouds **Z** that are not necessarily chemically plausible ligands. EQUIBIND performs our fast conformer fitting corrections – see Section 3.2.2. EQUIBIND+Q predicts an approximate ligand position and fine-tunes it using QuickVina 2. EQUIBIND+Q2 samples more candidate positions, and EQUIBINDS uses SMINA for fine-tuning. *GLIDE runtime details in Appendix C. 
+
+|AVG<br>AVG|LIGANDRMSD_↓_<br>CENTROIDDISTANCE_↓_<br>KABSCH<br>%BELOW<br>%BELOW|LIGANDRMSD_↓_<br>CENTROIDDISTANCE_↓_<br>KABSCH<br>%BELOW<br>%BELOW|LIGANDRMSD_↓_<br>CENTROIDDISTANCE_↓_<br>KABSCH<br>%BELOW<br>%BELOW|
+|---|---|---|---|
+|AVG.<br>SEC.<br>AVG.<br>SEC.<br>**METHODS**<br>16-CPU GPU|PERCENTILES_↓_<br>% BELOW<br>THRESHOLD_↑_<br>PERCENTILES_↓_<br>% BELOW<br>THRESH. _↑_<br>RMSD_↓_<br> MEAN 25TH 50TH 75TH 5 ˚A<br>2 ˚A<br>MEAN 25TH 50TH 75TH 5 ˚A<br>2 ˚A MEAN MED.|||
+|QVINA-W<br>49<br>-<br>GNINA<br>247<br>146<br>SMINA<br>146<br>-<br>GLIDE<br>1405*<br>-|16.9<br>3.4<br>10.3<br>28.1 31.9<br>15.3<br>16.7<br>4.5<br>13.4<br>27.8 27.8<br>13.9<br>15.7<br>4.8<br>10.9<br>26.0 25.7<br>9.0<br>19.6<br>**3.4**<br>18.0<br>31.4 28.7<br>**19.6**|15.2<br>1.3<br>6.5<br>26.8 47.9 35.4<br>15.1<br>2.0<br>10.1<br>27.0 39.5 25.7<br>13.6<br>1.6<br>6.5<br>25.7 41.7 29.9<br>18.1<br>1.1<br>17.6<br>29.1 40.6 29.4|**2.2**<br>1.9<br>2.3<br>1.8<br>2.3<br>1.9<br>2.3<br>**1.7**|
+|EQUIBIND<br>**0.16**<br>**0.04**<br>EQUIBIND+Q<br>8<br>8<br>EQUIBIND+Q2<br>15<br>15<br>EQUIBIND+S<br>146<br>146|**11.3**<br>5.9<br>9.1<br>**14.3** 18.8<br>0.7<br>11.5<br>5.5<br>8.7<br>15.7 22.9<br>9.3<br>12.0<br>4.1<br>8.0<br>19.7 28.0<br>13.3<br>11.9<br>3.6<br>**7.9**<br>19.7 **33.3**<br>14.6|**8.9**<br>2.6<br>6.3<br>**12.9** 43.8 16.7<br>9.1<br>1.6<br>5.5<br>14.0 47.9 30.7<br>9.8<br>1.3<br>4.4<br>18.5 53.9 30.8<br>9.7<br>**1.0**<br>**4.0**<br>18.2 **57.6 40.3**|2.7<br>2.2<br>2.3<br>1.9<br>2.3<br>**1.7**<br>**2.2**<br>1.8|
+|EQUIBIND-U<br>0.14<br>0.02|11.0<br>5.7<br>8.8<br>14.1 21.5<br>1.4|8.9<br>2.6<br>6.3<br>12.9 43.8 16.7|2.2<br>1.8|
+
+
+
+**EQUIBIND: Geometric Deep Learning for Drug Binding Structure Prediction** 
+
+_Figure 10._ Case study for the Tyrosine Kinase 6HD6 (in green) and two inhibitor drugs (in red and blue) for lung cancer, leukemia, and gastrointestinal tumors: ABL001 (Asciminib - Novartis, FDA approved Oct 2021) and Imatinib (STI-571 - Novartis). Shown is always the ground truth for both ligands and the predictions of the models in the same color, only lighter. Neither the ligands nor the receptor was part of the training set. We find that only EQUIBIND and EQUIBIND + S are able to identify the correct binding pocket and EQUIBIND + S almost perfectly predicts the ligand structures. This complex was not cherry-picked - it was suggested to us by industry collaborators as an important and hard to dock complex. 
+
+**EQUIBIND: Geometric Deep Learning for Drug Binding Structure Prediction** 
+
+_Figure 11._ **Flexible blind self-docking.** Zoomed in versions of the histograms in Figure 3 where only the 0-5 A range is shown.[˚] Left: Cumulative histogram of the L-RMSD. Right: Cumulative histogram of the centroid distance. 
+
+_Figure 12._ **Flexible blind self-docking new receptors.** Results when removing all complexes from the time split based test set whose receptor was present in a complex that is older than 2019. Cumulative density histogram of the L-RMSD (top) and centroid distance (bottom) of EQUIBIND with and without SMINA for fine-tuning. 
+
+_Figure 13._ **LAS distance geometry constraint visualization.** Visualization of the interatomic distances which are included in the LAS distance geometry constraints in Equation 3.2.1. The pairwise distances in rings are only included if the ring is aromatic, like in the bottom left ring of the depicted molecule. The torsion angles in non-aromatic rings, such as the one in the bottom right, remain flexible. 
+
+**EQUIBIND: Geometric Deep Learning for Drug Binding Structure Prediction** 
+
+_Figure 14._ Three cherry-picked example predictions of EQUIBIND (cyan) on the left with the same image on the right, including the true bound conformer in pink. 
+
+**EQUIBIND: Geometric Deep Learning for Drug Binding Structure Prediction** 
+
+## **B. Dataset** 
+
+**Preprocessing.** The time split is done after preprocessing the 19 443 complexes of PDBBind v2020 as follows. First, we drop all complexes that cannot be processed by the RDKit library (Landrum, 2016), leaving 19 119 complexes. We process each ligand and receptor with OpenBabel (Open Babel development team, 2005). Next we correct all receptor hydrogens and add missing ones using reduce[4] . 
+
+A significant remaining data issue is symmetric receptor structures comprised of the same protein repeated multiple times. In these cases, the ligand could equally likely bind to the pocket of each of the proteins, i.e., multiple ligand correct positions are possible. However, the ground truth ligand is only placed in one of those locations. Examples are in Figure 15. We address the majority of these cases by only keeping the connected components of the receptor, which have an atom within a 10 A radius of any ligand atom.[˚] 
+
+_Figure 15._ Examples of symmetric receptor complexes with multiple equally valid binding positions for the ligand. 
+
+_Figure 16._ Histograms that show how often each unique ligand and receptor appears in the PDBBind dataset. 
+
+## **C. Implementation Details** 
+
+**Featurization.** For the _α_ -carbons in the receptor graph, we use the residue type as a feature. The edges have two attributes. Firstly, the interatomic distances encoded with Gaussian basis functions with 15 different variances—secondly, the local 
+
+4https://github.com/rlabduke/reduce 
+
+**EQUIBIND: Geometric Deep Learning for Drug Binding Structure Prediction** 
+
+frame orientation encodings as they are employed by Jumper et al. (2021a) and (Ganea et al., 2021a). 
+
+In the ligand, the edges have features that are encoded in the same fashion as for the receptor. Meanwhile, the atoms have the following features: atomic number; chirality; degree; formal charge; implicit valence; the number of connected hydrogens; the number of radical electrons; hybridization type; whether or not it is in an aromatic ring; in how many rings it is; and finally, 6 features for whether or not it is in a ring of size 3, 4, 5, 6, 7, or 8. 
+
+**GLIDE Runtime.** While baselines like GNINA, SMINA, and QVina-W can leverage multiple CPU cores while making the predictions for a single complex, this is not the case for GLIDE, which only uses a single thread when processing a complex (this and the following information is described here https://www.schrodinger.com/kb/1165). GLIDE has an application that supports starting multiple processes with each processing a different complex in parallel and for distributing these processes across CPU cores. However, each process also requires a separate software license. 
+
+**Further Hyperparameters.** We use a learning rate of 10 _[−]_[4] for EQUIBIND and 3 _×_ 10 _[−]_[4] for EQUIBIND-R. The learning rate is reduced by a factor of 0 _._ 6 after 60 epochs of no improvement in our main validation criterion, which is the percentage of predicted validation set complexes with an RMSD better than 2 A. The models with the best validation score are then[˚] tested on the time-based test set. 
+
+_Table 6._ Search space for all EQUIBIND models through which we searched to obtain a strong performance on the validation set. The final parameters for the standard EQUIBIND model are marked in **bold** . 
+
+|PARAMETER|SEARCHSPACE|
+|---|---|
+|LAS DG STEP SIZE_η_|1, 0.01,**0.001**, 0.0001|
+|LAS DG NUMBER OF STEPS_T_|**1**, 5, 10|
+|OPTIMAL TRANSPORT LOSS WEIGHT|0, 0.1, 0.5,**1**, 2, 10|
+|INTERSECTION LOSS WEIGHT|0, 0.1, 1,**3**, 10, 50, 100|
+|PROPAGATION DEPTH|[ 5, 7, **8**]|
+|INTERSECTION_σ_|8 (BASED ON LOSS ON VAL-SET)|
+|INTERSECTION_γ_|8 (BASED ON LOSS ON VAL-SET)|
+|KABSCHRMSD LOSS WEIGHT|0,**1**|
+|HIDDEN DIMENSION|32,**64**, 100|
+|NON LINEARITIES|**LEAKY-RELU**, RELU, SELU|
+|LEARNING RATES|0.0009, 0.0003,**0.0001**, 0.00007|
+|DROPOUT|0, 0.05,**0.1**, 0.2|
+|NUM ATTENTION HEADS|10, 20,**30**, 50, 100|
+|NORMALIZATION|**BATCHNORM**, LAYERNORM, GRAPHNORM|
+
+
+

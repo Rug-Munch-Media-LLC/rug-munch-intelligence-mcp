@@ -1,0 +1,1990 @@
+# AUTO-CORRELATION FUNCTIONS OF SATO–TATE DISTRIBUTIONS AND IDENTITIES OF SYMPLECTIC CHARACTERS 
+
+KYU-HWAN LEE AND SE-JIN OH[†] 
+
+Abstract. The Sato–Tate distributions for genus 2 curves (conjecturally) describe the statistics of numbers of rational points on the curves. In this paper, we explicitly compute the auto-correlation functions of Sato–Tate distributions for genus 2 curves as sums of irreducible characters of symplectic groups. Our computations bring about families of identities involving irreducible characters of symplectic groups Sp(2m) for all m ∈ Z≥1, which have interest in their own rights. 
+
+## 1. Introduction 
+
+The connection between random matrices and number theory was first conjectured by H. L. Montgomery [Mon73] in 1973 from the observation made by himself and F. J. Dyson that the two-point correlation function of the zeros of the Riemann zeta function is the same as the two-point correlation function of the eigenvalues of random matrices. Since then extensive research on correlation functions of L-functions and random matrices has been performed. For example, see [BK96, BK95, Hej94, KS99, Rub98, RS96]. 
+
+In 2000, Keating and Snaith [KS00b, KS00a] studied averages of characteristic polynomials of random matrices motivated in part by this connection to number theory and in part by the importance of these averages in quantum chaos [AS95]. Over the years it has become clear that averages of characteristic polynomials are fundamental for random matrix models, and many important developments have been made to the theory [BDS03, BS06, BH00, BH01, FS02a, FS02b, MN01]. In particular, the auto-correlation functions of the distributions of characteristic polynomials in the compact classical groups were computed by Conrey, Farmer, Keating, Rubinstein and Snaith [CFK[+] 03, CFK[+] 05] in connection with conjectures for integral moments of zeta and L-functions, and by Conrey, Farmer and Zirnbauer [CFZ08, CFZ05] in connection with conjectures for ratios of L-functions. Later, Bump and Gamburd [BG06] obtained different derivations of such formulae applying the symmetric function theory and (analogues of) the dual Cauchy identity along with classical results due to Weyl and Littlewood. Their results show that the auto-correlation functions are actually combinations of characters of classical groups. 
+
+> Date: June 12, 2020. 
+
+> †The research of S.-j. Oh was supported by the Ministry of Education of the Republic of Korea and the National Research Foundation of Korea (NRF-2019R1A2C4069647). 
+
+1 
+
+K.-H. LEE AND S.-J. OH 
+
+2 
+
+More precisely, Conrey, Farmer, Keating, Rubinstein and Snaith [CFK[+] 03] computed Selberg’s integrals to obtain the following formula (and many other formulae): 
+
+**==> picture [24 x 12] intentionally omitted <==**
+
+**==> picture [266 x 40] intentionally omitted <==**
+
+where sλ is the Schur function and the sum is over partitions λ = (λ1, . . . , λm) with all parts λj even and 2g ≥ λ1 ≥· · · ≥ λm ≥ 0. The left-hand side of (1.1) is the average of the products of characteristic polynomials of random matrices in USp(2g) as dγ is the Haar probability measure on USp(2g). Here, since −γ ∈ USp(2g) for γ ∈ USp(2g), we may use det(I + xjγ). 
+
+In a totally different way, Bump and Gamburd [BG06] could compute the same integral to obtain 
+
+**==> picture [388 x 40] intentionally omitted <==**
+
+where χ[Sp(2] (g[m] )[m][)] is the irreducible character of Sp(2m)[1] associated with the rectangular partition (g[m] ). The equality of the right-hand sides of (1.1) and (1.2) can be shown directly through branching of the character χ[Sp(2][m][)] . In fact, Bump and Gamburd used an analogue of the dual (g[m] ) Cauchy identity due to Jimbo–Miwa [JM85] and Howe [How95]: 
+
+**==> picture [425 x 34] intentionally omitted <==**
+
+where λ[˜] = (m − λ[′] g[, . . . , m][ −][λ] 1[′][)][with][λ][′][=][(][λ][′] 1[, . . . , λ][′] g[)][the][transpose][of][λ][.][This][identity][can] be considered as a reflection of Howe duality. 
+
+While most of the connections of number theory to random matrices are still conjectural, the celebrated Sato–Tate conjecture for elliptic curves is directly related to random matrices in nature and has been proved (under some conditions) by the works of R. Taylor, jointly with L. Clozel, M. Harris, and N. Shepherd-Barron [CHT08, Tay08, HSBT10]. The conjecture concerns the distribution of Euler factors of an elliptic curve over a number field. It specifically predicts that this distribution always takes one of the three forms, one occurring whenever the elliptic curve fails to have complex multiplication, which is the generic case, and two exceptional cases arising for curves with complex multiplication, and furthermore says that all three distributions are the same as the distributions of eigenvalues of random matrices in the compact groups SU(2), U(1) and N (U(1)), respectively, where N (U(1)) is the normalizer of U(1) in SU(2). 
+
+This amazing structural randomness in arithmetic data is not expected to be restricted to the case of elliptic curves. Indeed, J.-P. Serre, N. Katz and P. Sarnak proposed a generalized Sato–Tate conjecture for curves of higher genera [Ser94, KS99]. Pursuing this direction, K. S. Kedlaya and A. V. Sutherland [KS09] and later together with F. Fit´e and V. Rotger [FKRS12] made a list of 55 compact subgroups of USp(4) called Sato–Tate groups that would classify all 
+
+> 1By this notation we mean Sp(2m, C) or USp(2m) accodring to the context. We keep this ambiguity for notational convenience. 
+
+SATO–TATE DISTRIBUTIONS AND SYMPLECTIC CHARACTERS 
+
+3 
+
+the distributions of Euler factors for abelian surfaces and showed that at most 52 of them can actually arise from abelian surfaces[2] . 
+
+For example, the hyperelliptic curve y[2] = x[5] − x + 1 over Q falls into the generic case and has the distribution given by the group USp(4), while the curve y[2] = x[6] + 2 over Q([√] −3) has the distribution given by the subgroup ⟨U(1), **ζ** 12⟩ of USp(4), where **ζ** 12 is a primitive 12[th] root of unity (embedded into USp(4)). Thus USp(4) and ⟨U(1), **ζ** 12⟩ are examples of the Sato–Tate groups for genus 2 curves. 
+
+Through enormous amount of computer computation [FKRS12], they found abelian surfaces whose Euler factors have the same distributions as the distributions of characteristic polynomials of the 52 Sato–Tate groups. Since then, the Sato–Tate conjecture for abelian surfaces defined over Q, which covers 34 Sato–Tate groups, has been established by C. Johansson and N. Taylor [Joh17, Tay20] except for the generic case USp(4). Actually, those three groups, which do not arise for abelian surfaces, and two other subgroups of USp(4) appear when certain motives of weight 3 are considered in [FKS16]. Thus all the 57 groups are interesting in number theory and arithmetic geometry, and we will call all of them Sato–Tate groups in what follows. 
+
+In this paper, we describe the distributions of characteristic polynomials of random matrices in Sato–Tate groups H ≤ USp(4) by computing the auto-correlation functions 
+
+**==> picture [313 x 32] intentionally omitted <==**
+
+as sums of irreducible characters of Sp(2m). We consider all the 57 Sato–Tate groups H ≤ USp(4), and obtain the following result. 
+
+Theorem 1.1. Let H ≤ USp(4) be a Sate–Tate group. Then, for any m ∈ Z≥1, we have 
+
+**==> picture [326 x 39] intentionally omitted <==**
+
+where the coefficients m(b+2z,b) are the multiplicities of the trivial representation in the restrictions χ[Sp(4)] (b+2z,b)��H[and][are][explicitly][given][in][Table][5.1][.] 
+
+As the statement of the theorem manifests, this result can also be interpreted as a result on branching rules in representation theory. Indeed, our approach starts with the identity (1.3) and converts the problem to the branching rules of irreducible characters of USp(4) restricted to Sato–Tate groups H. Though a few of the Sato–Tate groups invoke classical branching rules, almost all of them call for a new study because they are disconnected and involve twists by automorphisms. 
+
+In classical situations, branching rules invoke many interesting combinatorial questions (e.g. [Kin71, KT90]). With Sato–Tate groups, we also meet various combinatorial problems, and adopt crystals as our main combinatorial tools for the problems. One can find details about 
+
+> 2In [FKS19], an additional Sato–Tate axiom is included for abelian varieties of dimension ≤ 3, and it eliminates those 3 groups which do not arise for abelian surfaces. 
+
+K.-H. LEE AND S.-J. OH 
+
+4 
+
+crystals, for example, in [BuSch17, HK02, Kash02]. However, in some cases, we need more concrete realizations of representations of USp(4). 
+
+Moreover, since most of the Sato–Tate groups are disconnected, we can decompose the integral (1.4) according to coset decompositions, and find that the characteristic polynomials over some cosets are independent of the elements of the cosets. Combining this observation with the computations of branching rules, we obtain families of non-trivial identities of irreducible characters of Sp(m) for all m ∈ Z≥1 as follows. 
+
+Theorem 1.2. Let κ1 = −2, κ2 = 2, κ3 = 1, κ4 = 0, and κ6 = −1. Then, for any m ∈ Z≥1 and n = 1, 2, 3, 4, 6, we have 
+
+**==> picture [351 x 38] intentionally omitted <==**
+
+where ψn(z, b) ∈ Z are respectively defined in (5.8) and (5.9) and in Table 5.3; 
+
+**==> picture [414 x 101] intentionally omitted <==**
+
+where ξ2(z, b) ∈ Z is defined in Table 5.4. 
+
+Notice that the irreducible characters χ[Sp(2] λ[m][)] are symmetric functions with the number of terms growing very fast as m increases, but that the coefficients (e.g. ψn(z, b)) are independent of m. These identities seem intriguing from the viewpoint of representation theory and algebraic combinatorics. Without the motivation coming from the Sato–Tate distributions which led to the computations in this paper, it might have been difficult for us to expect that such identities exist. 
+
+1.1. Organization of the paper. In Section 2, we present backgrounds for Sato–Tate groups. In Section 3, the dual Cauchy identity for symplectic groups will be used to convert computation of auto-correlation functions into that of branching rules of USp(4). Section 4 is devoted to the genus one case. This case will demonstrate basic ideas which apply to the genus two case. In Section 5, the main theorems are stated and proved by considering each of the Sato–Tate groups using the results of Section 6, where we study branching rules for Sato–Tate groups through crystals and other methods. 
+
+Convention 1.3. Throughout this paper, we keep the following conventions. 
+
+- (i) For a statement P , δ(P ) is equal to 1 or 0 according to whether P is true or not. 
+
+- (ii) For a partition λ, we denote by λ[′] = (λ[′] 1[≥][. . .][ ≥][λ][′] g[≥][0)][the][transpose][of][λ][.] 
+
+> (iii) The term for k = 0 in a summation over 1 ≤ i1 < · · · < ik ≤ m is set to be equal to 1. (iv) For m, m[′] ∈ Z, we write m ≡k m[′] if k divides m − m[′] , and m ̸≡k m[′] otherwise. 
+
+SATO–TATE DISTRIBUTIONS AND SYMPLECTIC CHARACTERS 
+
+5 
+
+Acknowledgments. We are very grateful to Daniel Bump for his help and guidance for this project, and thank Seung Jin Lee for useful discussions. We also thank Andrew Sutherland for his helpful comments. 
+
+## 2. Sato–Tate groups 
+
+In this section, we briefly overview backgrounds of Sato–Tate groups and their auto-correlation functions of characteristic polynomials. More details can be found in [KS09, FKRS12]. 
+
+Let C be a smooth, projective, geometrically irreducible algebraic curve of genus g defined over Q. For each prime p where C has good reduction, we define the zeta function Z(C/Fp; T ) by 
+
+**==> picture [166 x 34] intentionally omitted <==**
+
+where Nk is the number of the points on C over Fpk. It is well-known [Art24] that Z(C/Fp; T ) is a rational function of the form 
+
+**==> picture [152 x 27] intentionally omitted <==**
+
+where Lp ∈ Z[T ] is a polynomial of degree 2g with constant term 1. For example, when C is an elliptic curve, i.e. when g = 1, we have Lp(T ) = 1 − apT + pT[2] and Lp(1) is equal to the number of points on C over Fp. 
+
+Set L[¯] p(T ) := Lp(p[−][1][/][2] T ) and write 
+
+**==> picture [306 x 14] intentionally omitted <==**
+
+Let PC(N ) be the set of primes p ≤ N for which the curve C has good reduction. 
+
+Definition 2.1. For 1 ≤ k ≤ g and m ≥ 0, define ak(m; g) to be the average value of a[m] k,p[over] p ∈ PC(N ) as N →∞. 
+
+The values ak(m; g), m ≥ 0, are the m[th] moments of the distribution of ak,p, and we are interested in how to describe ak(m; g). The generalized Sato–Tate conjecture expects that curves of fixed genus g are classified into certain families and that ak(m; g) are all the same for curves in each family. In particular, there is a generic family of curves for each genus g. 
+
+Let ℓ be a prime and Tℓ(C) be the Tate module, i.e., the inverse limit of the ℓ[n] -torsion subgroups (n ∈ Z≥1) of the Jacobian J(C) of C. Then we obtain the representation 
+
+**==> picture [208 x 13] intentionally omitted <==**
+
+We say that the curve C has large Galois image if the image of ρℓ is Zariski dense in GSp(2g, Zℓ) ⊂ GL(2g, Zℓ) for any ℓ. The curves with large Galois image form the generic family of curves with a fixed genus g. 
+
+Example 2.2. The following curves are from the generic families ([KS09, FKRS12]). 
+
+**==> picture [146 x 12] intentionally omitted <==**
+
+**==> picture [314 x 12] intentionally omitted <==**
+
+6 
+
+K.-H. LEE AND S.-J. OH 
+
+**==> picture [319 x 71] intentionally omitted <==**
+
+**==> picture [247 x 49] intentionally omitted <==**
+
+The generalized Sato–Tate conjecture predicts that these distributions are actually the same as the distributions of eigenvalues of random matrices. To be precise, let us consider the group USp(2g) with the Haar probability measure. Let 
+
+**==> picture [292 x 13] intentionally omitted <==**
+
+be the characteristic polynomial of a random matrix γ of USp(2g). 
+
+Definition 2.3. For each k = 1, 2, . . . , g, let Xk be the random variable corresponding to the coefficient ck and define ck(m; g) to be the m[th] moment E[Xk[m][],][m][∈][Z][≥][0][,][of][the][random] variable Xk. 
+
+The following is the generalized Sato–Tate conjecture for the case that C is in the generic family. 
+
+Conjecture 2.4 ([KS99]). Let C be a smooth projective curve of genus g. Assume that C is in the generic family. Then, for each k = 1, 2, . . . , g and m ≥ 0, we have 
+
+**==> picture [96 x 12] intentionally omitted <==**
+
+Therefore it is important to compute the distribution of the characteristic polynomials of random matrices in USp(2g). Ultimately, the auto-correlation functions 
+
+**==> picture [24 x 12] intentionally omitted <==**
+
+**==> picture [149 x 40] intentionally omitted <==**
+
+for m ∈ Z≥0 will describe the distribution completely. The number ck(m; g) will appear as the coefficient of (x1 · · · xm)[k] in (2.1). 
+
+As mentioned in the previous section, Conrey–Farmer–Keating–Rubinstein–Snaith [CFK[+] 03] and Bump–Gamburd [BG06] obtained 
+
+**==> picture [388 x 40] intentionally omitted <==**
+
+where χ[Sp(2] (g[m] )[m][)] is the irreducible character of Sp(2m) associated with the rectangular partition (g[m] ). By computing the coefficients of (x1 · · · xm)[k] in the right-hand side of (2.2), which are nothing but weight multiplicities, one can check 
+
+**==> picture [93 x 12] intentionally omitted <==**
+
+SATO–TATE DISTRIBUTIONS AND SYMPLECTIC CHARACTERS 
+
+7 
+
+for the sequences ak(m; g) in Example 2.2. Thus we see validity of the generalized Sato–Tate conjecture for the curves in the example. 
+
+Aside from the generic family of curves whose distribution is (expected to be) given by USp(2g), there are exceptional families of curves. For elliptic curves, there are two exceptional families (only one over Q) which consist of elliptic curves with complex multiplication. The Sato–Tate conjecture, which is proven much earlier for these exceptional families of g = 1 [Deu41], tells us that the moment sequences a1(m; 1) are the same as those of N (U(1)) and U(1), respectively. Here N (U(1)) is the normalizer of U(1) in SU(2)[∼] = USp(2). 
+
+For genus 2 curves, there are a lot more of exceptional families. Kedlaya and Sutherland [KS09] and later with Fit´e and Rotger [FKRS12] made a conjectural, exhaustive list of 55 compact subgroups of USp(4) that would classify all the distributions of Euler factors for abelian surfaces, and called the groups Sato–Tate groups. Later, when they considered certain motives of weight 3 [FKS16], two other groups were added to the list of Sato–Tate groups that are subgroups of USp(4). They determined the moment sequences ck(m; 2), k = 1, 2, for each Sato–Tate group by expressing them as combinations of some sequences. In the process they investigated a huge number of abelian surfaces to see that Euler factors have the same distributions as the Sato–Tate distributions, supporting their refined, generalized Sato–Tate conjecture for abelian surfaces. 
+
+## 3. Dual Cauchy identity 
+
+In this section, we use the dual Cauchy identity for symplectic groups to convert computation of auto-correlation functions into that of branching rules. 
+
+We recall the dual Cauchy identity for symplectic groups: 
+
+Proposition 3.1 ( [JM85, How95]). For m, g ∈ Z≥1, we have 
+
+**==> picture [425 x 34] intentionally omitted <==**
+
+where we set 
+
+**==> picture [124 x 15] intentionally omitted <==**
+
+**==> picture [195 x 14] intentionally omitted <==**
+
+Let H be a compact subgroup of USp(2g). For each m ∈ Z≥1, we want to compute the auto-correlation of distribution of characteristic polynomials of H: 
+
+**==> picture [106 x 32] intentionally omitted <==**
+
+Fix g for the time being. For γ ∈ USp(2g) with eigenvalues t[±] 1[1][, . . . , t][±] g[1][,][we][have] 
+
+**==> picture [220 x 33] intentionally omitted <==**
+
+We also write χλ[Sp(2] ˜[g][)] (γ) = χλ[Sp(2] ˜[g][)] (t[±] 1[1][, . . . , t][±] g[1][)][for][simplicity][of][notations.] 
+
+K.-H. LEE AND S.-J. OH 
+
+8 
+
+Definition 3.2. Let mλ˜(H) denote the multiplicity of the trivial representation 1H of H in the restriction of χ[Sp(2] ˜[g][)] to H. That is, λ 
+
+**==> picture [336 x 18] intentionally omitted <==**
+
+The following proposition shows that the decomposition multiplicities mλ˜(H) are the coefficients of character expansion of auto-correlation functions. 
+
+Proposition 3.3. For each m ∈ Z≥1, the auto-correlation function of the distribution of characteristic polynomials of H is given by 
+
+**==> picture [347 x 34] intentionally omitted <==**
+
+Proof. Since we have 
+
+**==> picture [224 x 16] intentionally omitted <==**
+
+it follows from the dual Cauchy identity (3.1) that 
+
+**==> picture [395 x 110] intentionally omitted <==**
+
+From Schur orthogonality (for example, [Bum13]), the integral �H[χ] λ[Sp(2] ˜[g][)] (γ)dγ is equal to the multiplicity of the trivial representation 1H of H in the restriction of χ[Sp(2] ˜[g][)] to H, which is λ mλ˜(H) by definition. □ 
+
+When H is clear from the context, we will simply write mλ˜ for mλ˜(H). For simplicity, we also write 
+
+**==> picture [156 x 17] intentionally omitted <==**
+
+As a special case, we obtain the identity (1.2) where H is equal to the generic Sato–Tate group USp(2g). 
+
+Corollary 3.4 ([BG06]). When H = USp(2g), we obtain 
+
+**==> picture [307 x 33] intentionally omitted <==**
+
+Proof. Since H = USp(2g), we have mλ˜(H) = 0 unless χλ[Sp(2] ˜[g][)] itself is trivial. If χλ[Sp(2] ˜[g][)] is trivial, we get λ[˜] = ∅, mλ˜(H) = 1 and λ = (g[m] ). □ 
+
+SATO–TATE DISTRIBUTIONS AND SYMPLECTIC CHARACTERS 
+
+9 
+
+**==> picture [138 x 10] intentionally omitted <==**
+
+In this section, we compute mλ˜(H) for non-generic Sato–Tate groups H ≨ USp(2) when g = 1. The computations will demonstrate our approach which extends to the case g = 2 in Sections 5 and 6. 
+
+**==> picture [395 x 12] intentionally omitted <==**
+
+**==> picture [91 x 13] intentionally omitted <==**
+
+Thus U(1) is a (maximal) torus of USp(2). Under this embedding the non-generic Sato–Tate groups are U(1) and its normalizer N (U(1)). 
+
+The auto-correlation functions for g = 1 are explicitly given in the following theorem. 
+
+Theorem 4.1. For each m ∈ Z≥1, we have 
+
+**==> picture [24 x 12] intentionally omitted <==**
+
+**==> picture [254 x 38] intentionally omitted <==**
+
+where 
+
+**==> picture [105 x 68] intentionally omitted <==**
+
+Proof. If λ ⊴ (1[m] ), we can write 
+
+**==> picture [234 x 14] intentionally omitted <==**
+
+First, assume that H = U(1). Let v1 = (1, 0) and v2 = (0, 1) be the standard unit vectors of V := C[2] , and consider the standard representation of Sp(2, C) on V . Consider the irreducible representation Sym[m][−][k] (V ) of Sp(2, C) with the character χ[Sp(2)] (m−k)[of][degree][m][ −][k][ + 1.][Then] the trivial U(1)-module is generated by v1[j][v] 2[j][only][when][m][ −][k][=][2][j][.] Thus the restriction χ[Sp(2)] (m−k)[|][U(1)][has][the][trivial][character][with][multiplicity][1][if][and][only][if][m][ −][k][is][even.][That][is,] 
+
+**==> picture [156 x 33] intentionally omitted <==**
+
+Thus it follows from Proposition 3.3 that 
+
+**==> picture [433 x 38] intentionally omitted <==**
+
+where we change the indices by m − k = 2j. This proves (4.1) for H = U(1). 0 1 Next, assume that H = N (U(1)). Let J = −1 0 ∈ USp(2). Then � � 
+
+**==> picture [128 x 17] intentionally omitted <==**
+
+K.-H. LEE AND S.-J. OH 
+
+10 
+
+and Jv1 = −v2 and Jv2 = v1 on the standard representation of Sp(2, C) on V . Consider again the irreducible representation Sym[m][−][k] (V ) of Sp(2, C). As noted above, the trivial U(1)-module is generated by v1[j][v] 2[j][when][m][ −][k][=][2][j][,][and][J][acts][trivially][on][v] 1[j][v] 2[j][if][and][only][if][j][is][even.] Consequently, the restriction χ[Sp(2)] (m−k)[|][N][(U(1))][has] 
+
+**==> picture [120 x 14] intentionally omitted <==**
+
+Now it follows from Proposition 3.3 that 
+
+**==> picture [449 x 77] intentionally omitted <==**
+
+As corollaries, we obtain the following identities which are interesting in their own rights. 
+
+Proposition 4.2. For each m ∈ Z≥1, we have the following identities: 
+
+**==> picture [365 x 82] intentionally omitted <==**
+
+Proof. Since �U(1)[u][k][du][ =][ δ][(][k][= 0)][for][k][∈][Z][,][we][have] 
+
+**==> picture [363 x 154] intentionally omitted <==**
+
+where we put m − k = 2ℓ for the last equality. Since det(I + xγ) = 1 + (u + u[−][1] )x + x[2] for u 0 γ = 0 u[−][1] , the identity (4.4) follows from Theorem 4.1. � � For any γ ∈ J U(1), we compute to see that 
+
+**==> picture [104 x 13] intentionally omitted <==**
+
+SATO–TATE DISTRIBUTIONS AND SYMPLECTIC CHARACTERS 
+
+11 
+
+Thus we have 
+
+**==> picture [430 x 112] intentionally omitted <==**
+
+where dγ1 is the probability Haar measure on U(1) and we use (4.2) for the last equality. By comparing with (4.3), we obtain 
+
+**==> picture [326 x 54] intentionally omitted <==**
+
+Diving both sides by x1 · · · xm, we obtain the desired identity (4.5). 
+
+## 5. Main results: case g = 2 
+
+After fixing notations for Sato–Tate groups, we present the first main theorem of this paper and go over its proof. Much of the computations of branching rules involving crystals will be performed in Section 6 though we use the results of the branching rules in this section. In the process we will decompose Sato–Tate groups into cosets and prove various identities of irreducible characters of Sp(2m) for all m ≥ 1, which form another set of main results in this paper. 
+
+We will adopt the same notations for the Sato–Tate groups as in [FKRS12]. To make this paper more self-contained, we recall the definitions of these groups. We take the group USp(4) 0 I2 to fix the symplectic form −I2 0 , where I2 is the 2 × 2 identity matrix. Let Eij be the � � 4 × 4 elementary matrix which has (i, j)-entry equal to 1 and other entries equal to 0. We fix a basis for the Lie algebra sp4(C): 
+
+**==> picture [368 x 29] intentionally omitted <==**
+
+Set 
+
+**==> picture [344 x 34] intentionally omitted <==**
+
+Define weights ǫi, i = 1, 2, by ǫi(h[ˆ] j) = δij. Then the simple roots sp4(C) are 
+
+α1 = ǫ1 − ǫ2, α2 = 2ǫ2, 
+
+and the fundamental weights are 
+
+**==> picture [118 x 10] intentionally omitted <==**
+
+12 
+
+K.-H. LEE AND S.-J. OH 
+
+A pair of non-negative integers (a, b) with a ≥ b, or a partition (a, b) of length ≤ 2 will be considered as a weight corresponding to aǫ1 + bǫ2. 
+
+We embed U(1) into USp(4) by 
+
+**==> picture [124 x 14] intentionally omitted <==**
+
+and SU(2) and U(2) into USp(4) by 
+
+**==> picture [266 x 34] intentionally omitted <==**
+
+where A consists of the complex conjugates of the entries of A. 
+
+We fix an embedding 
+
+(5.2) SU(2) × SU(2) ֒→ USp(4) 
+
+in such a way that the induced Lie algebra embedding sl2(C) × sl2(C) → sp4(C) gives 
+
+(h, 0) �−→ h[ˆ] 1 and (0, h) �−→ h[ˆ] 2. 
+
+From this, we also induce an embedding 
+
+**==> picture [120 x 12] intentionally omitted <==**
+
+Identify SU(2) with the group of unit quaternions via the isomorphism 
+
+**==> picture [264 x 34] intentionally omitted <==**
+
+and also identify them with the corresponding elements in USp(4) through the embedding 
+
+**==> picture [449 x 93] intentionally omitted <==**
+
+image in USp(4) will also be written as **ζ** 2n. Set 
+
+**==> picture [237 x 14] intentionally omitted <==**
+
+**==> picture [433 x 61] intentionally omitted <==**
+
+Let 
+
+**==> picture [415 x 41] intentionally omitted <==**
+
+> 3In [FKRS12], the symplectic form of USp(4) is changed for U(1) × U(1) and for the groups that contain it. In this paper, we do not change the symplectic form. There is no difference except for switching some indices. 
+
+SATO–TATE DISTRIBUTIONS AND SYMPLECTIC CHARACTERS 
+
+13 
+
+Definition 5.1 (Sato–Tate groups). (1) For n = 1, 2, 3, 4, 6, define 
+
+**==> picture [86 x 12] intentionally omitted <==**
+
+For n = 2, 3, 4, 6, define 
+
+**==> picture [66 x 12] intentionally omitted <==**
+
+With Q1 and Q2 in (5.3) and (5.4), respectively, define 
+
+**==> picture [185 x 12] intentionally omitted <==**
+
+**==> picture [102 x 12] intentionally omitted <==**
+
+**==> picture [371 x 31] intentionally omitted <==**
+
+(3) For n = 2, 4, 6, define 
+
+**==> picture [254 x 13] intentionally omitted <==**
+
+For n = 3, 4, 6, define 
+
+**==> picture [110 x 13] intentionally omitted <==**
+
+and 
+
+**==> picture [72 x 12] intentionally omitted <==**
+
+with Q2 in (5.4). (4) For n = 1, 2, 3, 4, 6, define 
+
+**==> picture [270 x 15] intentionally omitted <==**
+
+where e[πi/n] is with 
+
+**==> picture [152 x 14] intentionally omitted <==**
+
+(5) The image of U(2) is denoted by the same notation and its normalizer by N (U(2)). 
+
+(6) Define F to be the image of U(1) × U(1) under the embedding (5.5), and define 
+
+**==> picture [288 x 31] intentionally omitted <==**
+
+where a, b, c are defined in (5.6). 
+
+(7) Define G1,3 and G3,3 to be the images of U(1) × SU(2) and SU(2) × SU(2) respectively under the embedding (5.2), and N (G1,3) and N (G3,3) to be their normalizers in USp(4). 
+
+The following is one of the main theorems in this paper. 
+
+Theorem 5.2 (Theorem 1.1). For each m ∈ Z≥1, we have 
+
+**==> picture [388 x 39] intentionally omitted <==**
+
+where m(b+2z,b) is the multiplicity of the trivial representation in the restriction χ[Sp(4)] (b+2z,b)��H[for] each Sate–Tate group H ≤ USp(4) and is explicitly given in Table 5.1. 
+
+K.-H. LEE AND S.-J. OH 
+
+14 
+
+|H||m(b+2z,b)|||H|||||m(b+2z,b)|||
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|C1||η1|||D3,2|||||1<br>6η1 + 1<br>3 η3+|1<br>2ψ2||
+|C2||1<br>2η1 + 1<br>2 η2|||D4,2|||1<br>8|η1+ 1<br>8η2 + 1<br>4η4 + 1<br>2 ψ2||||
+|C3||1<br>3η1 + 2<br>3 η3|||D6,2||1<br>12|η1+||1<br>12 η2+ 1<br>6η3 + 1<br>6 η6+||1<br>2ψ2|
+|C4||1<br>4 η1 + 1<br>4η2 + 1<br>2η4|||O1||1<br>24η1||+|1<br>8η2 + 1<br>3 η3+|1<br>4ψ2 +|1<br>4 ψ4|
+|C6||1<br>6 η1+ 1<br>6η2 + 1<br>3 η3+ 1<br>3η6|||E1|||||b+ 1|||
+|D2||1<br>4η1 + 3<br>4 η2|||E2|||||(b+ 1)δ(b ≡2 0)|||
+|D3||1<br>6 η1 + 1<br>2η2 + 1<br>3η3|||E3||||⌊b/3⌋+ 1−δ(b||≡3 1)||
+|D4||1<br>8 η1 + 5<br>8η2 + 1<br>4η4|||E4||||(2⌊b/4⌋+ 1)δ(b||≡2 0)||
+|D6||1<br>12 η1+<br>7<br>12 η2+ 1<br>6η3 +|1<br>6 η6||E6||||(2⌊b/6⌋+ 1)δ(b||≡2 0)||
+|T||1<br>12 η1 + 1<br>4 η2+ 2<br>3η3|||J(E1)|||1<br>2 (b+ 1) + 1<br>2(−1)z|||δ(b ≡2|0)|
+|O||1<br>24 η1+ 3<br>8η2 + 1<br>3η3 + 1<br>4 η4|||J(E2)|||(b/2||+δ(z ≡2 0))δ(b ≡2 0)|||
+|J(C1)||θ1|||J(E3)|1<br>2|(⌊b/3⌋+ 1−δ(b ≡3 1)) +||||1<br>2(−1)zδ(b ≡2 0)||
+|J(C2)||1<br>2 θ1+ 1<br>2 θ2|||J(E4)||(⌊b/4⌋+δ(z ≡2 0))||||δ(b ≡2|0)|
+|J(C3)||1<br>3 θ1+ 2<br>3 θ3|||J(E6)||(⌊b/6⌋+δ(z ≡2 0))||||δ(b ≡2|0)|
+|J(C4)||1<br>4 θ1+ 1<br>4 θ2+ 1<br>2 θ4|||U(2)|||||δ(b≡2 0)|||
+|J(C6)||1<br>6θ1 + 1<br>6 θ2+ 1<br>3 θ3+ 1<br>3|θ6||N(U(2))||||δ(b ≡2 0)δ(z ≡2 0)||||
+|J(D2)||1<br>4 θ1+ 3<br>4 θ2|||F|||||ξ1|||
+|J(D3)||1<br>6 θ1+ 1<br>2 θ2+ 1<br>3 θ3|||Fa|||||1<br>2ξ1+ 1<br>2ξ2|||
+|J(D4)||1<br>8 θ1+ 5<br>8 θ2+ 1<br>4 θ4|||Fc|||||1<br>2ξ1+ 1<br>2η2|||
+|J(D6)||1<br>12θ1 +<br>7<br>12 θ2+ 1<br>6θ3+|1<br>6θ6||Fab|||||1<br>2 ξ1+ 1<br>2 ψ2|||
+|J(T)||1<br>12 θ1+ 1<br>4θ2+ 2<br>3θ3|||Fac|||||1<br>4ξ1+ 1<br>4ψ2 +|1<br>2 ψ4||
+|J(O)||1<br>24 θ1+ 3<br>8 θ2+ 1<br>3θ3+ 1<br>4θ4|||Fa,b|||||1<br>4 ξ1+ 1<br>4 ψ2+|1<br>2ξ2||
+|C2,1||1<br>2 η1+ 1<br>2ψ2|||Fab,c|||||1<br>4ξ1 + 1<br>4 ψ2+|1<br>2 η2||
+|C4,1||1<br>4η1 + 1<br>4η2 + 1<br>2 ψ4|||Fa,b,c||1<br>8|ξ1+||1<br>4 ξ2+ 1<br>8ψ2+|1<br>4ψ4 + 1<br>4 η2||
+|C6,1||1<br>6 η1+ 1<br>3η3 + 1<br>6ψ2+ 1<br>3ψ6|||G1,3|||||1|||
+|D2,1||1<br>4η1 + 1<br>4η2 + 1<br>2 ψ2|||N(G1,3)|||||δ(z ≡2 0)|||
+|D4,1||1<br>8 η1+ 3<br>8η2 + 1<br>4ψ2+ 1<br>4ψ4|||G3,3|||||δ(z = 0)|||
+|D6,1|1<br>12|η1+ 1<br>4η2 + 1<br>6η3 + 1<br>3 ψ2|+|1<br>6ψ6|N(G3,3)|||||δ(b ≡2 0)δ(z = 0)|||
+||||||USp(4)|||||δ(b = 0)δ(z = 0)|||
+
+
+
+Table 5.1. Coefficients m(b+2z,b) 
+
+**==> picture [336 x 86] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+z\b 0 1 2 3 4 5<br>z\b 0 1 2 3 0 1 2 2 1 0 0<br>z\b 0 1 2<br>0 1 1 0 0 1 3 5 4 1 −1 0<br>0 1 0 0<br>1 2 1 −1 0 2 4 5 2 −2 −3 0<br>1 1 −1 0<br>2 1 −1 −2 0 3 3 2 −2 −5 −4 0<br>2 0 −1 0<br>3 0 −1 −1 0 4 1 −1 −4 −5 −3 0<br>5 0 −1 −2 −2 −1 0<br>**----- End of picture text -----**<br>
+
+
+Table 5.2. Functions ηi(z, b), i = 3, 4, 6 
+
+Here we 
+
+**==> picture [202 x 14] intentionally omitted <==**
+
+**==> picture [201 x 34] intentionally omitted <==**
+
+and the functions ηi(z, b), i = 3, 4, 6 on the congruence classes of z and b as in Table 5.2; define 
+
+SATO–TATE DISTRIBUTIONS AND SYMPLECTIC CHARACTERS 
+
+15 
+
+|||||||||||||z\b|0|1|2|3|4|5|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|z\b|0|1|2|3|4|5|z\b|0|1|2|3|0|1|−2|2|−1|0|0|
+||||||||0|1|−1|0|0|1|1|−1|0|1|−1|0|
+|0|1|0|0|−1|0|0|||||||||||||
+||||||||1|0|1|−1|0|2|0|1|−2|2|−1|0|
+|1|−1|1|0|1|−1|0|||||||||||||
+||||||||2|−1|1|0|0|3|−1|2|−2|1|0|0|
+|2|0|−1|0|0|1|0|||||||||||||
+||||||||3|0|−1|1|0|4|−1|1|0|−1|1|0|
+|||||||||||||5|0|−1|2|−2|1|0|
+
+
+
+Table 5.3. Functions ψi(z, b), i = 3, 4, 6 
+
+**==> picture [96 x 38] intentionally omitted <==**
+
+**==> picture [130 x 11] intentionally omitted <==**
+
+**==> picture [333 x 55] intentionally omitted <==**
+
+and the functions ψi(z, b), i = 3, 4, 6 on the congruence classes of z and b as in Table 5.3; define 
+
+ξ1(z, b) := z(b + 1) + ⌊b/2⌋ + 1, 
+
+and ξ2(z, b) on the congruence classes of z and b as in Table 5.4; finally define 
+
+(5.10) 
+
+**==> picture [240 x 23] intentionally omitted <==**
+
+More explicitly, 
+
+**==> picture [251 x 112] intentionally omitted <==**
+
+and θi(z, b), i = 3, 4, 6, are determined by the congruence classes of z and b as in Table 5.5. 
+
+In the rest of this section, we prove Theorem 5.2. The cases J(Cn), J(En) and Fa will lead to Theorems 5.5, 5.9 and 5.10, which are also main results of this paper. We denote by V˜[Sp(4)] λ the irreducible representation of Sp(4) with character χ[Sp(4)] λ˜ . 
+
+From Proposition 3.3, we have 
+
+**==> picture [279 x 34] intentionally omitted <==**
+
+K.-H. LEE AND S.-J. OH 
+
+16 
+
+|||||||||||||z\b|0|1|2|3|4|5|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|z\b|0|1|2|3|4|5|z\b|0|1|2|3|0|1|0|2|0|0|0|
+||||||||0|1|0|0|0|1|2|2|2|1|−1|0|
+|0|1|0|0|0|0|0|||||||||||||
+||||||||1|1|1|−1|0|2|2|3|0|0|−2|0|
+|1|0|0|0|1|−1|0|||||||||||||
+||||||||2|0|0|−1|0|3|1|2|−2|−2|−2|0|
+|2|0|−1|0|0|0|0|||||||||||||
+||||||||3|0|−1|0|0|4|0|0|−2|−3|−1|0|
+|||||||||||||5|0|−1|0|−2|0|0|
+
+
+
+Table 5.5. Functions θi(z, b), i = 3, 4, 6 
+
+In particular, λ[˜] = (m − λ[′] 2[, m][−][λ][′] 1[) with][ λ][′][= (][λ][′] 1[, λ][′] 2[) the transpose of][ λ][.][For][λ][˜][ = (][a, b][)][ ⊴][(][m][2][),] we define z := (a − b)/2. Then λ[˜] = (b + 2z, b) and λ = (2[m][−][b][−][2][z] , 1[2][z] ) for 0 ≤ b ≤ m and 0 ≤ z ≤[m] 2[−][b][.] 
+
+For each Sato–Tate group H, the number m(a,b)(H) is equal to the number of independent weight vectors vµ with weight µ in V([Sp(4)] a,b) which are fixed by H and satisfy some other conditions. Since each H contains either 
+
+**==> picture [282 x 14] intentionally omitted <==**
+
+one necessary condition for µ is that 
+
+**==> picture [116 x 14] intentionally omitted <==**
+
+If a − b is odd then this condition cannot be satisfied. Thus, for each of the Sato–Tate groups, 
+
+(5.11) m(a,b) = m(b+2z,b) = 0 unless a − b is even, or equivalently, unless z is an integer. This justifies having only integer values for z in (5.7). 
+
+5.1. Groups Cn. For each n = 1, 2, 3, 4, 6, the group Cn ≤ USp(4) consists of the matrices of the form 
+
+**==> picture [408 x 34] intentionally omitted <==**
+
+**==> picture [449 x 90] intentionally omitted <==**
+
+where h[ˆ] 1 = E11 − E33 and[ˆ] h2 = E22 − E44 as before. Thus the number mλ˜(Cn) is equal to the number of independent vectors with weight µ in the representation V˜[Sp(4)] such that λ 
+
+(5.12) µ(h[ˆ] 1 + h[ˆ] 2) = 0 and µ(h[ˆ] 1 − h[ˆ] 2) ≡ 0 (mod 2n), n = 1, 2, 3, 4, 6. 
+
+The numbers mλ˜(Cn) are all calculated in Section 6.2 (Propositions 6.4–6.9) and they match with the formulae in Table 5.1. This prove Theorem 5.2 for the groups Cn. 
+
+SATO–TATE DISTRIBUTIONS AND SYMPLECTIC CHARACTERS 
+
+17 
+
+For convenience in notation, define 
+
+**==> picture [386 x 34] intentionally omitted <==**
+
+Then we have 
+
+**==> picture [390 x 37] intentionally omitted <==**
+
+for n = 1, 2, 3, 4, 6, where dγCn is the probability Haar measure on Cn. 
+
+5.2. Cosets of Cn. We need to study the cosets of C1 in Cn to understand other groups. Consider 
+
+**==> picture [320 x 14] intentionally omitted <==**
+
+Then we have 
+
+**==> picture [358 x 14] intentionally omitted <==**
+
+**==> picture [312 x 13] intentionally omitted <==**
+
+where we set ωn = −2, 0, 1, √2, √3 for n = 1, 2, 3, 4, 6, respectively. 
+
+Proposition 5.3. For n = 1, 2, 3, 4, 6, we have 
+
+**==> picture [396 x 75] intentionally omitted <==**
+
+**==> picture [29 x 12] intentionally omitted <==**
+
+Proof. The case n = 1 is already checked as a part of Theorem 5.2, and we have only to consider n = 2, 3, 4, 6. To begin with, note that we have the coset decompositions 
+
+**==> picture [421 x 33] intentionally omitted <==**
+
+Let dγCn and du be the probability Haar measures on Cn and U(1), respectively. Note that C1[∼] = U(1). Recall (5.13): 
+
+**==> picture [333 x 38] intentionally omitted <==**
+
+In what follows we write 
+
+**==> picture [293 x 31] intentionally omitted <==**
+
+to ease the notation, where dγ is the probability Haar measure on the group the integral is over. 
+
+18 
+
+K.-H. LEE AND S.-J. OH 
+
+When n = 2, we obtain from (5.14) and (5.16), 
+
+**==> picture [401 x 70] intentionally omitted <==**
+
+� Since η2 = 2[1][η][1][ +][1] 2[η][2][,][we][obtain][(][5.15][)][for][n][ = 2.] For n = 3, since −u ∈ U(1) for u ∈ U(1), a similar computation to (5.14) yields 
+
+**==> picture [370 x 165] intentionally omitted <==**
+
+Thus we obtain from (5.14) and (5.16), 
+
+� Since η3 =[1] 3[η][1][ +][2] 3[η][3][,][we][obtain][(][5.15][)][for][n][ = 3.] When n = 4, we get 
+
+**==> picture [124 x 27] intentionally omitted <==**
+
+Thus we obtain from (5.14) and (5.16), 
+
+**==> picture [377 x 107] intentionally omitted <==**
+
+� Since η4 = 4[1][η][1][ +][1] 4[η][2][ +][1] 2[η][4][,][we][obtain][(][5.15][)][for][n][ = 4.] The case n = 6 is similar to the previous cases, and we obtain 
+
+**==> picture [396 x 47] intentionally omitted <==**
+
+� Since η6 = 6[1][η][1][ +][1] 6[η][2][ +][1] 3[η][3][ +][1] 3[η][6][,][we][obtain][(][5.15][)][for][n][ = 6.] 
+
+SATO–TATE DISTRIBUTIONS AND SYMPLECTIC CHARACTERS 
+
+19 
+
+Corollary 5.4. For any m ∈ Z≥1, we have 
+
+**==> picture [360 x 84] intentionally omitted <==**
+
+**==> picture [449 x 80] intentionally omitted <==**
+
+for n = 2, 3, 4, 6. Consider 
+
+**==> picture [306 x 46] intentionally omitted <==**
+
+We see that 
+
+**==> picture [176 x 14] intentionally omitted <==**
+
+for any n = 2, 3, 4, 6. Then we have 
+
+**==> picture [295 x 63] intentionally omitted <==**
+
+By (5.15), we obtain 
+
+**==> picture [356 x 38] intentionally omitted <==**
+
+and it follows from (5.13) that mλ˜(Dn) are given by 
+
+(5.20) 
+
+**==> picture [153 x 23] intentionally omitted <==**
+
+These coincide with the formulae in Table 5.1 and prove Theorem 5.2 for the groups Dn. 
+
+5.4. Group T . There are 24 cosets of C1 in T , whose representatives are given by 
+
+**==> picture [170 x 14] intentionally omitted <==**
+
+From computations of the characteristic polynomials for the elements of each coset, we see the following. 
+
+(i) There are 2 cosets whose characteristic polynomials are 
+
+**==> picture [244 x 13] intentionally omitted <==**
+
+By (5.14), these are the same as those of C1. 
+
+K.-H. LEE AND S.-J. OH 
+
+20 
+
+(ii) There are 6 cosets whose characteristic polynomials are 
+
+**==> picture [170 x 13] intentionally omitted <==**
+
+which are the same as those of **ζ** 4C1 by (5.14). 
+
+(iii) The characteristic polynomials of the remaining 16 cosets are 
+
+**==> picture [233 x 13] intentionally omitted <==**
+
+These are the same as those of **ζ** 6C1 by (5.14). 
+
+**==> picture [349 x 43] intentionally omitted <==**
+
+and it follows from (5.15) that 
+
+(5.21) 
+
+**==> picture [130 x 14] intentionally omitted <==**
+
+This proves Theorem 5.2 for the group T . 
+
+5.5. Group O. There are 48 cosets of C1 as one can see from (5.4). We compute the characteristic polynomial for the elements of each coset. Comparing with (5.14), we obtain 2 cosets with C1 polynomials, 18 cosets with **ζ** 4C1 polynomials, 16 cosets with **ζ** 6C1 polynomials and 12 cosets with **ζ** 8C1 polynomials. 
+
+Thus we obtain 
+
+**==> picture [358 x 27] intentionally omitted <==**
+
+and it follows from (5.15) that 
+
+**==> picture [304 x 15] intentionally omitted <==**
+
+This proves Theorem 5.2 for the group O. 
+
+**==> picture [449 x 47] intentionally omitted <==**
+
+obtained by adjoining J to Cn for n = 1, 2, 3, 4, 6, and we have the decomposition 
+
+**==> picture [94 x 11] intentionally omitted <==**
+
+˜ The number mλ(J(Cn)) is equal to the number of independent J-fixed vectors with weight µ in the representation Vλ˜[Sp(4)] satisfying the conditions in (5.12). The numbers mλ˜(J(Cn)) are all calculated in Propositions 6.12 and 6.13, and they coincide with the formulae in Table 5.1. This prove Theorem 5.2 for the groups J(Cn). 
+
+**==> picture [410 x 36] intentionally omitted <==**
+
+SATO–TATE DISTRIBUTIONS AND SYMPLECTIC CHARACTERS 
+
+21 
+
+Then the result for J(Cn) can be written as 
+
+**==> picture [392 x 37] intentionally omitted <==**
+
+Using the above result, we now prove another main theorem of this paper. 
+
+Theorem 5.5 (Theorem 1.2 (1)). Let κ1 = −2, κ2 = 2, κ3 = 1, κ4 = 0, and κ6 = −1. Then, for any m ∈ Z≥1 and n = 1, 2, 3, 4, 6, we have the following identities: 
+
+**==> picture [439 x 38] intentionally omitted <==**
+
+where ψn(z, b) are defined in (5.8), (5.9) and Table 5.3. 
+
+**==> picture [448 x 46] intentionally omitted <==**
+
+direct computation shows 
+
+(5.26) det(I + xJ **ζ** 2nγ) = 1 − (e[πi/n] + e[−][π/n] )x[2] + x[4] = 1 − κnx[2] + x[4] . This proves the first equality in (5.25). 
+
+We continue to use the notational convention in (5.18). We have 
+
+**==> picture [210 x 28] intentionally omitted <==**
+
+When n = 1, we get from (5.13), (5.24) and (5.26) 
+
+**==> picture [326 x 112] intentionally omitted <==**
+
+Since θ[�] 1 = θ1 = 2[1][η][1][ +][1] 2[ψ][1][and][η][1][=][η][�][1][by][definition,][we][obtain] 
+
+**==> picture [244 x 38] intentionally omitted <==**
+
+as desired. 
+
+Assume that n = 2. Using (5.16) along with (5.13), (5.24) and (5.26), we obtain 
+
+**==> picture [267 x 38] intentionally omitted <==**
+
+**==> picture [416 x 155] intentionally omitted <==**
+
+When n = 3, similar computation yields 
+
+**==> picture [400 x 38] intentionally omitted <==**
+
+Since θ[�] 3 =[1] 3[θ][1][ +] 3[2][θ][3][=] 6[1][η][1][ +][1] 3[η][3][ +][1] 6[ψ][1][ +][1] 3[ψ][3][and][η][�][3][=][1] 3[η][1][ +][2] 3[η][3][,][we][obtain] 
+
+**==> picture [244 x 38] intentionally omitted <==**
+
+When n = 4, it follows from 
+
+that 
+
+**==> picture [404 x 92] intentionally omitted <==**
+
+Finally, when n = 6, we have 
+
+**==> picture [409 x 129] intentionally omitted <==**
+
+and obtain 
+
+The following identities are obtained from computations in the proof above. These identities will be used in the next subsection. 
+
+Corollary 5.6. For n = 1, 2, 3, 4, 6, we have 
+
+**==> picture [391 x 38] intentionally omitted <==**
+
+SATO–TATE DISTRIBUTIONS AND SYMPLECTIC CHARACTERS 
+
+23 
+
+where we define 
+
+**==> picture [396 x 36] intentionally omitted <==**
+
+We also obtain the following identity from (4.5): 
+
+Corollary 5.7. For any m ∈ Z≥1, we have 
+
+**==> picture [388 x 39] intentionally omitted <==**
+
+5.7. Groups J(Dn). We have the decompositions 
+
+**==> picture [216 x 12] intentionally omitted <==**
+
+**==> picture [405 x 47] intentionally omitted <==**
+
+**==> picture [144 x 13] intentionally omitted <==**
+
+Using (5.20), (5.25) and (5.27), we compute 
+
+**==> picture [419 x 70] intentionally omitted <==**
+
+Then we have 
+
+**==> picture [177 x 16] intentionally omitted <==**
+
+which are the same as the formulae in Table 5.1 for n = 2, 3, 4, 6. This proves Theorem 5.2 for the groups J(Dn). 
+
+5.8. Groups J(T ) and J(O). We have the decompositions 
+
+**==> picture [199 x 12] intentionally omitted <==**
+
+As we have noticed in Sections 5.4 and 5.5, elements of each coset S of C1 in T or O have the same characteristic polynomials of the elements of **ζ** 2nC1 for some n. Then the coset JS in JT or JO has the same characteristic polynomials as those of J **ζ** 2nC1. It follows from (5.21), (5.22) and (5.25) that 
+
+**==> picture [371 x 53] intentionally omitted <==**
+
+This proves Theorem 5.2 for J(T ) and J(O). 
+
+24 
+
+K.-H. LEE AND S.-J. OH 
+
+5.9. Groups Cn,1. Recall Cn,1 = ⟨U(1), J **ζ** 2n⟩, n = 2, 4, 6. The group Cn,1 has the subgroup ⟨U(1), **ζ** n⟩ of index 2 which is isomorphic to Cn/2. Thus we have the decomposition 
+
+**==> picture [117 x 13] intentionally omitted <==**
+
+It follows from (5.16) that 
+
+**==> picture [376 x 65] intentionally omitted <==**
+
+we use (5.13) and (5.25) to obtain 
+
+**==> picture [140 x 53] intentionally omitted <==**
+
+Thus we have proved Theorem 5.2 for Cn,1. 
+
+5.10. Groups Dn,1. We have the decompositions 
+
+**==> picture [267 x 13] intentionally omitted <==**
+
+**==> picture [377 x 74] intentionally omitted <==**
+
+For any γ ∈ jJ **ζ** 2nCn/2, one can check 
+
+**==> picture [134 x 13] intentionally omitted <==**
+
+Thus it follows from (5.19) and (5.25) that 
+
+**==> picture [172 x 14] intentionally omitted <==**
+
+These are the same as the formulae for Dn,1 in Theorem 5.2. 
+
+5.11. Groups Dn,2. We have the decomposition 
+
+**==> picture [152 x 12] intentionally omitted <==**
+
+For any γ ∈ JjCn, we obtain 
+
+**==> picture [134 x 14] intentionally omitted <==**
+
+Since we have 
+
+we get 
+
+**==> picture [199 x 60] intentionally omitted <==**
+
+SATO–TATE DISTRIBUTIONS AND SYMPLECTIC CHARACTERS 
+
+25 
+
+These are the same as the formulae for Dn,2 in Theorem 5.2. 
+
+5.12. Group O1. Recall O1 = ⟨T, JQ2⟩ with Q2 in (5.4). There are 48 cosets of C1 in O1. Half of them belong to the subgroup T . In the other half, 12 of the 24 cosets have the same characteristic polynomial as J **ζ** 4C1 and the remaining 12 cosets have the same as J **ζ** 8C1. By (5.25), we obtain 
+
+**==> picture [154 x 14] intentionally omitted <==**
+
+This coincides with the formula in Table 5.1 for O1. 
+
+5.13. Groups En. We have En = ⟨SU(2), e[πi/n] ⟩, n = 1, 2, 3, 4, 6, where e[πi/n] is identified with 
+
+**==> picture [152 x 14] intentionally omitted <==**
+
+The number mλ˜(En) is equal to the number of independent weight vectors vµ with weight µ in Vλ˜[Sp(4)] that generate the trivial representation of SU(2) and satisfy µ(h[ˆ] 1 + h[ˆ] 2) ≡ 0 (mod 2n), equivalently, the number of independent weight vectors vµ such that µ(h[ˆ] 1 + h[ˆ] 2) ≡ 0 (mod 2n) and e1vµ = f1vµ = 0. The numbers mλ˜(En) are all calculated in Proposition 6.20, and they coincide with the formulae in Table 5.1. This proves Theorem 5.2 for En. 
+
+5.14. Groups J(En). The number mλ˜(J(E1)) is equal to the number of independent J-fixed weight vectors vµ with weight µ in Vλ˜[Sp(4)] such that e1vµ = f1vµ = 0. The numbers mλ˜(J(E1)) are calculated in Proposition 6.23, and they are the same as the formulae in Table 5.1. For the other J(En), n = 2, 3, 4, 6, observe that 
+
+**==> picture [349 x 33] intentionally omitted <==**
+
+for any A ∈ SU(2) and t ∈ U(1). Thus 
+
+**==> picture [218 x 27] intentionally omitted <==**
+
+Notice from Propositions 6.23 that 
+
+**==> picture [206 x 23] intentionally omitted <==**
+
+Since J(E1) = E1 ⊔ JE1, we obtain the following: 
+
+Corollary 5.8. For n = 1, 2, 3, 4, 6, 
+
+**==> picture [373 x 80] intentionally omitted <==**
+
+26 
+
+K.-H. LEE AND S.-J. OH 
+
+From J(En) = En ⊔ JEn, n = 2, 3, 4, 6, we also obtain 
+
+**==> picture [208 x 23] intentionally omitted <==**
+
+which are equal to the formulae in Table 5.1. 
+
+Using the above results on J(En), we now prove another identity presented in the introduction. 
+
+Theorem 5.9 (Theorem 1.2 (2)). For any m ∈ Z≥1, the following identity holds: 
+
+**==> picture [378 x 38] intentionally omitted <==**
+
+Proof. Recall 
+
+**==> picture [28 x 12] intentionally omitted <==**
+
+**==> picture [111 x 28] intentionally omitted <==**
+
+where Ck = k+11 �2kk� is the k[th] Catalan number. It is known that the second inverse binomial transformations of Catalan numbers are central binomial coefficients. Precisely, we have 
+
+**==> picture [29 x 12] intentionally omitted <==**
+
+**==> picture [172 x 32] intentionally omitted <==**
+
+Using (5.30) and (5.31), we obtain 
+
+**==> picture [301 x 69] intentionally omitted <==**
+
+Then, using (5.28), we have 
+
+**==> picture [348 x 72] intentionally omitted <==**
+
+On the other hand, we have from (5.29) 
+
+**==> picture [356 x 57] intentionally omitted <==**
+
+and obtain the desired identity. 
+
+SATO–TATE DISTRIBUTIONS AND SYMPLECTIC CHARACTERS 
+
+27 
+
+5.15. Groups U(2) and N (U(2)). The number mλ˜(U(2)) is equal to the number of independent weight vectors vµ with weight µ in Vλ˜[Sp(4)] such that e1vµ = f1vµ = 0 and µ = 0, and we see from (6.17) that such a vector vµ exists with multiplicity 1 if and only if b is even. The number mλ˜(N (U(2)) is equal to the number of such vectors vµ which is fixed by J, and it follows from (6.19) that, when it exits, the vector vµ is fixed by J if and only if J is even. These match with the formulae in Table 5.1. 
+
+5.16. Groups F∗. Recall that we have the embedding U(1) × U(1) into USp(4) given by (u1, u2) �→ diag(u1, u2, u[−] 1[1][, u] 2[−][1][)][,] 
+
+and that 
+
+**==> picture [384 x 85] intentionally omitted <==**
+
+5.16.1. Group F . We have F =[∼] U(1) × U(1). The number mλ˜(F ) is equal to the number of independent weight vectors vµ such that µ = 0. This number is calculated in Proposition 6.24, and coincides with the formula in Table 5.1. That is, 
+
+**==> picture [352 x 38] intentionally omitted <==**
+
+where 
+
+**==> picture [146 x 12] intentionally omitted <==**
+
+5.16.2. Group Fa. The number mλ˜(Fa) is equal to the number of a-fixed independent weight vectors vµ such that µ = 0. This number is calculated in Proposition 6.25, and we obtain 
+
+**==> picture [363 x 37] intentionally omitted <==**
+
+Using (5.33), we can establish the last identity presented in the introduction. 
+
+Theorem 5.10 (Theorem 1.2 (3)). For any m ∈ Z≥1, the following identity holds: 
+
+**==> picture [280 x 39] intentionally omitted <==**
+
+Proof. We have the decomposition 
+
+**==> picture [64 x 10] intentionally omitted <==**
+
+For γ ∈ aF , we have 
+
+**==> picture [272 x 13] intentionally omitted <==**
+
+28 
+
+K.-H. LEE AND S.-J. OH 
+
+Thus we obtain 
+
+**==> picture [340 x 106] intentionally omitted <==**
+
+where we use the identity in Theorem 4.1 for U(1). It follows from (5.32) and (5.33) that 
+
+**==> picture [352 x 97] intentionally omitted <==**
+
+**==> picture [28 x 12] intentionally omitted <==**
+
+and we obtain the desired identity. 
+
+## 5.16.3. Group Fc. We have Fc = F ⊔ cF . For γ ∈ cF , we obtain 
+
+**==> picture [206 x 14] intentionally omitted <==**
+
+Thus 
+
+**==> picture [325 x 137] intentionally omitted <==**
+
+since du1 is translation-invariant. It follows from (5.15) that 
+
+**==> picture [148 x 23] intentionally omitted <==**
+
+which is the same as the formula in Table 5.1. 
+
+## 5.16.4. Group Fab. We have Fab = F ⊔ abF . For γ ∈ abF , we have 
+
+**==> picture [116 x 14] intentionally omitted <==**
+
+Thus 
+
+**==> picture [182 x 27] intentionally omitted <==**
+
+SATO–TATE DISTRIBUTIONS AND SYMPLECTIC CHARACTERS 
+
+29 
+
+**==> picture [144 x 31] intentionally omitted <==**
+
+It follows from (6.24) and (5.25) that 
+
+**==> picture [281 x 38] intentionally omitted <==**
+
+This coincides with the formula in Table 5.1. 
+
+5.16.5. Group Fac. There are four cosets of F in Fac represented by 1, ac, (ac)[2] , (ac)[3] . For γ ∈ acF or (ac)[3] F , we have 
+
+**==> picture [104 x 14] intentionally omitted <==**
+
+For γ ∈ (ac)[2] F = abF , we have 
+
+**==> picture [116 x 14] intentionally omitted <==**
+
+Using (5.25), we have 
+
+**==> picture [312 x 75] intentionally omitted <==**
+
+This coincides with the formula in Table 5.1. 
+
+5.16.6. Group Fa,b. There are four cosets of F in Fa,b represented by 1, a, b, ab. For γ ∈ aF or bF , we have 
+
+**==> picture [366 x 33] intentionally omitted <==**
+
+**==> picture [116 x 14] intentionally omitted <==**
+
+Thus it follows from (5.25) and (5.34) that 
+
+**==> picture [211 x 24] intentionally omitted <==**
+
+which is the same as the formula in Table 5.1. 
+
+5.16.7. Group Fab,c. There are four cosets of F in Fab,b represented by 1, ab, c, abc. For γ ∈ cF or abcF , we have 
+
+**==> picture [206 x 14] intentionally omitted <==**
+
+Thus using the results on Fab and Fc, we have 
+
+**==> picture [216 x 23] intentionally omitted <==**
+
+which is the same as the formula in Table 5.1. 
+
+K.-H. LEE AND S.-J. OH 
+
+30 
+
+5.16.8. Group Fa,b,c. There are eight cosets of F in Fa,b,c represented by 1, ac, (ac)[2] , (ac)[3] , a, b, c, abc. Using the results on Fa, Fb, Fac and Fabc, we have 
+
+**==> picture [329 x 24] intentionally omitted <==**
+
+which coincides with the formula in Table 5.1. 
+
+5.17. Groups G1,3 and N (G1,3). Recall that G1,3[∼] = U(1) × SU(2) and 
+
+**==> picture [260 x 40] intentionally omitted <==**
+
+The number mλ˜(G1,3) is equal to the number of independent weight vectors vµ in Vλ˜[Sp(4)] such that µ = 0 and eˆ2 and f[ˆ] 2 act trivially, and the number mλ˜(N (G1,3)) is equal to the number of a-fixed such vectors. From Proposition 6.28, we obtain the same numbers as in the formulae in Table 5.1 for G1,3 and N (G1,3). 
+
+5.18. Groups G3,3 and N (G3,3). Recall that G3,3[∼] = SU(2) × SU(2) and 
+
+**==> picture [269 x 40] intentionally omitted <==**
+
+In this case, the number mλ˜(G3,3) is equal to the number of independent weight vectors vµ in Vλ˜[Sp(4)] such that µ = 0 and eˆi and f[ˆ] i act trivially for i = 1, 2, and the number mλ˜(N (G1,3)) is equal to the number of J-fixed such vectors. From Proposition 6.29, we obtain the same numbers as those in Table 5.1 for G3,3 and N (G3,3). 
+
+We have checked all the formulae in Table 5.1. This completes our proof of Theorem 5.2. □ 
+
+## 6. Branching rules 
+
+In this section we study branching rules that arise in relation to the Sato–Tate groups. The results are essentially used in Section 5 for the proof of Theorem 5.2. We present these branching rules for Lie algebras. This will be more consistent with standard notations for crystals which are our main tools in this section. We refer the readers to [BuSch17, HK02, Kash02] for a theory of crystals. 
+
+The Cartan types of Lie algebras sp4 and sl2 will be denoted by C2 and A1, respectively. A partition (a, b) of length ≤ 2 will be considered as a weight of C2 type corresponding to aǫ1 + bǫ2. The irreducible representation of sp4(C) with highest weight (a, b) will be denoted by VC2(a, b) and its crystal by BC2(a, b). Similar notations will be adopted for other types. In this section, since we are mainly interested in the Sato–Tate groups, 
+
+we assume that a − b is even, and write z := (a − b)/2. 
+
+This assumption is justified by (5.11). 
+
+SATO–TATE DISTRIBUTIONS AND SYMPLECTIC CHARACTERS 
+
+31 
+
+6.1. From C2 to A1 × A1. For a partition (a, b) of length ≤ 2, define a set of pairs of integers (6.1) ΦA1×A1(a, b) := {(a − r − s, b − r + s) | 0 ≤ r ≤ b, 0 ≤ s ≤ a − b}. Clearly, we have 
+
+**==> picture [163 x 12] intentionally omitted <==**
+
+Example 6.1. 
+
+(a) ΦA1×A1(2, 2) = {(2, 2), (1, 1), (0, 0)}. 
+
+**==> picture [369 x 12] intentionally omitted <==**
+
+Let t1 = ( 2[1][,][ −][1] 2[,][ 0][,][ 0)][and][t][2][=][(0][,][ 0][,][1] 2[,][ −] 2[1][)][be][weights][of][type][A][1][×][ A][1][.][For][non-negative] integers p and q, the crystal BA1×A1(pt1 + qt2) can be realized as the set of one-row standard tableaux with entries 1, 1, 2 or 2 having the order 1 ≺ 1 ≺ 2 ≺ 2 such that 
+
+(6.2) the total number of 1 and 1 is p and the total number of 2 and 2 is q. For instance, 
+
+**==> picture [318 x 12] intentionally omitted <==**
+
+The cardinality of BA1×A1(pt1 + qt2) is (p + 1)(q + 1). 
+
+Note that, BA1×A1(pt1 + qt2) is minuscule; i.e., each weight space in BA1×A1(pt1 + qt2) is 1-dimensional. The crystal graph of BA1×A1(t1 + t2) is given by 
+
+**==> picture [96 x 42] intentionally omitted <==**
+
+Clearly, the Kashiwara operators e˜1 and e˜2 commute. For a pair (a1, a2) of non-negative integers and i = 1, 2, we have 
+
+(6.3) 
+
+BA1×A1(a1t1 + a2t2) ⊗ BA1×A1(ti) 
+
+**==> picture [407 x 12] intentionally omitted <==**
+
+and 
+
+**==> picture [185 x 12] intentionally omitted <==**
+
+**==> picture [424 x 31] intentionally omitted <==**
+
+**==> picture [220 x 12] intentionally omitted <==**
+
+On the other hand, for a highest weight crystal BC2(a, b) (a ≥ b ≥ 0), we have 
+
+**==> picture [332 x 22] intentionally omitted <==**
+
+**==> picture [241 x 12] intentionally omitted <==**
+
+and 
+
+**==> picture [321 x 12] intentionally omitted <==**
+
+**==> picture [426 x 30] intentionally omitted <==**
+
+K.-H. LEE AND S.-J. OH 
+
+32 
+
+Proposition 6.2. For each partition (a, b), we have 
+
+**==> picture [240 x 23] intentionally omitted <==**
+
+Proof. For simplicity we write BA(p, q) for BA1×A1(pt1 + qt2). By direct calculation, one can see that 
+
+**==> picture [174 x 12] intentionally omitted <==**
+
+We first apply an induction argument on a using (6.3) and (6.5) to obtain the formula for BC2(a + 1, b). Namely, BC2(a, b) ⊗ BC2(1, 0) can be replaced with 
+
+**==> picture [234 x 34] intentionally omitted <==**
+
+Then, for the composition factors in RHS of (6.5) except BC2(a + 1, b), we apply the induction on a. Now we use (6.4) and (6.6) to obtain the formula for BC2(a + 1, b + 1). More precisely, BC2(a, b) ⊗ BC2(1, 1) can be replaced with 
+
+**==> picture [238 x 33] intentionally omitted <==**
+
+Then, for the composition factors in RHS of (6.6) except BC2(a+1, b+1), we apply the induction on a + b. We obtain our assertion for BC2(a +1, b +1) by comparing LHS and RHS of (6.6). □ 
+
+Corollary 6.3. 
+
+**==> picture [424 x 12] intentionally omitted <==**
+
+- (b) BA1×A1(0) appears in BC2(a, b)|A1×A1 if and only if a = b. 
+
+6.2. Sato-Tate groups Cn. Recall that we set h[ˆ] 1 = E11 − E33 and h[ˆ] 2 = E22 − E44, where Eij are the 4 × 4 elementary matrices. From the embedding (5.2), we have the induced Lie algebra embedding sl2(C) × sl2(C) ֒→ sp4(C) such that 
+
+**==> picture [170 x 15] intentionally omitted <==**
+
+1 0 where h = . 0 −1 � � Consider the Sato–Tate groups Cn for n = 1, 2, 3, 4, 6. By definition the number mλ˜(Cn) is equal to the multiplicity of trivial representations in χ[Sp(4)] λ˜ |Cn. Throughout this section, write 
+
+**==> picture [48 x 14] intentionally omitted <==**
+
+As observed in Section 5.1, the number m(a,b)(Cn) is equal to the number of independent weight vectors with weight µ in the representation VC2(a, b) such that 
+
+µ(h[ˆ] 1 + h[ˆ] 2) = 0 and µ(h[ˆ] 1 − h[ˆ] 2) ≡ 0 (mod 2n), n = 1, 2, 3, 4, 6. 
+
+If a − b is odd then µ(h[ˆ] 1 + h[ˆ] 2) cannot be zero. This verifies (5.11), and we assume that a − b is even in what follows, and write 
+
+**==> picture [70 x 12] intentionally omitted <==**
+
+SATO–TATE DISTRIBUTIONS AND SYMPLECTIC CHARACTERS 
+
+33 
+
+Proposition 6.4 (n = 1). For a partition (a, b), assume that a − b is even. Then the sum of weight multiplicities of the weights µ such that µ(h[ˆ] 1 + h[ˆ] 2) = 0 is given by 
+
+**==> picture [302 x 28] intentionally omitted <==**
+
+� which is equal to η1(z, b) = η1(z, b). 
+
+Proof. Since we have the branching decomposition in Proposition 6.2, we look at BA1×A1(pt1 + qt2) for (p, q) ∈ ΦA1×A1(a, b). If a tableau in the realization of BA1×A1(pt1 + qt2) has weight µ, then µ(h[ˆ] 1 + h[ˆ] 2) is equal to 
+
+**==> picture [248 x 12] intentionally omitted <==**
+
+Thus the number of elements in BA1×A1(pt1 + qt2) with weights µ such that µ(h[ˆ] 1 + h[ˆ] 2) = 0 is equal to min(p, q) + 1 (recall (6.2)). 
+
+The elements (p, q) in ΦA1×A1(a, b) and the corresponding numbers min(p, q) + 1 can be each arranged into an array of size (2z + 1) × (b + 1) as follows, where we put (p, q) in the left and min(p, q) + 1 in the right: 
+
+**==> picture [443 x 119] intentionally omitted <==**
+
+Taking sums by rows and adding up the results yields 
+
+**==> picture [449 x 53] intentionally omitted <==**
+
+Remark 6.5. In (6.7), all (p, q)’s with p = q form the row containing (b + z, b + z). 
+
+Proposition 6.6 (n = 2). For a partition (a, b), assume that a − b is even. Then the sum of weight multiplicities of the weights µ such that µ(h[ˆ] 1 + h[ˆ] 2) = 0 and µ(h[ˆ] 1 − h[ˆ] 2) ≡4 0 is given by 
+
+**==> picture [296 x 35] intentionally omitted <==**
+
+and the sum is equal to 
+
+**==> picture [146 x 14] intentionally omitted <==**
+
+Proof. Write µ = rǫ1 + sǫ2 for a weight of BA1×A1(pt1 + qt2) satisfying r + s = 0. Then we have 
+
+**==> picture [204 x 11] intentionally omitted <==**
+
+K.-H. LEE AND S.-J. OH 
+
+34 
+
+With this observation, our first assertion follows from the first paragraph in the proof of Proposition 6.4. 
+
+Now let us consider the second assertion; i.e., the sum is equal to 
+
+**==> picture [97 x 15] intentionally omitted <==**
+
+Since p ≡2 q, the sum (6.8) amounts to the sum of odd integers in the right array of (6.7). For any block of 4 integers of the form 
+
+**==> picture [56 x 24] intentionally omitted <==**
+
+in (6.7), the sum of odd integers is 2i. By decomposing the right array in (6.7) into as many such blocks of 4 integers as possible in each of the cases b ≡2 0, 1 and z ≡2 0, 1, we can check the sum is equal to[1] 2[η][1][ +][1] 2[η][2][.] 
+
+For example, if b ≡2 1 and z ≡2 0, the first z rows of the array are decomposed into[b][+1] 2[×][z] 2 blocks of 4 integers, and the sum of odd integers from those blocks is 
+
+**==> picture [97 x 14] intentionally omitted <==**
+
+The sum of odd integers in the middle row is 
+
+**==> picture [97 x 15] intentionally omitted <==**
+
+and the total sum of odd integers is 
+
+**==> picture [402 x 15] intentionally omitted <==**
+
+which is the same as[1] 2[η][1][ +] 2[1][η][2][in][this][case.] □ 
+
+Proposition 6.7 (n = 3). Assume that a − b is even. Then the sum of weight multiplicities of the weights µ such that µ(h[ˆ] 1 + h[ˆ] 2) = 0 and µ(h[ˆ] 1 − h[ˆ] 2) ≡6 0 is given by 
+
+**==> picture [354 x 28] intentionally omitted <==**
+
+and the sum is equal to 
+
+**==> picture [146 x 15] intentionally omitted <==**
+
+Proof. Consider (p, q) ∈ ΦA1×A1(a, b), and without loss of generality assume that p ≥ q. Write µ = rǫ1 + sǫ2 for a weight of BA1×A1(pt1 + qt2) satisfying r + s = 0. Explicitly, the set of such weights (r, s) is 
+
+**==> picture [350 x 12] intentionally omitted <==**
+
+Since r + s = 0, the condition r − s ≡6 0 is equivalent to s ≡3 0. In each case of q ≡3 0, 1, 2, we count the number of pairs (−s, s) in (6.10) such that s ≡3 0, and it is equal to 
+
+**==> picture [112 x 54] intentionally omitted <==**
+
+This justifies the expression in (6.9). 
+
+SATO–TATE DISTRIBUTIONS AND SYMPLECTIC CHARACTERS 
+
+35 
+
+Now we have to add the numbers ⌊(e − 1)/3⌋ + 1 − δ((e − 1) ≡3 1), where e runs over the right array in (6.7). Observe that, for any consecutive 3 integers i + 1, i, i − 1, we have 
+
+**==> picture [202 x 33] intentionally omitted <==**
+
+By decomposing the right array in (6.7) into blocks of 3-consecutive integers as many as possible, we can check the sum is equal to[1] 3[η][1][ +] 3[2][η][3][.] □ 
+
+Proposition 6.8 (n = 4). Assume that a − b is even. Then the sum of weight multiplicities of the weights µ such that µ(h[ˆ] 1 + h[ˆ] 2) = 0 and µ(h[ˆ] 1 − h[ˆ] 2) ≡8 0 is given by 
+
+**==> picture [316 x 36] intentionally omitted <==**
+
+and the sum is equal to 
+
+**==> picture [200 x 15] intentionally omitted <==**
+
+Proof. As in the proof of Proposition 6.7, consider (p, q) ∈ ΦA1×A1(a, b) with p ≥ q and the set (6.10). Since r + s = 0, the condition r − s ≡8 0 is equivalent to s ≡4 0. If s ≡4 0, then we must have q ≡2 0. Thus, in each case of q ≡4 0, 2, we count the number of pairs (−s, s) in (6.10) such that s ≡4 0, and it is equal to 
+
+**==> picture [68 x 11] intentionally omitted <==**
+
+This justifies the expression in (6.11). 
+
+We need to add the numbers (2 × ⌊(e − 1)/4⌋ + 1) × δ((e − 1) ≡2 0), where e runs over the right array in (6.7). Observe that, for 8-integers in any block of the form 
+
+**==> picture [121 x 24] intentionally omitted <==**
+
+in (6.7), we have 
+
+**==> picture [264 x 34] intentionally omitted <==**
+
+By decomposing the right array in (6.7) into as many such blocks of 8 integers as possible in each of the cases b ≡4 0, 1, 2, 3 and z ≡4 0, 1, 2, 3, we can see that the sum is equal to 1[1][1] □ 4[η][1][ +] 4[η][2][ +] 2[η][4][.] 
+
+Proposition 6.9 (n = 6). Assume that a − b is even. Then the sum of weight multiplicities of the weights µ such that µ(h[ˆ] 1 + h[ˆ] 2) = 0 and µ(h[ˆ] 1 − h[ˆ] 2) ≡12 0 is given by 
+
+**==> picture [316 x 36] intentionally omitted <==**
+
+and the sum is equal to 
+
+**==> picture [254 x 15] intentionally omitted <==**
+
+K.-H. LEE AND S.-J. OH 
+
+36 
+
+Proof. As in the proof of Proposition 6.7, consider (p, q) ∈ ΦA1×A1(a, b) with p ≥ q and the set (6.10). Since r + s = 0, the condition r − s ≡12 0 is equivalent to s ≡6 0. If s ≡6 0, then q ≡2 0. Thus, in each case of q ≡6 0, 2, 4, we count the number of pairs (−s, s) in (6.10) such that s ≡6 0, and it is equal to 
+
+**==> picture [68 x 12] intentionally omitted <==**
+
+This justifies the expression in (6.12). 
+
+We have to add the numbers (2 × ⌊(e − 1)/6⌋ + 1) × δ((e − 1) ≡2 0), where e runs over the right array in (6.7). Observe that, for any 12-integers of the form 
+
+**==> picture [186 x 24] intentionally omitted <==**
+
+in (6.7), we have 
+
+**==> picture [264 x 34] intentionally omitted <==**
+
+By decomposing the right array in (6.7) into as many such blocks of 12 integers as possible in each of the cases, we see that the sum is equal to[1] 6[η][1][ +][1] 6[η][2][ +][1] 3[η][3][ +][1] 3[η][6][.] □ 
+
+In the next subsection, we need the following. 
+
+Corollary 6.10. Assume that a − b is even. Then we have 
+
+**==> picture [264 x 187] intentionally omitted <==**
+
+where ψ[�] i(z, b) are defined in Corollary 5.6. 
+
+Proof. After dividing cases according to the congruence classes of b and z, the computation becomes straightforward in each case. For example, consider ψ[�] 2(z, b) and assume that b and z are both even. Then the sum in the right hand side is equal to 
+
+**==> picture [108 x 12] intentionally omitted <==**
+
+On the other hand, in this case, ψ1(z, b) = (b +1)(z + b/2+1) and ψ2(z, b) = z + b/2+1. Thus 
+
+**==> picture [270 x 15] intentionally omitted <==**
+
+SATO–TATE DISTRIBUTIONS AND SYMPLECTIC CHARACTERS 
+
+37 
+
+The other cases are similar. 
+
+**==> picture [9 x 8] intentionally omitted <==**
+
+**==> picture [448 x 47] intentionally omitted <==**
+
+we need more information than the crystal isomorphism in Proposition 6.2. Let V and W ⊂ �2 V be the fundamental representations of Sp(4, C). Take a basis {v1, v2, v1[, v] 2[}][of][V][such] that 
+
+(6.13) 
+
+**==> picture [266 x 11] intentionally omitted <==**
+
+Write 
+
+**==> picture [226 x 29] intentionally omitted <==**
+
+and take the basis {w12, w12[, w] 21[, w] 12[, w] 22[−][w] 11[}][for][W][.][Then][we][have] 
+
+**==> picture [247 x 31] intentionally omitted <==**
+
+We realize the representation VC2 (a, b) for a partition (a, b) as the irreducible component of Sym[a][−][b] V ⊗ Sym[b] W generated by the highest weight vector v1[a][−][b] ⊗ w12[b][.] In particular, V = VC2 (1, 0) and W = VC2(1, 1). We identify VC2(a +1, b +1) with the image of the embedding 
+
+**==> picture [233 x 13] intentionally omitted <==**
+
+given by 
+
+**==> picture [168 x 15] intentionally omitted <==**
+
+Let VA(p, q) be the representation of A1 × A1 with highest weight pt1 + qt2. When a − b is even, we inductively specify A1 × A1-highest weight vectors v(p,q;a,b) in VC2(a, b) to describe the decomposition 
+
+**==> picture [186 x 24] intentionally omitted <==**
+
+in what follows. 
+
+For VC2(a, 0) with a even, let v(p,q;a,0) := v1[p][v] 2[q][for][(][p, q][)][ ∈][Φ][A] 1[×][A] 1[(][a,][ 0).][Then one][can][see][that] v(p,q;a,0) are A1 × A1-highest weight vectors with highest weights pt1 + qt2. For the induction, assume that v(p,q;a,b) are A1 × A1-highest weight vectors in VC2(a, b) with weights pt1 + qt2 for (p, q) ∈ ΦA1×A1(a, b) with a − b even. 
+
+Consider the following subset of ΦA1×A1(a, b) 
+
+(6.14) φA(a, b) := {(a, b), (a − 1, b + 1), (a − 2, b + 2), . . . , (b + 1, a − 1), (b, a)}, 
+
+by taking r = 0 in (6.1). Now the lemma below completes the induction process. 
+
+Lemma 6.11. 
+
+(1) For (p, q) ∈ φA(a, b), the vectors 
+
+**==> picture [185 x 17] intentionally omitted <==**
+
+are A1 × A1-highest weight vectors in VC2(a + 1, b + 1) with weights pt1 + qt2. 
+
+38 
+
+K.-H. LEE AND S.-J. OH 
+
+(2) For each (p, q) ∈ ΦA1×A1(a, b)\φA(a, b), there is an A1×A1-highest weight vector v(p,q;a+1,b+1) of the form 
+
+**==> picture [323 x 14] intentionally omitted <==**
+
+for some u1, u2, u3, u4 ∈ VC2 (a, b), where VC2(a +1, b +1) is identified with the image of ιa+1,b+1 in VC2(a, b) ⊗ VC2(1, 1). 
+
+Proof. Note that v(a,b;a,b) = v1[a][−][b] ⊗ w12[b][is][the][C][2][-highest][weight][vector][of][V][C] 2[(][a, b][).] 
+
+(1) The vectors v(p,q;a+1,b+1) are obtained from the highest weight vector v1[a][−][b] ⊗ w12[b][+1] by applying f1 successively. Since there are no v1[, v] 2[factors][in][the][elements,][they][are][clearly] A1 × A1-highest weight vectors. 
+
+(2) Starting from the C2-highest weight vector v(a,b;a,b) ⊗w12, we apply f1’s and f2’s to obtain v(p,q;a,b) ⊗ w12 + u and then apply f1f2 to obtain v(p,q;a,b) ⊗ (w22[−][w] 11[) +][ u][′][,][where][the][terms] of u and u[′] have w12, w12[, w] 21[or][w] 12[as][right-most][factors.][We][can][determine][constants][c][k][,][d][l][,] M and N so that 
+
+**==> picture [314 x 34] intentionally omitted <==**
+
+is an A1 × A1-highest vector. Since the action of eˆi and f[ˆ] i, i = 1, 2, on v(p,q;a,b) ⊗ (w22[−][w] 11[)][is] trivial, this highest weight vector is of the desired form. □ 
+
+Proposition 6.12 (n = 1). For a partition (a, b) with a − b ≡2 0, the number of linearly independent vectors in VC2(a, b), 
+
+(i) which are fixed by the action of J, and 
+
+(ii) whose weights µ satisfy µ(h[ˆ] 1 + h[ˆ] 2) = 0, 
+
+is equal to 
+
+**==> picture [298 x 33] intentionally omitted <==**
+
+Proof. Suppose that v is a vector of VC2(a, b) which lies inside the A1 × A1-representation generated by the vector v(p,q;a,b) inductively defined in Lemma 6.11 for (p, q) ∈ ΦA1×A1(a, b). Then the number of v1 and v1[factors in each of the terms of][ v][is][ p][.][After the action of][ J][on][ v][ induced] from (6.13), the number of v1 and v1[factor][in][each][of][the][terms][of][J][(][v][)][is][q][.][In][particular,][if] p = q then v = J(v). Since J[2] = I, the vector v + J(v) is fixed by J. Furthermore, if v is of weight µ such that µ(h[ˆ] 1 + h[ˆ] 2) = 0, then the weight of J(v) has the same property. Thus, when p ̸= q, a J-fixed vector of weight µ such that µ(h[ˆ] 1 + h[ˆ] 2) = 0 must be of the form v + J(v). 
+
+Recall that the number of independent vectors in the isomorphic copy of VA(p, q) in VC2(a, b) with weights µ such that µ(h[ˆ] 1 +h[ˆ] 2) = 0 is equal to min(p, q)+1, and the numbers are displayed in array (6.7). The observation made in the previous paragraph shows that the total number of J-fixed independent vectors in the isomorphic copy of VA(p, q) for p ̸= q with such weights µ 
+
+SATO–TATE DISTRIBUTIONS AND SYMPLECTIC CHARACTERS 
+
+39 
+
+is given by the sum of the numbers in the first z rows of array (6.7): 
+
+**==> picture [375 x 54] intentionally omitted <==**
+
+(see Remark 6.5). Explicitly, the total number for the case p ̸= q is 
+
+**==> picture [377 x 24] intentionally omitted <==**
+
+Now let us consider the case p = q. Using induction on a + b, we will show 
+
+**==> picture [60 x 14] intentionally omitted <==**
+
+for any vector v with weight µ such that µ(h[ˆ] 1 + h[ˆ] 2) = 0 in the isomorphic copy of VA(p, p) in VC2(a, b). 
+
+First assume that (p, p) ∈ φA(a, b), where the set φA(a, b) is defined in (6.14). Then by Lemma 6.11 (1) we have a highest weight vector of the form v1[p][−][b] v2[p][−][b] ⊗ w12[b][.][A][weight][vector] v in the A1 × A1-representation generated by this highest weight vector has the form 
+
+**==> picture [190 x 15] intentionally omitted <==**
+
+- If we further assume v has weight µ such that µ(h[ˆ] 1 + h[ˆ] 2) = 0, then ℓ + k = p. Using the relations 
+
+**==> picture [161 x 13] intentionally omitted <==**
+
+and the symmetry of A1 × A1-representation, we obtain 
+
+**==> picture [323 x 55] intentionally omitted <==**
+
+Next assume that (p, p) ̸∈ φA(a, b), a ≥ b ≥ 1. By Lemma 6.11 (2) we have a highest weight vector of the form 
+
+**==> picture [150 x 13] intentionally omitted <==**
+
+where u = u1 ⊗ w12 + u2 ⊗ w12[+][ u][3][ ⊗][w] 21[+][ u][4][ ⊗][w] 12[for][some][u][1][, u][2][, u][3][, u][4][∈][V][C] 2[(][a][ −][1][, b][ −][1).] Since f[ˆ] 1 and f[ˆ] 2 act trivially on (w22[−][w] 11[),][a][weight][vector][v][in][the][A][1][×][ A][1][-representation] generated by this highest weight vector is of the form 
+
+**==> picture [228 x 21] intentionally omitted <==**
+
+We further assume that v has weight µ such that µ(h[ˆ] 1 + h[ˆ] 2) = 0. By induction hypothesis, we have 
+
+**==> picture [286 x 62] intentionally omitted <==**
+
+Since J(w22[−][w] 11[) =][ −][(][w] 22[−][w] 11[),][we][obtain] 
+
+40 
+
+K.-H. LEE AND S.-J. OH 
+
+Recall that VA(p, q) is minuscule. The action of J preserves the weight space containing v since the number of v2 factors is equal to that of v1[factors][in][the][terms][of][v][.][Thus][we][must] have Jv = (−1)[b] v as claimed in this case too. 
+
+We have just shown that all the weight vectors in the isomorphic copy of VA(p, p) with weight µ such that µ(h[ˆ] 1 + h[ˆ] 2) = 0 are fixed by J if b is even, and that none of them are fixed by J if b is odd. Combining this with the result for p = q in (6.15), the total number of J-fixed independent vectors of VC2(a, b) with weight µ such that µ(h[ˆ] 1 + h[ˆ] 2) = 0 is equal to (6.15) if b is odd, and to the sum of (6.15) and the z + 1[st] row of the array in (6.7) if b is even, which is given by 
+
+**==> picture [449 x 44] intentionally omitted <==**
+
+Proposition 6.13 (n = 2, 3, 4, 6). Assume that a − b is even. For n = 2, 3, 4, 6, the number of independent vectors in VC2(a, b), which are fixed by the action of J, with weights µ such that µ(h[ˆ] 1 + h[ˆ] 2) = 0 and µ(h[ˆ] 1 − h[ˆ] 2) ≡2n 0, is equal to θ[�] n(z, b) defined in (5.23). 
+
+Proof. Suppose that v is a vector of VC2(a, b) which lies inside the A1 × A1-representation generated by the vector v(p,q;a,b) inductively defined in Lemma 6.11 for (p, q) ∈ ΦA1×A1(a, b), and assume that v is of weight µ such that µ(h[ˆ] 1 + h[ˆ] 2) = 0. The total numbers of such vectors are � equal to ηn(z, b) by Propositions 6.6–6.9, and the numbers of such vectors only for p = q are equal to ψ[�] n(z, b) by Corollary 6.10. 
+
+As observed in the proof of Proposition 6.12, if p ̸= q then the J-fixed vectors are precisely given by J(v)+v; if p = q and b is even then all the vectors v of weight µ such that µ(h[ˆ] 1+h[ˆ] 2) = 0 are fixed by J; if p = q and b is odd then none of such vectors are fixed by J. The conditions µ(h[ˆ] 1 − h[ˆ] 2) ≡2n 0 exactly bring out the restrictions on the sums considered in Propositions 6.6–6.9. 
+
+Thus, when n = 2, the number of J-fixed vectors of weight µ satisfying the conditions is given by 
+
+**==> picture [349 x 36] intentionally omitted <==**
+
+where we use Corollary 6.10 and the definition of θ2(z, b) in (5.10) along with the definitions of η�2, ψ[�] 2 and θ[�] 2. Similarly, when n = 3, 4, 5, the numbers of J-fixed vectors of weight µ satisfying the conditions are equal to 
+
+**==> picture [298 x 16] intentionally omitted <==**
+
+6.4. From C2 to A1 via removing the second vertex. In this section, we shall prove the branching decomposition of VC2 (a, b) to A1 via Levi rule which removes the second vertex in the Dynkin diagram of type C2 
+
+**==> picture [42 x 14] intentionally omitted <==**
+
+SATO–TATE DISTRIBUTIONS AND SYMPLECTIC CHARACTERS 
+
+41 
+
+where we assume a + b ≡2 0. We are mainly interested in the composition multiplicity of the trivial representation VA1(0) inside VC2(a, b)|A1 . We state the result at the crystal level as in Proposition 6.2. 
+
+Proposition 6.14. For a partition (a, b), set ǫ := δ(a + b ≡2 1) and l = ⌈(a − b − 1)/2⌉. Then we have 
+
+**==> picture [312 x 66] intentionally omitted <==**
+
+Proof. As Proposition 6.2, the assertion can be proved by using double induction on a + b and the Clebsch–Gordan formula. □ 
+
+Corollary 6.15. The multiplicity of the trivial representation VA1(0) in VC2(a, b)|A1 is equal to 
+
+**==> picture [112 x 12] intentionally omitted <==**
+
+Now we shall interpret Corollary 6.15 via Kashiwara–Nakashima crystal. The crystal of vector representation is given as follows: 
+
+**==> picture [102 x 16] intentionally omitted <==**
+
+with a linear order 
+
+## 1 ≺ 2 ≺ 2 ≺ 1. 
+
+Now let us recall C2-type Kashiwara–Nakashima tableaux. 
+
+Definition 6.16. Let Y be a Young diagram with at most 2-rows. 
+
+- (1) A C2-tableaux of shape Y is a tableau obtained from Y by filling the boxes with entries {1, 2, 2, 1}. 
+
+- (2) A C2-tableaux is said to be semistandard if the entries in each row are weakly increasing and the entries in each column are strictly increasing. 
+
+We define B(Y ) to be the set of all semistandard C2-tableaux T satisfying the following conditions: 
+
+- 1 
+
+- (a) T does not have a column ; 1 
+
+**==> picture [301 x 26] intentionally omitted <==**
+
+Definition 6.17. Assume that (a, b) is a partition with a + b ≡2 0. For each 0 ≤ k ≤ b, define Tk be the semistandard C2-tableaux of shape (a, b) such that 
+
+- (1) the first row of the tableau Tk is filled with the sequence of entries (1[k] , 2[z] , 2[y] ), where 
+
+**==> picture [162 x 24] intentionally omitted <==**
+
+(2) the second row of the tableau Tk is filled with the sequence of entries (2[k] , 1[b][−][k] ). 
+
+Lemma 6.18. For each 0 ≤ k ≤ b, the tableaux Tk is contained in B(Y ). 
+
+K.-H. LEE AND S.-J. OH 
+
+42 
+
+Proof. The condition (a) is obviously satisfied. Let us check whether Tk satisfies the condition (b). Note that, for 1 ≤ s ≤ b, if an entry placed in the position (1, s) is 2, then the entry placed in the position (2, s) is 1, if it exists, by definition. Thus the condition (b) is satisfied. □ 
+
+Proposition 6.19. For each 0 ≤ k ≤ b, we have 
+
+**==> picture [82 x 14] intentionally omitted <==**
+
+where e˜1 and f[˜] 1 are the Kashiwara operators. 
+
+1 Proof. We use the far eastern reading [HK02]. Then, since the 1-signature of is[•] , 2 
+
+(6.16) we do not need to read the first k-columns for 1-signature. Set 
+
+**==> picture [287 x 13] intentionally omitted <==**
+
+**==> picture [287 x 13] intentionally omitted <==**
+
+By definition s1 = s2 = 2k − b. By an induction and (6.16), it suffices to consider when k = 0. Then, by the far eastern reading, T0 can be read as follows: 
+
+**==> picture [203 x 16] intentionally omitted <==**
+
+Since (i) the 1-signature of 2 is +, (ii) the 1-signature of 2 ⊗ 1 is[•] , (iii) the 1-signature of 2 ⊗ 1 is −−, our assertion follows. □ 
+
+We keep the assumption that a − b is even. By Corollary 6.15 , the C2-tableaux {Tk}0≤k≤b exhaust all the trivial representations VA1(0) inside VC2(a, b)|A1 . Note that the weight of Tk is (6.17) (2k − b)(ǫ1 + ǫ2), 0 ≤ k ≤ b. 
+
+For the Sato–Tate groups En, n = 1, 2, 3, 4, 6, the number m(a,b)(En) is equal to the number of independent weight vectors vµ in VC2(a, b) with weight µ such that µ(h[ˆ] 1 + h[ˆ] 2) ≡ 0 (mod 2n) and e1vµ = f1vµ = 0. By Proposition 6.19, the number m(a,b)(En) for each n is equal to the number of tableaux Tk such that 
+
+**==> picture [59 x 11] intentionally omitted <==**
+
+We count the number of such tableaux for each n = 1, 2, 3, 4, 6, and summarize the results in the following proposition. 
+
+Proposition 6.20. Assume that a − b is even. Then the number of independent weight vectors vµ in VC2(a, b) with weight µ such that µ(h[ˆ] 1 + h[ˆ] 2) ≡2n 0 and e1vµ = f1vµ = 0 is equal to 
+
+**==> picture [163 x 87] intentionally omitted <==**
+
+SATO–TATE DISTRIBUTIONS AND SYMPLECTIC CHARACTERS 
+
+43 
+
+6.5. Sato–Tate groups J(En). We keep the notations of Section 6.3. We start with a lemma on representations of sl2(C). 
+
+Lemma 6.21. Assume that v is a vector of weight 0 in a finite dimensional representation of sl2(C) with the standard basis {e, h, f }. Suppose that e[N][+1] v = 0 for N ∈ Z≥0. Then the vector 
+
+**==> picture [108 x 34] intentionally omitted <==**
+
+either vanishes or generates the trivial representation of sl2(C), where f[(][k][)] = f[k] /k! and e[(][k][)] = e[k] /k!. 
+
+Proof. Since 
+
+**==> picture [239 x 33] intentionally omitted <==**
+
+(see [HK02, Exercise 1.3 (c)]), we have 
+
+**==> picture [166 x 13] intentionally omitted <==**
+
+on the weight 0 space. Similarly, since 
+
+**==> picture [160 x 14] intentionally omitted <==**
+
+we have 
+
+**==> picture [186 x 24] intentionally omitted <==**
+
+on the weight 0 space. 
+
+Since e[N][+1] v = 0 and the weight of v is zero, we also have f[N][+1] v = 0. Then 
+
+**==> picture [338 x 92] intentionally omitted <==**
+
+Similarly, 
+
+**==> picture [392 x 91] intentionally omitted <==**
+
+Now we consider VC2(a, b) for a partition (a, b) with a − b even. Assume that e1v = f1v = 0 for a vector v in VC2(a, b). Since J commutes with e1 and f1, we have 
+
+(6.18) e1Jv = f1Jv = 0. 
+
+K.-H. LEE AND S.-J. OH 
+
+44 
+
+By Proposition 6.19 and (6.17), the vectors on which e1 and f1 act trivially have weights t(ǫ1 +ǫ2) where t = 2k−b for 0 ≤ k ≤ b. The action of J sends weight t(ǫ1 +ǫ2) to −t(ǫ1 +ǫ2). If v is a vector such that e1v = f1v = 0, then Jv + v is fixed by J and e1(Jv + v) = f1(Jv + v) = 0 by (6.18). Conversely, any J-fixed vector of non-zero weight on which e1 and f1 act trivially must be of the form Jv + v. 
+
+Therefore, if b is odd then t cannot be zero and the number of J-fixed vectors v such that e1v = f1v = 0 is equal to (b + 1)/2 from Proposition 6.20. If b is even then the number of J-fixed vectors of non-zero weight such that e1v = f1v = 0 is equal to b/2. Now the remaining case is when b is even and the weight is 0. There is only one vector of weight 0 on which e1 and f1 act trivially. We will determine whether J fixes this vector or not. 
+
+Lemma 6.22. Assume that b is even. Suppose that v ∈ VC2(a, b) ⊂ Sym[a][−][b] V ⊗ Sym[b] W is a vector of weight 0 such that e1v = f1v = 0. Then v has a scalar multiple of 
+
+**==> picture [119 x 17] intentionally omitted <==**
+
+as a non-zero term, where z = (a − b)/2. 
+
+Proof. Let 
+
+**==> picture [144 x 18] intentionally omitted <==**
+
+If we apply e[k] 2[on][the vector][v][˜][for][1][ ≤][k][≤][z][ +][b/][2,][the result for each][k][can][be written][in terms] of 
+
+**==> picture [337 x 39] intentionally omitted <==**
+
+for some l and m, and the signs of the coefficients of these terms are determined by the parity of the exponent of w21[.][In][particular,][the][result of][the action][of][e][2][on][v] 2[z][+][m] v2[z][−][m] ⊗ w12[b/][2][w] 2[l] 1[w] 1[b/] 2[2][−][l] is not canceled out with other terms. Thus if we apply e[z] 2[+][b/][2] on v˜, all the terms are combined and the result is a scalar multiple of 
+
+**==> picture [74 x 18] intentionally omitted <==**
+
+(One can check that the coefficient is (−1)[b/][2] (z + b/2)!.) 
+
+Similarly, the action of e[2] 1[z][+][b] on v2[2][z][⊗][w] 12[b/][2][w] 2[b/] 1[2][results][in][a][scalar][multiple][of] v1[2][z][⊗][w] 12[b/][2][w] 1[b/] 2[2] 
+
+and the following action of e[b/] 2[2] brings it to a scalar multiple of the highest weight vector v1[2][z][⊗][w] 12[b][.][Thus][we][have][shown][that][the][highest][vector][can][be][obtained][from][the][vector][v][˜][by] applying e1’s and e2’s. This implies that if we apply f1’s and f2’s on the highest weight vector appropriately then we obtain 
+
+a vector vˆ of weight 0 which has a non-zero scalar multiple of v˜ as a term. 
+
+Set 
+
+**==> picture [242 x 34] intentionally omitted <==**
+
+SATO–TATE DISTRIBUTIONS AND SYMPLECTIC CHARACTERS 
+
+45 
+
+˜ ˜ ˜ Since e1v = f1v = 0, the vector v is non-zero and still has a scalar multiple of v as a term. By Lemma 6.22, we have e1v = f1v = 0. Since every vector of weight 0 on which e1 and f1 act trivially is a scalar multiple of v, we are done. □ 
+
+Continue to assume that b is even, and consider a vector v of weight 0 such that e1v = f1v = 0. Since the space of weight 0 vectors on which e1 and f1 act trivially is one-dimensional, we have Jv = ±v from the fact that J[2] = 1. Furthermore, such a vector has a non-zero term (v1[z][v] 1[z][+][ v] 2[z][v] 2[z][)][ ⊗][w] 12[b/][2][w] 1[b/] 2[2][by][Lemma][6.22][.][Since][Jw][12][=][ w][12][and][Jw] 12[=][ w] 12[,][we][see][that] 
+
+**==> picture [322 x 21] intentionally omitted <==**
+
+It follows that 
+
+(6.19) 
+
+**==> picture [64 x 12] intentionally omitted <==**
+
+Combining this with the observations made in the paragraph right before Lemma 6.22, we have proved the following proposition. 
+
+Proposition 6.23. Assume that a − b is even, and set z := (a − b)/2. Then the number of J-fixed vectors v with weight µ such that e1v = f1v = 0 is equal to 
+
+**==> picture [131 x 14] intentionally omitted <==**
+
+6.6. Sato–Tate group F . Recall that we have the embedding U(1) × U(1) into USp(4) given by 
+
+**==> picture [156 x 14] intentionally omitted <==**
+
+and that the group F is the image of this embedding. The number m(a,b)(F ) is equal to the number of independent weight vectors vµ in VC2 (a, b) such that µ = 0. 
+
+Recall the array in (6.7), which lists the elements of ΦA1×A1(a, b) 
+
+Proposition 6.24. Assume that a − b is even. Then the multiplicity of weight 0 in VC2(a, b) is equal to the number of elements (p, q) ∈ ΦA1×A1(a, b) such that p ≡ q ≡ 0 mod 2. Explicitly, the number is equal to 
+
+**==> picture [150 x 11] intentionally omitted <==**
+
+Proof. A weight zero space appears in BA1×A1(pt1 + qt2) only if p ≡ q ≡ 0 mod 2. Then our assertion follows from the fact that BA1×A1(pt1 + qt2) is minuscule, and that the Cartan subalgebra for A1 × A1 is the Cartan subalgebra for C2. One can count the number of such pairs (p, q) in (6.7) to see that it is equal to ξ1(z, b). □ 
+
+## 6.7. Sato–Tate group Fa. Since we have 
+
+**==> picture [221 x 9] intentionally omitted <==**
+
+it follows from Proposition 6.24 that the number of a-fixed vectors of weight 0 in VC2(a, b) is equal to the number of elements (p, q) ∈ ΦA1×A1(a, b) such that p ≡4 0 and q ≡2 0. 
+
+K.-H. LEE AND S.-J. OH 
+
+46 
+
+Proposition 6.25. The number of a-fixed vectors of weight 0 in VC2(a, b) is equal to 
+
+**==> picture [97 x 23] intentionally omitted <==**
+
+where ξ2(z, b) is defined on the congruence classes of z and b by 
+
+**==> picture [99 x 39] intentionally omitted <==**
+
+Proof. There are 8 cases according to the congruence classes of z and b. Since all the cases are similar, we only prove the case when b ≡4 0 and z ≡2 0. In this case, a ≡4 0, and the pairs (p, q) ∈ ΦA1×A1(a, b) satisfying p ≡4 0 and q ≡2 0 can be arranged as follows: 
+
+**==> picture [362 x 62] intentionally omitted <==**
+
+The number of pairs in the array is 
+
+**==> picture [83 x 23] intentionally omitted <==**
+
+which is equal to[1] 2[ξ][1][(][z, b][) +] 2[1][ξ][2][(][z, b][).][This][proves][our][assertion][in][this][case.] □ 
+
+6.8. From C2 to A1 via removing the first vertex. In this subsection, we shall prove the branching decomposition of VC2(a, b) with a + b ≡ 0 mod 2 to A1 via b := (B2 ≃ C2) × Levi rule which removes the first vertex in the Dynkin diagram of C2. Specifically we want to count the composition multiplicity of VA1(0) inside VC2(a, b)|A[b] 1[.] 
+
+Proposition 6.26. For a partition (a, b) = (k + l, k), we have 
+
+**==> picture [398 x 33] intentionally omitted <==**
+
+Proof. As Proposition 6.2 and Proposition 6.14, our assertion follows from the induction on a + b and the Clebsch–Gordan formula. □ 
+
+Corollary 6.27. The composition multiplicity of VA1(0) inside VC2(a, b)|A[b] 1[is][b][ −][a][ + 1][.] 
+
+Now we investigate on which crystal elements in BC2(a, b) the operators ˜e2 and f[˜] 2 act trivially. For a partition (a, b), set c := a − b. For 0 ≤ k ≤ c, we define the semistandard C2-tableaux Tk[′] as follows: 
+
+**==> picture [293 x 95] intentionally omitted <==**
+
+SATO–TATE DISTRIBUTIONS AND SYMPLECTIC CHARACTERS 
+
+47 
+
+**==> picture [146 x 29] intentionally omitted <==**
+
+Then one can easily check that they are contained in B(Y ) and 
+
+**==> picture [82 x 14] intentionally omitted <==**
+
+Note that the weight of Tk[′][is] 
+
+**==> picture [306 x 12] intentionally omitted <==**
+
+Since the number of such crystal elements is b − a + 1, it follows from Corollary 6.27 that they exhaust all the crystal elements in BC2(a, b) on which the operators e˜2 and f[˜] 2 act trivially. 
+
+For the Sato–Tate subgroups G1,3 and N (G1,3), we record the following. 
+
+Proposition 6.28. Assume that a − b is even, and let z = (a − b)/2. Then the dimension of weight 0 space in VC2(a, b) on which e2 and f2 act trivially is one, and the space is fixed by the action of a precisely when z is even. 
+
+Proof. It follows from (6.20) that the weight of Tk[′][is][zero][if][and][only][if][k][=][(][a][ −][b][)][/][2.][This] proves the first assertion. For the second assertion, let v be a vector in the one-dimensional weight 0 space on which e2 and f2 act trivially. Then the vector lies in the A1×A1-representation generated by the highest weight vector v(a−b,0;a,b) defined in Lemma 6.11. It follows from the definition of v(a−b,0;a,b) that the vector v has a scalar multiple of 
+
+**==> picture [94 x 15] intentionally omitted <==**
+
+as a term. Since av1 = −v1[,][a][v] 1[=][ v][1][and][a][(][w] 22[−][w] 11[) =][ w] 22[−][w] 11[,][the][vector][v][is][fixed][by][a] if and only if z is even. □ 
+
+Finally, for the Sato–Tate subgroups G3,3 and N (G3,3), we have the following. 
+
+Proposition 6.29. The dimension of weight 0 space in VC2(a, b) on which ei and fi act trivially, i = 1, 2, is one if a = b and is zero otherwise. In the case a = b, the space is fixed by the action of J precisely when b is even. 
+
+Proof. The first assertion follows from Corollary 6.3 (b). For the second assertion, let v be a vector in the one-dimensional weight 0 space on which ei and fi act trivially, i = 1, 2. Then the vector v is a scalar multiple of v(0,0;a,b) defined in Lemma 6.11. It follows from the definition of v(0,0;a,b) that the vector v has a scalar multiple of 
+
+**==> picture [60 x 14] intentionally omitted <==**
+
+as a term. Since J(w22[−][w] 11[)][=][−][(][w] 22[−][w] 11[),][the][vector][v][µ][is][fixed][by][J][if][and][only][if][b][is] even. □ 
+
+K.-H. LEE AND S.-J. OH 
+
+48 
+
+## References 
+
+|[Art24]|E. Artin. Quadratische K¨orper im Gebiete der h¨oheren Kongruenzen. I. Math. Z., 19(1):153–206,|
+|---|---|
+||1924.|
+|[AS95]|A. V. Andreev and B. D. Simons. Correlators of Spectral Determinants in Quantum Chaos. Phys.|
+||Rev. Lett., 75:2304–2307, 1995.|
+|[BDS03]|Jinho Baik, Percy Deift, and Eugene Strahov. Products and ratios of characteristic polynomials of|
+||random Hermitian matrices. volume 44, pages 3657–3670. 2003. Integrability, topological solitons and|
+||beyond.|
+|[BH00]|Edouard Br´ezin and Shinobu Hikami. Characteristic polynomials of random matrices. Comm. Math.|
+||Phys., 214(1):111–135, 2000.|
+|[BH01]|E. Br´ezin and S. Hikami. Characteristic polynomials of real symmetric random matrices. Comm.|
+||Math. Phys., 223(2):363–382, 2001.|
+|[BK95]|E. B. Bogomolny and J. P. Keating. Random matrix theory and the Riemann zeros. I. Three- and|
+||four-point correlations. Nonlinearity, 8(6):1115–1131, 1995.|
+|[BK96]|. Random matrix theory and the Riemann zeros. II. n-point correlations. Nonlinearity,|
+||9(4):911–935, 1996.|
+|[BS06]|A. Borodin and E. Strahov. Averages of characteristic polynomials in random matrix theory. Comm.|
+||Pure Appl. Math., 59(2):161–253, 2006.|
+|[Bum13]|D. Bump. Lie groups, volume 225 of Graduate Texts in Mathematics. Springer, New York, second|
+||edition, 2013.|
+|[BG06]|D. Bump and A. Gamburd. On the averages of characteristic polynomials from classical groups.|
+||Comm. Math. Phys., 265(1):227–274, 2006.|
+|[BuSch17]|D. Bump and A. Schilling. Crystal bases, World Scientifc Publishing Co. Pte. Ltd., Hackensack, NJ,|
+||2017.|
+|[CFK+03]|J. B. Conrey, D. W. Farmer, J. P. Keating, M. O. Rubinstein, and N. C. Snaith. Autocorrelation of|
+||random matrix polynomials. Comm. Math. Phys., 237(3):365–395, 2003.|
+|[CFK+05]|. Integral moments of L-functions. Proc. London Math. Soc. (3), 91(1):33–104, 2005.|
+|[CFZ05]|J. B. Conrey, D. W. Farmer, and M. R. Zirnbauer. Howe pairs, supersymmetry, and ratios of random|
+||characteristic polynomials for the unitary groups U(N), 2005, arXiv:math-ph/0511024.|
+|[CFZ08]|. Autocorrelation of ratios of L-functions. Commun. Number Theory Phys., 2(3):593–636,|
+||2008.|
+|[CHT08]|L. Clozel, M. Harris, and R. Taylor. Automorphy for some l-adic lifts of automorphic mod l Ga-|
+||lois representations. Publ. Math. Inst. Hautes ´Etudes Sci., (108):1–181, 2008. With Appendix A,|
+||summarizing unpublished work of Russ Mann, and Appendix B by Marie-France Vign´eras.|
+|[Deu41]|M. Deuring. Die Typen der Multiplikatorenringe elliptischer Funktionenk¨orper. Abh. Math. Sem.|
+||Hansischen Univ., 14:197–272, 1941.|
+|[FKRS12]|F. Fit´e, K. S. Kedlaya, V. Rotger, and A. V. Sutherland. Sato–Tate distributions and Galois endo-|
+||morphism modules in genus 2. Compos. Math., 148(5):1390–1442, 2012.|
+|[FKS16]|F. Fit´e, K. S. Kedlaya, and A. V. Sutherland. Sato-Tate groups of some weight 3 motives. Contemp.|
+||Math., 663:57–101, 2016.|
+|[FKS19]|. Sato-Tate<br>groups of abelian<br>threefolds:<br>a preview of the classifcation.<br>preprint,|
+||arXiv:1911.02071.|
+|[FS02a]|Y. V. Fyodorov and E. Strahov. Characteristic polynomials of random Hermitian matrices and|
+||Duistermaat–Heckman localisation on non-compact K¨ahler manifolds. Nuclear Phys. B, 630(3):453–|
+||491, 2002.|
+|[FS02b]|. On correlation functions of characteristic polynomials for chiral Gaussian unitary ensemble.|
+||Nuclear Phys. B, 647(3):581–597, 2002.|
+|[Hej94]|D. A. Hejhal. On the triple correlation of zeros of the zeta function. Internat. Math. Res. Notices,|
+||(7):293f., approx. 10 pp. 1994.|
+
+
+
+SATO–TATE DISTRIBUTIONS AND SYMPLECTIC CHARACTERS 
+
+49 
+
+|[HSBT10]|M. Harris, N. Shepherd-Barron, and R. Taylor. A family of Calabi–Yau varieties and potential auto-|
+|---|---|
+||morphy. Ann. of Math. (2), 171(2):779–813, 2010.|
+|[HK02]|J. Hong and S.-J. Kang. Introduction to quantum groups and crystal bases, Graduate Studies in|
+||Mathematics 42, American Mathematical Society, Providence, RI, 2002.|
+|[How95]|R. Howe. Perspectives on invariant theory: Schur duality, multiplicity-free actions and beyond. In|
+||The Schur lectures (1992) (Tel Aviv), volume 8 of Israel Math. Conf. Proc., pages 1–182. Bar-Ilan|
+||Univ., Ramat Gan, 1995.|
+|[JM85]|M. Jimbo and T. Miwa. On a duality of branching rules for afne Lie algebras. In Algebraic groups|
+||and related topics (Kyoto/Nagoya, 1983), volume 6 of Adv. Stud. Pure Math., pages 17–65. North-|
+||Holland, Amsterdam, 1985.|
+|[Joh17]|C. Johansson. On the Sato–Tate conjecture for non-generic abelian surfaces. Trans. Amer. Math.|
+||Soc., 369(9):6303–6325, 2017. With an appendix by F. Fit´e.|
+|[Kash02]|M. Kashiwara. Bases cristallines des groupes quantiques, Cours Sp´ecialis´es 9, Soci´et´e Math´ematique|
+||de France, Paris, 2002.|
+|[KS09]|K. S. Kedlaya, and A. V. Sutherland. Hyperelliptic curves, L-polynomials, and random matrices,|
+||Contemp. Math., 487:119–162, 2009.|
+|[Kin71]|R. C. King. Modifcation rules and products of irreducible representations of the unitary, orthogonal,|
+||and symplectic groups. J. Math. Phys., 12:1588–1598, 1971.|
+|[KS99]|N. M. Katz and P. Sarnak. Random matrices, Frobenius eigenvalues, and monodromy, volume 45|
+||of American Mathematical Society Colloquium Publications. American Mathematical Society, Provi-|
+||dence, RI, 1999.|
+|[KS00a]|J. P. Keating and N. C. Snaith. Random matrix theory and L-functions at s = 1/2. Comm. Math.|
+||Phys., 214(1):91–110, 2000.|
+|[KS00b]|. Random matrix theory and ζ(1/2 +it). Comm. Math. Phys., 214(1):57–89, 2000.|
+|[KT90]|K. Koike and I. Terada. Young diagrammatic methods for the restriction of representations of complex|
+||classical Lie groups to reductive subgroups of maximal rank. Adv. Math., 79(1):104–135, 1990.|
+|[MN01]|M. L. Mehta and J.-M. Normand. Moments of the characteristic polynomial in the three ensembles|
+||of random matrices. J. Phys. A, 34(22):4627–4639, 2001.|
+|[Mon73]|H. L. Montgomery. The pair correlation of zeros of the zeta function. InAnalytic number theory (Proc.|
+||Sympos. Pure Math., Vol. XXIV, St. Louis Univ., St. Louis, Mo., 1972), pages 181–193, 1973.|
+|[Ser94]|J.-P. Serre. Propri´et´es conjecturales des groupes de Galois motiviques et des repr´esentationsl-adiques,|
+||in Motives (Seattle, WA, 1991). Proc. Sympos. Pure Math., vol. 55, 377–400, 1994.|
+|[RS96]|Z. Rudnick and P. Sarnak. Zeros of principal L-functions and random matrix theory. volume 81,|
+||pages 269–322. 1996. A celebration of John F. Nash, Jr.|
+|[Rub98]|M. O. Rubinstein. Evidence for a spectral interpretation of the zeros of L-functions. ProQuest LLC,|
+||Ann Arbor, MI, 1998. Thesis (Ph.D.)–Princeton University.|
+|[Tay20]|N. Taylor. Sato–Tate distributions on Abelian surfaces. Trans. Amer. Math. Soc., 373:3541–3559,|
+||2020.|
+|[Tay08]|R. Taylor. Automorphy for some l-adic lifts of automorphic mod l Galois representations. II. Publ.|
+||Math. Inst. Hautes ´Etudes Sci., (108):183–239, 2008.|
+
+
+
+Department of Mathematics, University of Connecticut, Storrs, CT 06269, U.S.A. E-mail address: khlee@math.uconn.edu 
+
+Department of Mathematics, Ewha Womans University, Seoul 120-750, South Korea E-mail address: sejin092@gmail.com 
+

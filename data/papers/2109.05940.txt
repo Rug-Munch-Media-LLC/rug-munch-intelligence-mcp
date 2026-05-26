@@ -1,0 +1,293 @@
+# **Cross Domain Robot Imitation with Invariant Representation** 
+
+Zhao-Heng Yin[1] , Lingfeng Sun[3] , Hengbo Ma[3] , Masayoshi Tomizuka[3] , Wu-Jun Li[2] 
+
+_**Abstract**_ **— Animals are able to imitate each others’ behavior, despite their difference in biomechanics. In contrast, imitating the other similar robots is a much more challenging task in robotics. This problem is called cross domain imitation learning (CDIL). In this paper, we consider CDIL on a class of similar robots. We tackle this problem by introducing an imitation learning algorithm based on invariant representation. We propose to learn invariant state and action representations, which aligns the behavior of multiple robots so that CDIL becomes possible. Compared with previous invariant representation learning methods for similar purpose, our method does not require human-labeled pairwise data for training. Instead, we use cycle-consistency and domain confusion to align the representation and increase its robustness. We test the algorithm on multiple robots in simulator and show that unseen new robot instances can be trained with existing expert demonstrations successfully. Qualitative results also demonstrate that the proposed method is able to learn similar representations for different robots with similar behaviors, which is essential for successful CDIL.** 
+
+Fig. 1. Illustration of the CDIL problem studied in the paper. Each dot indicates a robot instance. Our goal is to train a new robot instance (target) with the existing expert (source) demonstrations of similar robots. 
+
+## I. INTRODUCTION 
+
+Animals are able to imitate each others’ behavior by watching their demonstrations despite their difference in biomechanics such as body length, shape, and strength [28]. However, previous robotics research suggests that imitating a similar reference robot of different embodiment and dynamics is a challenging problem, which is also termed as Cross Domain (robot) Imitation Learning (CDIL) in the literature [9]. Solving this problem can be both appealing and significant for robotics. On one hand, domain discrepancies between the expert and the agent usually exist in the practice of imitation learning, and direct imitation by Behavior Cloning (BC) [1] or Inverse Reinforcement Learning (IRL) [13] without noticing such discrepancies will harm learning performance [9]. On the other hand, CDIL will also make imitation learning more flexible and convenient, as this enables us to use existing massive amount of demonstrations online to train similar robots. 
+
+Previous CDIL research usually focuses on cross domain imitation learning between a pair of robots [11], [22]. But the demonstrations can actually come from multiple sources (experts) in practice. Therefore in this paper, we consider a more general CDIL problem among a class of similar 
+
+> 1Zhao-Heng Yin is with the Department of Electronic and Computer Engineering, The Hong Kong University of Science and Technology, Hong Kong SAR. zhaohengyin@gmail.com 
+
+> 2Wu-Jun Li is with the Department of Computer Science and Technology, Nanjing University, Nanjing 210012, PRC. liwujun@nju.edu.cn 
+
+> 3Lingfeng Sun, Hengbo Ma and Masayoshi Tomizuka are with the Department of Mechanical Engineering, University of California, Berkeley, Berkeley, CA 94720, USA. _{_ lingfengsun, hengboma, tomizuka _}_ @berkeley.edu 
+
+robots. One example is shown in the Figure 1, which is taken from the MuJoCo Walker problem [25]. We are provided with demonstration of several walkers of different embodiments (leg length), and our goal is to use these demonstrations to train a new Walker instance sampled from a class of Walker robots. 
+
+The availability of demonstration from multiple experts inspires us to mine the invariant representation for behavior patterns, which can be used for CDIL. Taking Walker as an example, one can notice that all these human-like walker instances walk by alternatively moving one leg forward, despite their difference in leg length. Such moving pattern is invariant and shared across the instances. This observation is formalized as the _domain-invariant subspace assumption_ in recent work [30]: 
+
+**Assumption** The state space and the action space of similar domains can be disentangled into several independent subspaces (factors). Some of these subspaces are domaininvariant and shared by source and target tasks. Hence, we can share the task knowledge on these domain-invariant subspaces. 
+
+Our solution directly follows the assumption. We first learn an domain-invariant state and action representation space for robots, and then perform imitation learning inside this invariant representation space. For example, one possible domain-invariant state representation for the Walkers is shown in the Figure 2. We expect that such invariant state representation only encodes their walking behavior, and ignore the irrelevant factors. In other words, this invariant 
+
+expert demonstration. Among IRL algorithms, one recent branch is the Adversarial Imitation Learning (AIL) [7], [26], which trains the agent to match epert’s behavior via an adversarial process. Compared with Behavioral Cloning, AIL can succeed in various challenging control tasks [7]. In this work, our imitation learning process follows the AIL framework. 
+
+## _B. Cross Domain Imitation Learning_ 
+
+Fig. 2. Illustration of a possible domain-invariant state representation for Walkers. Despite their physical difference, the behavior of these Walkers can be extracted and described by invariant representation (above row). We propose a method to learn such invariant representation, and use it to solve the CDIL problem in this paper. 
+
+representation can be considered as a behavior prototype for these robots. 
+
+There exist some representation learning methods for similar purpose [5], [10]. However, these methods require human-specified paired states from source and target domain. This can be quite inconvenient when the number of experts increases. Moreover, specifying such pairwise states can also be difficult since it is hard to define which states can be paired in some cases [9], [29]. Our proposed method overcomes such problem by leveraging the cycle consistency structure and using domain confusion to align the representation and make it robust. 
+
+Our contributions can be summarized as follow: 
+
+- We study the CDIL problem on a class of similar robots, and propose a new CDIL algorithm based on invariant representation. The proposed algorithm is more convenient since it does not depend on human-labeled pairwise data between source and target task. 
+
+- We test the proposed algorithm on various robots in the MuJoCo simulator. Experimental results show that our algorithm can outperform previous methods and generalized to unseen new robots. We also visualize to show that the proposed method is able to learn representations of similar behavior patterns of different robots. 
+
+## II. RELATED WORK 
+
+## _A. Imitation Learning_ 
+
+In order to enable the robots to acquire desired behavior, one basic approach is by Reinforcement Learning (RL) [23]. However, one drawback of applying RL is the difficulty of reward design. To solve this problem, researchers propose behavior acquisition by Imitation Learning (IL) [8]. One straightforward approach of IL is Behavioral Cloning [1]. Behavioral Cloning solves the IL problem via a supervised process, in which it learn to predict expert-like action given the state. However, Behavioral Cloning algorithms may suffer from the covariate shift problem [16]. Another line of work is Inverse Reinforcement Learning (IRL) [13]. IRL algorithms propose to infer the reward function from the 
+
+One crucial assumption of IL algorithms in the previous part is that the expert (source) and the agent (target) should be in the same domain. However, the expert demonstration may come from other similar but different domain in practice. Utilizing numerous existing demonstrations to solve the learning problem on an unseen new domain is quite appealing, and is called CDIL or Adaptive IL (ADIL) [9], [10]. One common ritual of CDIL is to map the states and actions in the source domain to functionally similar states in the agent’s domain, which is called domain adaptation (translation) [29]. Such mechanism is also observed in biology [12]. Some recent research in robotics directly defines cross domain mapping by human prior knowledge [14] to train a quadruped robot, but the approach is application-specific and can be confined to particular scenarios. Besides, researchers also consider learning such mapping. Some methods learn the mapping by using pairwise data in the source and target domain [10]. Some other method utilizes auxiliary tasks and dynamics information to align the states and actions without such pairwise data [9]. However, collecting pairwise data or defining tasks on multiple domains can be tricky and difficult. Therefore, these methods can be quite inconvenient in practice. Some vision-based works also propose unsupervised domain translation [20], but such method can misalign states in some cases [29]. 
+
+We address this problem by learning invariant representations, rather than direct domain translation. Such idea is partially inspired by research in robot transfer learning [30], whose purpose is quite similar to CDIL. Some previous methods like [5] propose to learn an invariant feature space for transfer learning. However, it requires supervised pairwise data for alignment. Some other methods tackle the CDIL problem by domain confusion [22], which can also be considered as instances of invariant representation learning. We will discuss these methods in the next section. Learning invariant representations is also related to domain randomization [24], which uses various domains to make representation used by policy invariant and robust. 
+
+One limitation of our method is that it does not consider cross morphology cases (such as different number of joints). But we believe that this problem can be solved by padding state and action space in the future. Cross morphology CDIL is recently studies in some recent research [6]. 
+
+## _C. Domain Confusion_ 
+
+Some CDIL methods reuse the demonstrations from different robots by getting rid of the domain specific information in the demonstration via representation learning, and this 
+
+process is usually called domain confusion [3], [4], [27]. The process is implemented by minizing the mutual information between representation and domain label [3], [22]. To estimate the mutual information, a mutual information estimator based on neural network called MINE is often used [2]. Besides MINE based implementation, [15] uses a variational information bottleneck to regularize the mutual information, which is also used in recent domain adaptation method [21]. This variational information bottleneck can provide an upper bound estimation of mutual information. Some other methods like [4], [17], [29] also propose to train a domain discriminator for domain confusion. However, we find that merely using domain confusion for CDIL is not optimal in some cases, since it does not use the dynamics information to align the representation. Our method further takes this into consideration. 
+
+## III. BACKGROUND AND PRELIMINARIES 
+
+## _A. Notations_ 
+
+Since similar robots usually differ from each other only on some particular physical configuration (parameters) like link length and body mass, in this paper we assume that we can use these physical configuration _c_ to describe a robot, which is denoted as _Rc_ . Then, a class of similar robots can be denoted as _RC_ = _{Rc|c ∈C}_ , where _C_ is the configuration space (i.e. set of possible physical configuration parameters). For example, we can use _Cpend_ = [1 _._ 5 _,_ 2] to characterize a class of pendulums whose lengths are between 1 _._ 5m and 2m. _R_ 1 _._ 6 can represent a pendulum whose length is 1 _._ 6m. A similar environment characterization is also used by [11]. 
+
+We formalize the control problem of a robot _Rc_ by the Markov Decision Process (MDP) in RL, which is defined as a tuple ( _S, A, P, R_ ). _S_ denotes its state space. _A_ denotes its action space. _P_ denotes the transition dynamics from time step _t_ to _t_ + 1. _R_ : _S × A →_ R is the reward function. At time step _t_ , the robot agent observes _st ∈S_ and output an action _at ∈A_ . Then, the environment evolves to _st_ +1 following the dynamics defined by _P_ . Moreover, for the transition ( _st, at, st_ +1), we also use _ct_ to denote the corresponding robot’s configuration. In this paper, we assume that the dimension of the robots’ state space and action space are the same (the controllable joints are the same across the robots). But note that one state (action) can be of different meanings to different robots. For example, let the state space of a pendulum is the tilting angle (for simplicity). Then pendulums of different length should react differently to the same observed tilting angle. This is due to the difference of dynamics of different robots. 
+
+## _B. Generative Adversarial Imitation Learning_ 
+
+We use Generative Adversarial Imitation Learning (GAIL) [7] as our imitation learning framework. GAIL enables the agent to obtain expert-like behavior by encouraging it to match its behavior with expert by fooling a discriminator network _D_ . Such discriminator _D_ is trained to discern expert _πE_ ’s state-action pair from agent _π_ ’s 
+
+state-action pair, which is equivalent to minimizing the following loss: 
+
+**==> picture [198 x 11] intentionally omitted <==**
+
+Then, we can use such discriminator _D_ to define the imitation reward for the agent. The reward for taking _at_ at state _st_ is defined as _rt_ = _−_ log(1 _− D_ ( _st, at_ )). 
+
+## _C. Mutual Information Neural Estimation_ 
+
+Our algorithm requires mutual information estimation to learn robust invariant representation. To evaluate the mutual information, we apply the estimation method proposed by MINE [2]. This method follows from the Donsker Varadhan representation theorem, which states that given two random variables _X_ and _Z_ on the sample space Ω, the mutual information between _X_ and _Z_ is given by 
+
+**==> picture [222 x 19] intentionally omitted <==**
+
+In the above equation, _PXZ_ denotes the joint probability distribution of _X_ and _Z_ , _PX PZ_ denotes the product of their marginal distributions. The supremum is taken over functions such that the expectation terms are finite. MINE proposes to parameterize the mapping _T_ with a neural network _Tφ_ , so 
+
+**==> picture [196 x 13] intentionally omitted <==**
+
+provides a lower bound estimation of _I_ ( _X, Z_ ). We can get an approximation of _I_ ( _X, Z_ ) by maximizing _ITφ_ and calculate its value. 
+
+Fig. 3. Overall process of the proposed algorithm. The first step is to train an invariant representation module. The second step is cross domain imitation learning on the target robot. We train the target robot to match expert’s behavior in the invariant representation space. 
+
+## IV. ALGORITHM 
+
+## _A. Overview_ 
+
+We first provide the overview of our proposed learning process in Figure 3. The whole process is composed of two steps. The first step is to train a invariant representation module. This module maps the states and actions of each robot instance to the an invariant representation space where similar states and actions in different robots are aligned. In the second step, we carry out imitation learning. We transform the state-action pairs of the target robot into the invariant representation space, and use GAIL to train the target robot to match them with the expert demonstration. 
+
+Fig. 4. (a) Structure of the proposed invariant representation module. (b) Illustration of the loss functions. 
+
+## _B. Invariant Representation Module_ 
+
+We illustrate the invariant representation module in the Figure 4. It has two parts: the main part consists of encodingdecoding networks, which produce invariant representation. The other part consists of some auxiliary regularization networks to further improve the representation. 
+
+_1) Main Network:_ We use two variational encoders to encode states and actions respectively. Concretely, we define the state encoder as Φ _s_ ( _·|st, ct_ ), which takes current state _st_ and robot configuration _ct_ as input, and produces a Gaussian distribution on the invariant state space _ZS_ . The encoded invariant state representation _zt[c]_[is][then][sampled][from] Φ _s_ ( _·|st, ct_ ). The action encoder Φ _a_ ( _·|at, ct_ ) is defined on the invariant action space _ZA_ in the same way. We sample invariant action representation _zt[a][∼]_[Φ] _[a]_[(] _[·|][a][t][, c][t]_[)][. Then, we use two] decoders to ensure that the representation contains enough information about the input. The state decoder Γ _s_ ( _zt[s][, c][t]_[)][is] required to reconstruct robot’s state _st_ conditioned on _zt[s]_[with] its configuration _ct_ . The action decoder Γ _a_ ( _zt[a][, c][t]_[)][ is defined] similarly. The reconstructed state and action are denoted as _s_ ˜ _t_ and _a_ ˜ _t_ . Then the reconstruction loss functions for state and action representation are defined as 
+
+**==> picture [184 x 13] intentionally omitted <==**
+
+and 
+
+**==> picture [186 x 13] intentionally omitted <==**
+
+respectively. To enforce Gaussian distribution, a prior loss is also used. It is as 
+
+**==> picture [163 x 10] intentionally omitted <==**
+
+_2) Dynamics Loss:_ As is introduced before, similar robot instances share their motion (dynamics) pattern in the invariant representation space. Therefore, we also train a dynamics model in the representation space for all the robot instances to discover shared pattern. Such dynamics model is a neural network _F_ : _ZS × ZA →ZS_ , whose goal is to predict the representation of the future state given the current state and action. This prediction is denoted as _z_ ˜ _t[s]_ +1[=] _[ F]_[(] _[z] t[s][, z] t[a]_[)][.][The] loss function is as 
+
+**==> picture [246 x 80] intentionally omitted <==**
+
+_3) Disentangle Loss:_ A necessary condition to make representation invariant is that the representation of different robots should be indistinguishable, otherwise the representation must carry robot-specific information. This condition is equivalent to minimizing the mutual information between encoded representation and robot’s configuration. In our setting, both _I_ ( _zt[s][, c][t]_[)][and] _[I]_[(] _[z] t[a][, c][t]_[)][should][be][minimized.] Hence we train two MINE networks _Ts_ and _Ta_ to provide estimation for _I_ ( _zt[s][, c][t]_[)][and] _[I]_[(] _[z] t[a][, c][t]_[)][,][which][are][written][as] _ITs_ ( _zt[s][, c][t]_[)][and] _[I][T] a_[(] _[z] t[a][, c][t]_[)][respectively.][Then][we][define][the] disentangle loss for encoders as 
+
+**==> picture [196 x 11] intentionally omitted <==**
+
+The loss function for updating _Ts_ and _Ta_ is defined as 
+
+where 
+
+**==> picture [190 x 11] intentionally omitted <==**
+
+**==> picture [190 x 11] intentionally omitted <==**
+
+Here, _DKL_ is the Kullback-Leibler divergence. _p_ ( _z_ ) is the prior Gaussian distribution _N_ (0 _,_ 1). 
+
+**==> picture [196 x 11] intentionally omitted <==**
+
+Our final training loss is defined as a weighted combination of the above loss functions: 
+
+**==> picture [223 x 11] intentionally omitted <==**
+
+Here, _λ_ 1, _λ_ 2 and _λ_ 3 are weighting hyperparameters. To obtain the training data, we sample transition data ( _st, at, st_ +1) on various robot instances in the given robot family using random policy. However, applying random policy for sampling may leave some important transitions uncovered in some tasks. Therefore, we also add rollout transition data of experts into training dataset if such situation happens. This is enough as expert rollouts can cover all the important transitions. Since the encoders Φ _s_ and Φ _a_ are evolving during the training process, we update _Ta_ and _Ts_ accordingly to track the change of the mutual information. In the implementation, we update network _Ts_ and _Ta_ by minimizing _LT_ after each update step of encoders. 
+
+## _C. Imitation Learning with Invariant Representation_ 
+
+After learning the invariant representation, we use it for imitation in the GAIL fashion. The only difference from GAIL is that we use the encoded invariant states and actions in the calculation. So the loss function for the discriminator is as 
+
+**==> picture [241 x 11] intentionally omitted <==**
+
+The reward for the agent _Rc_ is defined as _rt_ = _−_ log(1 _− D_ ( _zt[s][, z] t[a]_[))][.][The][overall][imitation][learning][process][is][sum-] marized in Algorithm 1. 
+
+## **Algorithm 1:** IR-GAIL 
+
+**Input:** Policy _π_ and discriminator _D_ . Agent configuration _c_ 
+
+// Step 1: Representation Learning 
+
+- **1** Build training dataset by random rollout and expert demo.; 
+
+**2 for** _i_ = 1 _,_ 2 _, ..._ **do** 
+
+- **3** Optimize Φ _s,_ Φ _a,_ Γ _s,_ Γ _a, F_ by minimizing _L_ ; 
+
+**4** Optimize _Ts_ , _Ta_ by minimizing _LT_ ; **5 end** 
+
+// Step 2: Imitation Learning **6 for** _i_ = 1 _,_ 2 _, ..._ **do 7** Sample trajectories using _πθi_ ; **8** Update _D_ by minimizing _Ld_ ; **9** Update _π_ based on _rt_ using PPO [19]; 
+
+**10 end** 
+
+## V. EXPERIMENTS 
+
+## _A. Settings_ 
+
+We validate our algorithm on several MuJoCo control benchmarks. We use InvertedPendulum, InvertedDoublePendulum, Hopper, Walker, Swimmer, and Halfcheetah. We setup the configuration space _C_ for these robots as follow. The values shown below are relative to the default configuration value in MuJoCo. 
+
+_1) InvertedPendulum:_ The configuration space is [0 _._ 75 _,_ 5 _._ 0] _×_ [0 _._ 5 _,_ 2 _._ 0]. The first dimension corresponds to the length of the link. The second dimension corresponds to the maximum gear. 
+
+_2) InvertedDoublePendulum:_ The configuration space is [1 _._ 0 _,_ 3 _._ 0] _×_ [1 _._ 0 _,_ 3 _._ 0] _×_ [0 _._ 5 _,_ 1 _._ 5]. The first and the second dimension are the length of the bottom link and the above link respectively. The third dimension is the weight of the above link. 
+
+_3) Hopper:_ The configuration space is [0 _._ 5 _,_ 3 _._ 0] _×_ [0 _._ 5 _,_ 3 _._ 0]. The first and the second dimension correspond to the length of the body and the length of the thigh respectively. _4) Walker:_ The configuration space is [0 _._ 5 _,_ 2 _._ 0] _×_ [0 _._ 5 _,_ 2 _._ 0]. The first and the second dimension correspond to the length of the thigh and the shank respectively. 
+
+_5) Swimmer:_ The configuration space is [0 _._ 5 _,_ 2 _._ 0] _×_ [0 _._ 5 _,_ 2 _._ 0] _×_ [0 _._ 5 _,_ 2 _._ 0]. The first, second, and third dimension correspond to the length of the head, body, and the tail respectively. 
+
+_6) Cheetah:_ The configuration space is [0 _._ 5 _,_ 2 _._ 5] _×_ [0 _._ 5 _,_ 2 _._ 0] _×_ [0 _._ 5 _,_ 2 _._ 0]. The first and the second dimension correspond to the length of the body and back leg respectively. The third dimension correspond to the maximum gear of the back leg. 
+
+We use the default sensor data as state observation in the experiments. For the InvertedPendulum and Cheetah, we use two different types of state observation. The first type is based on the body keypoints (K). The second type is based on the joint angles (A), which is the same as the default MuJoCo setup. 
+
+## _B. Evaluation_ 
+
+We evaluate the performance of algorithms by interpolation and extrapolation experiments. In the interpolation experiment, we sample robots whose physical configurations are quite close to the experts’. In the extrapolation experiment, however, the configurations of sampled robots differ 
+
+## TABLE I 
+
+THE INTERPOLATION (INT.) AND EXTRAPOLATION (EXT.) PERFORMANCE OF EVALUATED ALGORITHMS. 
+
+|Mode|Algorithm|IPendulum (K)|IDPendulum|Swimmer|Hopper|Walker|Cheetah (K)|IPendulum (A)|Cheetah (A)|
+|---|---|---|---|---|---|---|---|---|---|
+|Int.|GAIL|1.00_±_0.00|0.82_±_0.26|0.72_±_0.10|0.90_±_0.02|0.58_±_0.04|0.49_±_0.25|1.00_±_0.00|0.76_±_0.09|
+||TPIL|1.00_±_0.00|0.85_±_0.13|0.86_±_0.05|0.93_±_0.02|0.64_±_0.04|0.58_±_0.21|1.00_±_0.00|0.85_±_0.04|
+||IR-GAIL|**1.00**_±_**0.00**|**0.96**_±_**0.04**|**0.98**_±_**0.02**|**0.99**_±_**0.01**|**0.83**_±_**0.08**|**0.91**_±_**0.04**|**1.00**_±_**0.00**|**0.86**_±_**0.06**|
+|Ext.|GAIL|0.53_±_0.52|0.04_±_0.01|0.65_±_0.11|0.78_±_0.05|0.45_±_0.12|0.22_±_0.14|1.00_±_0.00|0.71_±_0.10|
+||TPIL|0.78_±_0.43|0.05_±_0.01|0.77_±_0.06|0.80_±_0.04|0.57_±_0.06|0.46_±_0.15|1.00_±_0.00|**0.81**_±_**0.08**|
+||IR-GAIL|**1.00**_±_**0.00**|**0.72**_±_**0.18**|**0.91**_±_**0.03**|**0.92**_±_**0.02**|**0.71**_±_**0.06**|**0.80**_±_**0.21**|**1.00**_±_**0.00**|0.79_±_0.11|
+
+
+
+be difficult, and keypoint based observation is used more frequently. 
+
+## _D. Ablation Studies_ 
+
+We also test the performance of the model after removing the dynamics regularization. We find that removing such regularization will not lead to a performance drop on InvertedPendulum and Hopper. However, we observe the performance on Walker, Swimmer, Cheetah, and InvertedDoublePendulum drops by 12%, 19%, 26%, and 43% respectively in average after its removal. An interesting fact is that the performance after such removal is still higher than the baselines in general. The reason is that variation bottleneck and the disentangle loss naturally regularize the representation and make it robust, which is also reported by [3]. 
+
+## _E. Qualitative Results_ 
+
+Fig. 5. Qualitative coupling results. Each row corresponds to states of one robot instance. Each column shows a group of coupled states. The coupled states in the same group are functionally similar. 
+
+significantly from the experts’. For each environment, the expert demonstrations and random rollout used for training are collected on robots sampled from a ball region _B_ in the configuration space, so that we can sample robots in (out of) _B_ for interpolation (extrapolation) evaluation. We collect the random rollout on 16 random sampled robots. We sample 32 trajectories from 4 different experts for imitation. For policy optimization, we use PPO with Generalized Advantage Estimation [18]. 
+
+## _C. Results_ 
+
+We compare the proposed IR-GAIL with GAIL, and another domain confusion based CDIL algorithm called TPIL [22]. The input of TPIL is fully observational, so we have to adapt it to our setting. The result is shown in the Table 1. We calculate the mean and standard deviation of each algorithm’s return, which are normalized with respect to the average return of the expert policy and the random policy. We can see that our proposed IR-GAIL in general performs better than GAIL and TPIL, though these methods can still learn from the expert on some of these domains, which is due to the similarity of observations and dynamics. IR-GAIL can also generalize well to robots out of the training distribution, though the extrapolation performance of IR-GAIL is lower than interpolation performance. We also notice that the previous algorithms can still perform quite well on InvertedPendulum and Cheetah, if the observation is based on joint angle. Such joint angle based observation is naturally invariant representations in some cases. For example, if the robots are only differerent from each other in size, then the angle information is still useful among them. However, measuring the angle accurately in application can 
+
+In this part, we provide some qualitative coupling results to understand the learned invariant representation space in Figure 5. We first rollout trajectories of different robot instances by trained policies, and map the encountered states into the invariant representation space using the trained invariant representation module. To obtain a group of coupled states of different robot instances, we sample a point in the representation space and find its nearest representations of different robot instances. Then the corresponding robot states of these representations form a group of coupled states. The results are collected from Hopper and Cheetah. We can find that the coupled states in each group are highly functionally similar. This result suggests that our method can encode desired invariant representation for similar robots. 
+
+## VI. CONCLUSION 
+
+In this paper, we studied the CDIL problem on a class of similar robots, and propose a new CDIL algorithm based on invariant representation. Experimental results showed that our method can achieve superior performance. We used visualization to demonstrate that our method can learn invariant representation for CDIL. One limitation of this work is that it is not observational, and we will study how to extend this approach to observational IL in the future. Another future direction is to study how to infer robot’s configuration automatically. We will also try to apply the proposed method on real robots. 
+
+## REFERENCES 
+
+- [1] M. Bain and C. Sammut. A framework for behavioural cloning. In _Machine Intelligence 15_ , pages 103–129, 1995. 
+
+- [2] M. I. Belghazi, A. Baratin, S. Rajeshwar, S. Ozair, Y. Bengio, A. Courville, and D. Hjelm. Mutual information neural estimation. In _International Conference on Machine Learning (ICML)_ , pages 531– 540, 2018. 
+
+- [3] E. Cetin and O. Celiktutan. Domain-robust visual imitation learning with mutual information constraints. In _International Conference on Learning Representations (ICLR)_ , 2021. 
+
+- [4] Y. Ganin, E. Ustinova, H. Ajakan, P. Germain, H. Larochelle, F. Laviolette, M. Marchand, and V. Lempitsky. Domain-adversarial training of neural networks. _The journal of machine learning research_ , 17(1):2096–2030, 2016. 
+
+- [5] A. Gupta, C. Devin, Y. Liu, P. Abbeel, and S. Levine. Learning invariant feature spaces to transfer skills with reinforcement learning. _arXiv preprint arXiv:1703.02949_ , 2017. 
+
+- [6] D. Hejna, L. Pinto, and P. Abbeel. Hierarchically decoupled imitation for morphological transfer. In _International Conference on Machine Learning (ICML)_ , pages 4159–4171. PMLR, 2020. 
+
+- [7] J. Ho and S. Ermon. Generative adversarial imitation learning. In _Advances in Neural Information Processing Systems (NIPS)_ , volume 29, pages 4565–4573, 2016. 
+
+- [8] A. Hussein, M. M. Gaber, E. Elyan, and C. Jayne. Imitation learning: A survey of learning methods. _ACM Computing Surveys (CSUR)_ , 50(2):1–35, 2017. 
+
+- [9] K. Kim, Y. Gu, J. Song, S. Zhao, and S. Ermon. Domain adaptive imitation learning. In _International Conference on Machine Learning (ICML)_ , pages 5286–5295. PMLR, 2020. 
+
+- [10] Y. Liu, A. Gupta, P. Abbeel, and S. Levine. Imitation from observation: Learning to imitate behaviors from raw video via context translation. In _IEEE International Conference on Robotics and Automation (ICRA)_ , pages 1118–1125. IEEE, 2018. 
+
+- [11] Y. Lu and J. Tompson. Adail: Adaptive adversarial imitation learning. _arXiv preprint arXiv:2008.12647_ , 2020. 
+
+- [12] A. N. Meltzoff and P. J. Marshall. Importance of body representations in social-cognitive development: new insights from infant brain science. _Progress in brain research_ , 254:25–48, 2020. 
+
+- [13] A. Y. Ng, S. J. Russell, et al. Algorithms for inverse reinforcement learning. In _International Conference on Machine Learning (ICML)_ , volume 1, page 2, 2000. 
+
+- [14] X. B. Peng, E. Coumans, T. Zhang, T. E. Lee, J. Tan, and S. Levine. Learning agile robotic locomotion skills by imitating animals. In _Robotics: Science and Systems (RSS)_ , 2020. 
+
+- [15] X. B. Peng, A. Kanazawa, S. Toyer, P. Abbeel, and S. Levine. Variational discriminator bottleneck: Improving imitation learning, inverse rl, and gans by constraining information flow. In _International Conference on Learning Representations (ICLR)_ , 2019. 
+
+- [16] S. Ross, G. Gordon, and D. Bagnell. A reduction of imitation learning and structured prediction to no-regret online learning. In _Proceedings of the fourteenth international conference on artificial intelligence and statistics_ , pages 627–635. JMLR Workshop and Conference Proceedings, 2011. 
+
+- [17] K. Schmeckpeper, O. Rybkin, K. Daniilidis, S. Levine, and C. Finn. 
+
+   - Reinforcement learning with videos: Combining offline observations with interaction. In _Conference on Robot Learning (CoRL)_ , 2020. 
+
+- [18] J. Schulman, P. Moritz, S. Levine, M. I. Jordan, and P. Abbeel. Highdimensional continuous control using generalized advantage estimation. In _International Conference on Learning Representations (ICLR)_ , 2016. 
+
+- [19] J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and O. Klimov. Proximal policy optimization algorithms. _arXiv preprint arXiv:1707.06347_ , 2017. 
+
+- [20] L. Smith, N. Dhawan, M. Zhang, P. Abbeel, and S. Levine. AVID: learning multi-stage tasks via pixel-level translation of human videos. In _Robotics: Science and Systems (RSS)_ , 2020. 
+
+- [21] Y. Song, L. Yu, Z. Cao, Z. Zhou, J. Shen, S. Shao, W. Zhang, and Y. Yu. Improving unsupervised domain adaptation with variational information bottleneck. _arXiv preprint arXiv:1911.09310_ , 2019. 
+
+- [22] B. C. Stadie, P. Abbeel, and I. Sutskever. Third person imitation learning. In _International Conference on Learning Representations (ICLR)_ , 2017. 
+
+- [23] R. S. Sutton and A. G. Barto. _Reinforcement learning: An introduction_ . MIT press, 2018. 
+
+- [24] J. Tobin, R. Fong, A. Ray, J. Schneider, W. Zaremba, and P. Abbeel. Domain randomization for transferring deep neural networks from simulation to the real world. In _IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)_ , pages 23–30. IEEE, 2017. 
+
+- [25] E. Todorov, T. Erez, and Y. Tassa. Mujoco: A physics engine for model-based control. In _IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)_ , pages 5026–5033, 2012. 
+
+- [26] F. Torabi, G. Warnell, and P. Stone. Generative adversarial imitation from observation. _arXiv preprint arXiv:1807.06158_ , 2018. 
+
+- [27] E. Tzeng, J. Hoffman, N. Zhang, K. Saenko, and T. Darrell. Deep domain confusion: Maximizing for domain invariance. _arXiv preprint arXiv:1412.3474_ , 2014. 
+
+- [28] T. R. Zentall. Imitation in animals: evidence, function, and mechanisms. _Cybernetics & Systems_ , 32(1-2):53–96, 2001. 
+
+- [29] Q. Zhang, T. Xiao, A. A. Efros, L. Pinto, and X. Wang. Learning crossdomain correspondence for control with dynamics cycle-consistency. In _International Conference on Learning Representations (ICLR)_ , 2021. 
+
+- [30] Z. Zhu, K. Lin, and J. Zhou. Transfer learning in deep reinforcement learning: A survey. _arXiv preprint arXiv:2009.07888_ , 2020. 
+

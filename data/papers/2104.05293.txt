@@ -1,0 +1,2071 @@
+EtherClue: Digital investigation of attacks on Ethereum
+smart contracts
+Simon Joseph Aquilinaa, Fran Casinoc,d, Mark Vellaa,∗, Joshua Ellula,b, Constantinos
+Patsakisc,d
+aDepartment of Computer Science, University of Malta, Msida, Malta
+bCentre for Distributed Ledger Technologies, University of Malta, Msida, Malta
+cDepartment of Informatics, University of Piraeus, 80 Karaoli & Dimitriou str., 18534 Piraeus, Greece
+dInformation Management Systems Institute, Athena Research Center, Artemidos 6, Marousi 15125, Greece
+Abstract
+Programming errors in Ethereum smart contracts can result in catastrophic ﬁnancial
+losses from stolen cryptocurrency. While vulnerability detectors can prevent vulnera-
+ble contracts from being deployed, this does not mean that such contracts will not be
+deployed. Once a vulnerable contract is instantiated on the blockchain and becomes
+the target of attacks, the identiﬁcation of exploit transactions becomes indispensable
+in assessing whether it has been actually exploited and identifying which malicious or
+subverted accounts were involved.
+In this work, we study the problem of post-factum investigation of Ethereum attacks
+using Indicators of Compromise (IoCs) specially crafted for use in the blockchain. IoC
+deﬁnitions need to capture the side-effects of successful exploitation in the context of
+the Ethereum blockchain. Therefore, we deﬁne a model for smart contract execution,
+comprising multiple abstraction levels that mirror the multiple views of code execution
+on a blockchain. Subsequently, we compare IoCs deﬁned across the different levels
+in terms of their effectiveness and practicality through EtherClue, a prototype tool for
+investigating Ethereum security incidents. Our results illustrate that coarse-grained
+IoCs deﬁned over blocks of transactions can detect exploit transactions with less com-
+putation; however, they are contract-speciﬁc and suffer from false negatives. On the
+other hand, ﬁne-grained IoCs deﬁned over virtual machine instructions can avoid these
+pitfalls at the expense of increased computation which are nevertheless applicable for
+practical use.
+Keywords: Blockchain Forensics, Ethereum Attacks, Indicators of Compromise,
+Ethereum Operational Semantics
+∗Corresponding author
+Email addresses: simon-joseph.aquilina.15@um.edu.mt (Simon Joseph Aquilina),
+francasino@unipi.gr (Fran Casino), mark.vella@um.edu.mt (Mark Vella),
+joshua.ellul@um.edu.mt (Joshua Ellul), kpatsak@unipi.gr (Constantinos Patsakis)
+arXiv:2104.05293v2  [cs.CR]  2 Sep 2021
+1. Introduction
+Nowadays, Ethereum is the largest public blockchain supporting smart contract
+execution. While introducing ﬂexibility in terms of programmable transactions, as
+deﬁned by Turing complete programming languages, the consequence is an enlarged
+attack surface [1, 2]. The immediate venue for attacks is presented by the smart con-
+tract code itself whenever it deviates from the intended functionality. This problem is
+aggravated by incomplete knowledge of how a smart contract is executed at runtime
+by inexperienced programmers. Security vulnerabilities at this level can be similar to
+those found in non-blockchain code, e.g. arithmetic overﬂows, reentrancy, and poor
+randomness. Others are speciﬁc to the particular nature of smart contracts, e.g. call to
+unknown third-party contract code, improperly checking the return status of external
+calls, and denial of service (DoS) vulnerabilities related to gas-based mitigation of in-
+ﬁnite execution bugs or call-stack depth limits, among many others. Furthermore, the
+number of currency/token-based contracts deployed on Ethereum aggravate the classic
+vulnerability of insufﬁciently sanitised user-controlled inputs.
+Other entry points for attacks are presented by the runtime environment support-
+ing contract code execution. Ethereum’s infrastructure requires a virtual machine for
+code execution, while the consensus protocol’s complexity is increased as a result of
+taking into account contract execution during block mining. The case of malicious
+miners being selective of which transactions, or in which order, they are included in-
+side a mined block, is one such example. By doing so, an attacker can exploit time or
+transaction order-dependent logic inside smart contracts. Finally, Ethereum’s external
+environment comprises code that interacts with Ethereum nodes, e.g. dApps and off-
+chain crypto wallets, further extend the attack surface [3]. At this level, attacks exploit
+vectors within the technologies in question, e.g. DOM-based XSS for dApps, or spy-
+ware in the case of desktop/mobile applications. Ultimately, these attacks can tamper
+with the submitted transactions in various ways.
+In recent years, we have witnessed a number of notorious security incidents con-
+cerning the Ethereum blockchain that resulted in signiﬁcant ﬁnancial losses or drastic
+measures being taken to avoid consequences. The DAO crowd-funding platform inci-
+dent is perhaps one of the most representative of these, as on June 18th, 2016, attack-
+ers managed to transfer $60M under their control [4]. The funds were salvaged only
+through a hard fork, a measure which goes directly against the principle of allowing au-
+tonomous authorities to be arranged foregoing central authority [5]. In April 2018, an
+integer overﬂow vulnerability was the root cause for the attack on BECToken, resulting
+in the theft of 1058 tokens. Just earlier this year, a potential multi-million dollar disaster
+for users of DeﬁSaver was only averted by the timely action of its development team
+when notiﬁed of a vulnerability in one of their digital asset management contracts [6].
+This work aims to identify exploit transactions and, therefore, the focus is on vul-
+nerabilities that can be exploited solely via maliciously crafted transactions. These are
+submitted either directly from an externally owned account, i.e. an account not associ-
+ated with code, or indirectly through a malicious smart contract. Ideally, such vulner-
+abilities would have been detected prior to smart contract instance creation, especially
+when one considers blockchain immutability. Therefore, tools that perform static anal-
+ysis of smart contract code, identifying security vulnerabilities inside the source code
+2
+(e.g. Solidity) or decompiled Ethereum Virtual Machine (EVM) bytecode of smart
+contracts, comprise the most common approaches. Notable examples include Oyente
+[7], analysis tools based on Gigahorse [8], as well as EtherTrust [9], Securify [10],
+Zeus [11] and the dynamic veriﬁcation tool for absence of reentrancy vulnerabilities
+[12]. Others take a testing approach and focus on generating test inputs using a fuzzing
+approach [13, 9, 14], comparing test outcomes with test oracles. However, in both
+approaches, comprehensive execution path coverage remains an open challenge. As a
+result, vulnerable contracts may still be deployed on the blockchain. In such cases, ex-
+ploit transactions can be identiﬁed post-factum during a subsequent investigation with
+the help of Digital Forensics and Incident Response (DFIR) tools. Investigations of
+this nature can help, ﬁrst and foremost, to understand whether the smart contract in
+question has been exploited. In the afﬁrmative case, the identiﬁcation of exploit trans-
+actions provides links to the source accounts. These accounts may either belong to
+the perpetrators or victims whose accounts have been compromised. Furthermore, the
+linked accounts may be associated with further smart contracts, which at this point
+would have to be considered malicious, with any future transactions originating from
+them considered suspicious.
+Indicators of Compromise (IoC) constitute evidence of intrusion and are typi-
+cally directly related to the long-term side-effects of successfully executing malware
+[15].
+For example, in the case of WannaCry ransomware attacks on a Windows
+machine, investigators can identify which artifact variant is in play, and therefore
+which recovery method could be effective, by checking whether the values cmd.exe
+/c and C:\ProgramData\aucdehyopp032\tasksche.exe can be found under the
+"HKLM\System\CurrentControlSet\Services\mssecsvc2.0" key used for persis-
+tence. Another IoC can be based on the auto-propagation code that exploits Eternal-
+Blue [16]. This step is observable within a network packet capture in the form of SMB
+trafﬁc attempting a connection to IPC$ and followed by an unusually large NT Trans
+SMB request. When one compares these host and network-level IoCs to Ethereum’s
+state transitions, it is evident that we must consider radically different approaches.
+We address the problem of responding to attacks on Ethereum smart contracts akin
+to responding to computer intrusions. In fact, during the earlier stages of the incident
+response process, a triage operation typically identiﬁes compromised devices. This is
+a live forensics operation conducted while machines are still powered on. Indicators
+of Compromise (IoC) constitute forensic evidence of the intrusion and are the key ele-
+ments of triage representing long-term residue of attack steps [15]. While similar IoCs
+could have been considered for attacks targeting Ethereum’s operational environment,
+this approach does not apply at the smart contract level. If we consider contract exe-
+cution steps as a state machine, we would rather be dealing with state transitions that
+update Ethereum blocks, add transactions to mined blocks and manipulate the EVM’s
+internal state. Therefore, our ﬁrst undertaking is precisely abstracting smart contracts
+execution in a model that considers all three levels.
+The result is the EtherClue DFIR tool (Figure 1), which given the address of a
+contract account and a vulnerable code location, it makes use of an IoC repository to
+identify potential exploit transactions from within an archive node that stores the full
+blockchain history. Evidently, EtherClue is intended to complement, and not replace,
+vulnerability detectors. While vulnerability detectors may prevent some vulnerabilities
+3
+to be deployed in production environments, in this case a blockchain, this does not
+mean that the code is bulletproof. On the contrary, new attacks which may be even
+unknown to the vulnerability detectors can lead to a late vulnerability discovery with
+the smart contract already deployed.
+In this context, one may investigate a suspected successful exploit. Examples of
+suspicious activities may include the unexpected draining of an account’s balance, an
+account getting stuck in a speciﬁc state or associated with an unusually high number
+of failed transactions. Traces from the suspect transactions are passed to vulnerability
+detectors, potentially presenting execution paths that would have been missed by them
+during pre-deployment analysis, or be manually inspected. Once vulnerabilities are
+conﬁrmed, their location is provided to EtherClue to obtain further information about
+the incidents concerned.
+ 
+ 
+EtherClue
+Forensics Tool
+IoC Repository
+Ethereum
+Archive Node
+Blockchain
+query/response
+IoC Rule
+Address
+Vulnerability location
+Output:
+Tx: 0x662e6…
+Tx: 0x318be…
+Tx: 0xbed0d...
+Input:
+Smart
+Contract
+Vulnerability 
+Detector
+<<
+>>
+Figure 1: EtherClue DFIR tool.
+Main contributions: The contributions of this work are manifold. More precisely,
+ﬁrst, we introduce a model for Ethereum smart contract execution covering the block,
+transaction and EVM levels, and upon which IoCs for the integer under/overﬂow, DoS,
+and reentrancy exploit classes are deﬁned. Furthermore, we introduce EtherClue, a
+new open-source DFIR tool making use of these IoCs.
+We perform experiments with EtherClue in both synthesised and real-world use
+cases and transactions. The full dataset for the synthesized cases has been publicly
+released, along with attack transaction labels for the real-world ones. Our experimental
+results show that block-level IoCs can produce results quicker than at the EVM-level as
+EVM instruction traces grow larger, while the opposite is true for an increase in contract
+storage size. Also, block-level IoCs are contract-speciﬁc and less precise than those
+deﬁned at the EVM level. Therefore, a balance of precision and speed depending on
+the application must be further assessed. Furthermore, we conducted some Ethereum
+mainnet case studies, demonstrating EtherClue’s practicality for EVM-level IoCs.
+The rest of this paper is structured as follows: Section 2 provides an overview
+4
+of Ethereum from the perspective of smart contract execution, as triggered by trans-
+actions, as can be observed at the EVM/transaction/block levels; Section 3 positions
+EtherClue alongside existing tools useful for digital forensics and incident response
+concerning Ethereum and blockchain technology in general; Section 4 presents the
+proposed model of smart contract execution before proceeding with IoC deﬁnitions;
+Section 5 highlights the main components of EtherClue’s prototype implementation,
+and which is subsequently used for experimentation in Section 6. Section 7 concludes
+this work by highlighting the implications of the results produced using our public
+dataset, as well as indicating the next steps required to bring EtherClue closer to a
+production-ready state.
+2. Background
+Deﬁning IoCs for smart contract attacks requires a characterization of their
+blockchain execution context. When viewing Ethereum as a world computer [17],
+smart contracts become the programs that manipulate its global state and whose in-
+tegrity is safeguarded by mainnet, Ethereum’s live blockchain. Mainnet is kept syn-
+chronized and immutable by a combination of consensus and block hash chaining be-
+tween participating nodes. They expose functions that, when called, as a result of
+transaction execution during block mining, manipulate this global state. Transactions,
+in turn, have their authenticity safeguarded by public-key cryptography. IoCs can ei-
+ther focus solely on this global state as a forensic source or consider the intermediate
+states resulting from individual transactions’ execution, down to the individual EVM
+instructions as candidate forensic sources.
+2.1. Ethereum Transactions and Smart Contracts
+The most basic view of Ethereum is that of a sequence of accounts holding a value
+in cryptocurrency, characterizing Ethereum’s global state. Accounts are identiﬁed by
+a 160-bit address linked to a private key used to authenticate all currency transfers
+requested on their behalf. Ether, Ethereum’s cryptocurrency, transfers between these
+so-called external accounts take the form of transactions. Transactions identify the
+source/destination addresses, the value in Ether, along with a digital signature authen-
+ticating the request, among other ﬁelds. Smart contracts provide a way to deﬁne custom
+ways of moving Ether between accounts, enabling the development of sub-currencies
+(token), wallets, autonomous governance, and decentralized gambling/lottery applica-
+tions [18], among others.
+Listing 1 shows a simpliﬁed wallet smart contract, Wallet.sol, written in Solidity
+[19]. A contract is itself an account on the blockchain, also holding a value in Ether,
+with the important difference that it includes code. Wallet.sol exposes two func-
+tions, deposit() (lines 5-12) and withdraw() (lines 9-18), both of which are callable
+by transactions with the contract’s address as destination. The former is marked as
+payable, meaning it can receive an Ether transfer and the payment (msg.value) is
+recorded in the money (permanent) storage variable (line 3). The withdraw() function
+accepts an amount argument as part of the transaction’s call data, resulting in a fur-
+ther internal message call (line 12), or at least if sufﬁcient funds are available for the
+transaction’s source address (msg.sender).
+5
+Listing 1: Wallet.sol - A Solidity wallet smart contract.
+1 pragma
+s o l i d i t y
+>=0.5.8;
+2 contract
+Wallet {
+3
+mapping ( address => uint ) money ;
+4
+/* Deposit ether with the contract -account. */
+5
+function
+d e p o s i t ( )
+public
+payable {
+6
+money [ msg . sender ] += msg . value ;
+7
+}
+8
+/* Withdraw ether from the contract -account. */
+9
+function
+withdraw ( uint
+amount )
+public {
+10
+uint b = money [ msg . sender ] −amount ;
+11
+i f ( b > 0) {
+12
+( bool
+rv ,
+) = msg . sender . c a l l { value :
+amount }( "" ) ;
+13
+i f ( rv )
+14
+{
+15
+money [ msg . sender ] = b ;
+16
+}
+17
+}
+18
+}
+19 }
+Listing 2: Bytecode snippet from the compiled Wallet.sol.
+1 . . . SNIP . . .
+2SUB
+//money[msg.sender] - amount
+3SWAP1
+//uint b = money[msg.sender] - a...
+4POP
+//uint b = money[msg.sender] - a...
+5PUSH 0
+//0
+6DUP2
+//b
+7GT
+//b > 0
+8 . . . SNIP . . .
+9GAS
+//msg.sender.call{value: amount}...
+10CALL
+//msg.sender.call{value: amount}...
+11 . . . SNIP . . .
+Prior to blockchain deployment and execution, smart contracts have to be compiled
+to EVM bytecode and possibly assigned an initial value in Ether via one more trans-
+action. The EVM is a stack machine, as indicated by the typical stack-manipulating
+opcodes on lines 2-6 of the compiled Wallet.sol shown in Listing 2. Lines 9-10
+concern the internal message call issued to withdraw via the CALL opcode. Of particu-
+lar interest is the GAS opcode. This instruction reﬂects Ethereum’s gas system, where
+instruction execution and memory utilization consume gas [20], paid in Ether by its
+caller account as deﬁned by the STARTGAS transaction ﬁeld. Its value effectively limits
+the maximum number of computational steps the transaction execution is allowed to
+take.
+This concept is crucial for Ethereum’s anti-denial of service model, preventing ac-
+cidental or malicious computational wastage [18]. In turn STARTGAS is bounded by the
+GASLIMIT value associated with Ethereum blocks [17]. Prior to instruction execution,
+the EVM checks whether the gas required to execute the instruction added to the total
+gas utilization so far exceeds the maximum gas allotted to the respective transaction,
+triggering an out-of-gas exception when exceeded. By executing the GAS instruction
+on Line 9, the amount of available gas is pushed on the stack, serving as the ﬁrst argu-
+ment for the subsequent CALL instruction. In general, instructions related to the calling
+6
+of other contracts, or sending Ether to accounts, are required to forward an amount of
+gas to the callee to consume. Gas prices are driven by a miners’ market, with trans-
+action creators specifying gas prices and miners prioritizing those transactions with
+favourable prices. A number of websites, e.g. ETH Gas Station1 help transaction cre-
+ators to get their gas prices right.
+2.2. Ethereum State Transitions
+When considering Ethererum as a state machine, the execution of Wallet.sol
+triggers state transitions on three levels: EVM instruction, transaction, and block min-
+ing. At the EVM-level, Figure 2, the contract’s persistent storage and EVM’s volatile
+memory sections characterize the execution state, while EVM instructions trigger tran-
+sitions. A new state is created at the start of all external and (for some) internal calls. A
+read-only data-section stores the call’s arguments, other transaction data, e.g. sender’s
+address, transaction value in Ether, as well as block-related context, e.g. block’s hash
+and timestamp. The contract storage is also made available, in our example storing
+money’s key-value pairs. Any changes to it will eventually be reﬂected in the global
+state post-successful execution. The stack area is the most dynamic, with Figure 3 il-
+lustrating a state transition triggered by a SUB instruction, acting on the top of the stack
+during withdraw()’s execution.
+ 
+ 
+Code
+169
+SUB
+170
+SWAP1
+171
+POP
+172
+PUSH 0
+SUB
+Stack (volatile)
+0:
+0x02
+1:
+0x01
+2:
+0x00
+3:
+0x01
+Call Data (volatile – read only)
+0:
+0x2e1a7...00001
+Contract storage (persistent)
+0xac40..
+Key:    0x1a10 ...f02
+Value: 0x02
+Code
+169
+SUB
+170
+SWAP1
+171
+POP
+172
+PUSH 0
+Stack (volatile)
+0:
+0x01
+1:
+0x00
+2:
+0x01
+3:
+0x5a
+Call Data (volatile – read only)
+0:
+0x2e1a7...00001
+Contract storage (persistent)
+0xac40..
+Key:    0x1a10 ...f02
+Value: 0x02
+EVM state i
+EVM state i+1
+Global state
+Key:    0x1a10 ...f02
+Value: 0x02
+Key:    0x1a10 ...f02
+Value: 0x01
+Figure 2: An EVM-level state transition triggered by instruction execution.
+1https://ethgasstation.info/
+7
+The transaction level’s state, Figure 3, is at a higher level of abstraction and is obliv-
+ious of the EVM level. Rather, it is concerned with transactions updating Ethereum’s
+global state. This state is an array of externally owned and contract accounts, with the
+only difference with the latter being associated with contract code and their persistent
+storage variables. Transaction-level state transitions, comprising the initial transaction
+and any internal ones triggered as a consequence, manipulate accounts through trans-
+action ﬁelds (e.g. destination account address and the cryptocurrency value ﬁelds) and
+contract code execution. In the case of a transaction calling Wallet.sol’s withdrawal
+function for 1 Wei (1 Ether = 1018 Wei), the post-state reﬂects an updated value in the
+money map.
+ 
+ 
+Contract account: 0xaaa
+nonce:
+0x
+balance:
+0x2
+storage Root:
+0x45784fda….
+Code Hash:
+0xb34712ac...
+Tx:
+0x82ee43...
+From:
+B8483F64...
+To:
+0xAc40c9C…
+Value:
+0x0
+Data:
+0xd0e3...
+...
+Key:    0x1a10 ...f02
+Value: 0x02
+Key:    0x1a10 ...f02
+Value: 0x01
+Global state
+Global state i
+Global state i+1
+External account: 0xaaa
+nonce:
+0x0A
+balance:
+0x64
+storage Root:
+0x00
+Code  Hash:
+0x00
+Contract account: 0xaaa
+nonce:
+0x
+balance:
+0x1
+storage Root:
+0x6ca234de….
+Code Hash:
+0xb34712ac...
+External account: 0xaaa
+nonce:
+0x0A
+balance:
+0x64
+storage Root:
+0x00
+Code  Hash:
+0x00
+Figure 3: A transaction-level state transition triggered by transaction execution.
+Transactions are executed in blocks, and they are stored as an immutable
+blockchain to safeguard the global state’s integrity. At the block level, Figure 4, ex-
+ecution states are deﬁned by these newly accepted blocks of transactions (Tx) and
+associated block meta-data, e.g. the block hash and the hash of the previous block
+chained to it. This level does not keep account of intermediate states generated by indi-
+vidual transactions or EVM-level state transitions, except for values inside transaction
+receipts (Rx), or log entries made by contract code. Nevertheless, through transaction
+tracing, typically offered by Ethereum nodes [21], it is possible to replay transaction
+execution up to EVM instruction level. This is achieved by recomputing (or caching)
+the global state at the transaction call point through blockchain traversal and accessing
+the contract bytecode stored as part of the global state. The global state’s integrity is
+safeguarded by a hash, called the state root, stored as part of every block.
+8
+ 
+ 
+Global state
+Guarantees
+State
+Integrity
+...
+Tx: i-4
+Tx: i-3
+Tx: i-2
+Tx: i-1
+Tx: i
+Block n-1
+(Global state i)
+...
+Prev. Hash
+TxRoot
+Prev. Hash
+TxRoot
+Receipts Root
+Block n
+(Global state i+t)
+Tx: i+1
+Tx: i+2
+Tx:82ee43...
+Tx: i+3
+Tx: i+t
+Block: 0x45def82...
+Block: 0xba4f62...
+Newly mined block
+State Root
+State Root
+Receipts Root
+Figure 4: A block-level state transition triggered by block mining.
+2.3. Notation and Execution Semantics
+The semantics underpinning Oyente’s symbolic execution engine [7], were cho-
+sen among other candidates [22, 23] since they provide a more convenient starting
+point for the required model of smart contract execution. Thus, their coverage of all
+three levels of smart contract execution simpliﬁes model development.. They build
+upon the formalism presented in the Ethereum Yellow Paper [17]; referred to from
+now on as EYP, where the global state made up of a sequence of all external/con-
+tract accounts is denoted as σ. In contrast, the state of a single account with ad-
+dress γ is denoted as σ[γ]. A single external/contract account state σ[γ], is the tuple
+⟨balance,nonce,storageHash,codeHash⟩. The ﬁrst two tuple elements correspond to
+the current value in currency owned by the account and countermeasure for replay
+attacks on digitally signed transactions. The last two are only relevant for contract
+accounts. They correspond to the root hashes of a (modiﬁed) Merkle trie structure (a
+key/value store with integrity protection) [17] storing all contract persistent variables
+and the hash of the smart contract code, respectively.
+Accounts states are accessible via the world state lookup function, γ →σ[γ], in turn
+requiring access to the blockchain BC to verify account state integrity. The three lev-
+els of execution, at the EVM/transaction/block levels are deﬁned by the semantics of
+small-step evaluation (⇝), successful transaction execution ( T
+−→) and big-step evalu-
+ation (⇓), updating the EVM state (µ), σ and BC respectively. Operational semantics
+rules are used, each describing execution at the EVM, transaction or block levels of
+abstraction, and structured as follows:
+9
+Execution:
+expression1(µ|σ|BC,µ′|σ′|BC′)
+expression2(µ|σ|BC,µ′|σ′|BC′)
+...
+expressionn(µ|σ|BC,µ′|σ′|BC′)
+µ|σ|BC
+⇝|
+T
+−→| ⇓
+µ′|σ′|BC′
+where expressions describe how post-states are evaluated from pre-sates and deﬁne
+any constraints on the transition. At the EVM level, the semantics of a subset of the
+EVM, called EtherLite, is provided. Combined, these semantics inform the imple-
+mentation of a symbolic execution engine. In turn, Oyente beneﬁts from a symbolic
+execution-based approach to inspecting contracts on a path-by-path basis. For each
+path, a number of instruction sequence-centric conditions are applied to detect vul-
+nerabilities. This approach is superior compared to dynamic testing, eliminating the
+need for input generation to maximise code coverage. However, accurate emulation of
+runtime execution becomes critical, warranting the need for precisely deﬁned execu-
+tion semantics. In contrast, since EtherClue operates on traces derived from concretely
+replayed transactions, this is no longer a requirement.
+3. Related work
+Post-factum detection and recovery from smart contract attacks is an area that has
+received much less attention as compared to proactive defences. While this is under-
+standable, this problem cannot be ignored, especially when one considers the limi-
+tations of vulnerability detectors and the need to identify malicious or subverted ac-
+counts. DappGuard [24] is the earliest effort we found in this direction, with a fo-
+cus on studying whether transactions and transaction receipt information extracted by
+blockchain exploration can help to uncover attacks. Its IoCs are referred to as attack
+ﬁngerprints and compare to EtherClue’s block-level IoCs. Similar approaches attempt
+to identify the discriminating features of accounts and associated transactions using
+machine learning [25, 26].
+TxSpector [27], on the other hand, is the most recent related work and, in fact,
+carried out in parallel to EtherClue’s study. It adopts a static analysis method to work
+on dynamic EVM bytecode traces instead and therefore compares to our EVM-level
+IoCs. Instruction traces enriched with data and control ﬂow dependencies are derived
+using a modiﬁed Ethereum node. Manually written logic rules are used to identify those
+traces, at this point represented as logical relations, generated from known attacks.
+TxSpector can be seen to be a generalization of Sereum [28], which take a dynamic
+taint analysis approach to detect reentrancy exploit transactions. While Sereum was
+originally positioned as a real-time detector, implemented by customizing an Ethereum
+node, its underpinning technique could still be employed in a post-factum manner to
+ﬂag transactions in a similar fashion to TxSpector. Yet its scope is restricted to just
+reentrancy attacks and does not offer support for writing additional detector rules or
+IoCs, as per TxSpector or EtherClue, respectively.
+Ultimately the goals of EtherClue and TxSpector are similar, however with one
+crucial difference. TxSpector, while capable of detecting exploit transactions, is actu-
+ally conceived as a dynamic vulnerability detector, operating on instruction traces of
+10
+already-executed transactions, as opposed to considering all possible execution paths
+that would have to be considered by a static analysis tool. On the other hand, EtherClue
+is positioned to complement vulnerability detectors, following up vulnerabilities de-
+tected within deployed contracts with an investigation concerning ﬁnding out whether
+the contract has yet been attacked along which accounts are implicated. The result is
+that of much simpler detection rules focusing on execution side-effects rather than pro-
+gram analysis-based ones. Furthermore, EtherClue’s operational semantics foundation,
+which already underpins Oyente’s [7] symbolic execution engine, can even provide a
+basis for automated IoC generation.
+Other works have the potential to complement EtherClue during incident response.
+Firstly, the identiﬁed exploit transactions can be used to detect other attack transac-
+tions related to the same incident, while not necessarily being exploit transactions per
+se, e.g. transactions related to the setting up of malicious smart contracts or ones that
+transfer stolen currency to ﬁnancial service contracts. DEFIER [29] is the only such
+tool we are aware of, whereby given a seed set of attack transactions, it performs data
+analysis using code/graph similarity, as well as time series analysis based on manually
+inspected attack kill-chains, to identify further incident-related transactions. Two other
+studies [30, 31] address the problem of the ever-increasing size of archive nodes and
+the implication to blockchain analysis. Some of the explored aspects include the appli-
+cation of parallel map/reduce and the practice of incomplete state storage that does not
+compromise high-ﬁdelity transaction replay.
+Once post-factum attack transactions are identiﬁed, the subsequent step is graceful
+recovery. One approach is to prepare for recovery during the smart contract program-
+ming stage using security patterns. The Emergency Stop pattern [32] involves deac-
+tivating critical contract functions when certain conditions are met, leaving only the
+possibility to withdraw funds. The Virtual Upgrade pattern [33] is less drastic, where
+critical functions are only exposed through a proxy contract that can dynamically route
+transactions to back-end contracts. This pattern provides ﬂexibility, re-routing trans-
+actions to patched contracts at runtime. Automated patching can speed up this time-
+critical operation, reducing the opportunity window for attacks further still [34].
+Other studies have a completely different scope than EtherClue’s. Using honeypots
+for threat analysis, for example, can shed light on little-known attack techniques [35].
+ContractLarva is a Runtime Veriﬁcation tool that can prevent exploits from succeeding
+by instrumenting smart contracts with security property veriﬁcation [36]. While this
+approach raises smart contracts’ security level, it can only do so with respect to the
+deﬁned properties and comes at the cost of additional gas consumption. Differently
+from incident response, the investigation of cryptocurrency-driven blockchains also
+concerns transactions related to fraud, extortion, money laundering and tax evasion dur-
+ing forensic accounting exercises [37, 38]. Finally, permissioned/private blockchains
+can be useful for chain-of-custody management of digital evidence [39, 40].
+4. EtherClue IoCs
+The model of smart contract execution encompasses all three levels of abstraction
+for state transitions, i.e. the EVM, transaction and block levels. The base state transi-
+11
+tions build upon the operational semantics used for Oyente [7], while EtherClue’s IoCs
+are deﬁned in terms of additional constraints over the base deﬁnitions.
+4.1. Model of smart contract execution
+Oyente’s [7] original semantics are primarily intended for accurate emulation, pro-
+viding a suitable starting point for our model. Some modiﬁcations/additions are neces-
+sary to ﬁt EtherClue’s digital forensics needs and are as follows:
+• Introduce a new world state map that supports the retrieval of past global states.
+• Provide custom deﬁnitions for blocks, transactions, and related structures, based
+on those found in the EYP so as to focus solely on the forensic sources of interest.
+• Likewise, abstract away details of the block mining process.
+• Enhance the model with transaction receipts since these constitute evidence con-
+cerning individual transaction execution.
+• Enhance EVM-level operational semantics with a provision to indicate the loca-
+tion of vulnerable code.
+• EVM-level semantics are deﬁned over grouped instruction classes, rather than
+for EtherLite (the sub-set of EVM instructions considered by Oyente). In this
+manner, a single IoC can be conveniently deﬁned over multiple EVM instruc-
+tions.
+• Provide IoC templates for the EVM and block levels to detect exploit transaction
+during transaction replay.
+We now enlist all deﬁnitions, the execution model underpinning EtherClue’s IoCs,
+highlighting the parts speciﬁc to EtherClue explicitly by enclosing them into a rounded-
+boxed border.
+The global state σ is an array of accounts, identiﬁable by the 160-bit contract ad-
+dress γ. We also adopt the σ[γ]s and σ[γ]c notation, to conveniently refer to the actual
+storage and code content respectively, rather than just the root hashes, and through
+which to access their internal elements, e.g. σ[γ]s[varname].
+According to the EYP:
+Deﬁnition 4.1. An Ethereum account σ[γ] is deﬁned as the tuple:
+σ[γ]
+de f
+= ⟨nonce,balance,storageHash,codeHash⟩,
+where nonce denotes a fresh number to use as countermeasure against transaction re-
+play attacks; balance denotes the account balance in Wei (= 10−18 Ether); storagehash
+denotes the root hash for the contract storage’s Merkle trie, and codeHash denotes the
+hash for associated smart contract EVM code.
+12
+EVM level. Deﬁnitions at this level are expressed in the spirit of all smarts contracts
+executing in the context of the current global state σ and observable through a trace
+of EVM opcodes, as derived through transactions replayed by an Ethereum node that
+supports the debug traceTransaction2 API call. See Table 1 for an example. An Ac-
+tivation Record Stack A of Activation Records AR is used to implement the mechanism
+of internal transaction execution. ARs keep track of the EVM state µ to be resumed
+once the current nested transaction returns control to its caller. The A for an external
+transaction always starts empty (ε). Whenever an exception EXC is thrown, it is placed
+on the top of the stack, replacing the topmost AR, effectively returning control to its
+caller, that either handles EXC or bubbles it up further in the call stack. An AR reﬂects
+the µ that is to be reinstated following caller resumption, and therefore has to keep
+track of the executing code’s address (only addition to Oyente’s deﬁnition), the code
+itself and the next instruction to execute on resumption, along with stack and volatile
+random-access memory’s transient content, that would have been cleared out prior to
+internal transaction execution. Therefore µ comprises the current A and the current σ in
+which it executes. State transitions on this level are described by small-step evaluations
+(⇝), and reﬂect the µs obtained for traced transactions. The full deﬁnition list for the
+EVM-level is the following:
+Deﬁnition 4.2. We deﬁne an Activation Record (AR) as the tuple
+AR
+def
+= ⟨id,M, pc,l,s⟩,
+where id denotes the γ of executing code, M denotes the smart contract’s EVM
+code, pc denotes the program counter representing an offset into M, and l,s
+denote the transient data in random-access volatile memory and stack memory
+data accordingly.
+Deﬁnition 4.3. Activation Records AR are stored in Activation Records Stacks A de-
+ﬁned as:
+A
+def
+= Anormal|EXC ·Anormal
+Anormal def
+= AR·Anormal|ε
+where ‘·’ separates the top element, an AR or a thrown exception EXC, from the rest
+of the stack; Anormal denotes an activation record for ‘normally halting’ calls, while ε
+denotes the empty stack.
+Deﬁnition 4.4. For an Activation Records stack A and an Ethereum account σ provid-
+ing the execution context (see Deﬁnition 4.1), we deﬁne an EVM state µ as the tuple:
+µ
+def
+= ⟨A,σ⟩
+2https://geth.ethereum.org/docs/rpc/ns-debug#debug tracetransaction
+13
+Deﬁnition 4.5. We abstract the transition from an EVM state µ to an EVM state µ′, as
+triggered by EVM opcodes inside replayed transaction traces, and call it a Small-step
+Evaluation representing it as µ ⇝µ′.
+Note that in Table 1, a[i 7→v] evaluates to a new array identical to a, but storing the
+new value v at position i.
+Table 1: Example EVM-level transitions are described in terms of how speciﬁc EVM opcodes inside replayed
+transaction traces can be observed to alter the abstract EVM state µ.
+M[pc]
+Conditions
+µ
+µ′
+PUSH8 1
+-
+⟨⟨id,M, pc,l,s⟩,·A,σ⟩
+⟨⟨id,M, pc+1,l,1·s⟩·A,σ⟩
+PUSH8 5
+-
+⟨⟨id,M, pc,l,1·s⟩·A,σ⟩
+⟨⟨id,M, pc+1,l,5·1·s⟩·A,σ⟩
+k = 5 ←pop(s)
+SSTORE
+v = 1 ←pop(s)
+⟨⟨id,M, pc+1,l,5·1·s⟩·A,σ⟩
+⟨⟨id,M, pc,l,s⟩·A,σ′⟩
+σ′ ←σ[id][storage][k →v]
+In EtherClue, we opted to deﬁne IoCs over grouped instruction classes and require
+the vulnerability’s location(s) and its associated parameters. This is both reasonable
+and practical since EtherClue’s scope complements and does not replace vulnerability
+detectors. Furthermore, IoC deﬁnitions can focus solely on the identiﬁcation of exploit
+side-effects, without being concerned with deﬁning the nature of the vulnerability per
+se. The notation we make use of, ⊗NAME
+PARAM1...N, identiﬁes EVM instruction classes by
+NAME. The parameter list PARAM1...N provides a vulnerability-speciﬁc context for
+the instruction class in question. For example, ⊗INT groups multiple integer arithmetic
+instructions. In terms of Solidity source language constructs, this grouping ranges over
+all possible integer sub-types (UINT8-256, INT8-256). Therefore a parameter list is
+required to deﬁne the lower/upper bounds for speciﬁc sub-types. These parameters
+assume the availability of the (possibly decompiled) source code. On the other hand,
+VULN LOCS, a set of code offsets belonging to a detected vulnerability, is instantiated
+with the code offsets from M associated with it, and where every opcode belongs to
+⊗NAME.
+To provide a common template, EVM-level IoCs are deﬁned as a sequence of con-
+straint expressions, deﬁned over µ, µ′, and VULN LOCS,PARAM1...N, qualifying those
+side-effects that render a small-step evaluation to be considered an exploit step. When
+all predicate expressions evaluate to true for a particular small-step evaluation, the
+corresponding transaction is ﬂagged as an exploit during replayed execution. More
+formally:
+14
+Deﬁnition 4.6. We deﬁne an EVM-level IoC template as an EVM instruction
+class:
+⊗NAME
+PARAM1...N :
+VULN LOCS ←M offsets
+expression1(µ,µ′,VULN LOCS,PARAM1...N)
+expression2(µ,µ′,VULN LOCS,PARAM1...N)
+...
+expressionn(µ,µ′,VULN LOCS,PARAM1...N)
+µ ⇝µ′
+where M offsets is a set of code offsets belonging to a vulnerability;
+VULN LOCS is a symbolic constant representing the above set of code
+offsets; µ,µ′ denote EVM-level pre/post-states; ⊗NAME is an EVM instruction
+class that matches the IoC; PARAM1...N represent EVM instruction class
+parameters; expressioni are operational semantics expressions deﬁned over
+µ,µ′,VULN LOCS,PARAM1...N, with an IoC match occurring whenever all
+predicate expressions evaluate to true.
+Transaction level. At this level, we consider the sender, to, value and data elements
+of successful transactions T as evidence sources. These elements correspond to the
+source/destination addresses, amount of cryptocurrency being transferred, and a data
+ﬁeld identifying the contract’s public function and arguments. Transactions are ex-
+ecuted as a sequence of 0 (when a destination is also an external account) or more
+small-step evaluations ⇝∗. State transitions
+T
+−→at this level operate on σ, transfer-
+ring cryptocurrency corresponding to T’s value to σ[to]’s balance. Further updates to
+σ may occur as a result of executing σ[to]c on termination of a small-step evaluation
+⇝∗. The ﬁnalized deﬁnitions comprise a sub-set of transaction attributes deﬁned in the
+EYP and the deﬁnitions provided by Oyente for transaction execution, either ending
+successfully or with an exception. In the latter case, the currency associated with the
+transaction is not transferred, and the changes to the global state are not committed.
+Deﬁnition 4.8, while maintaining the original semantics of transaction execution, its
+deﬁned to reﬂect modiﬁcations in its primitive deﬁnitions.
+Deﬁnition 4.7. We deﬁne a Transaction T in terms of a subset of the EYP’s
+deﬁnition, as the tuple T
+def
+= ⟨sender,to,value,data⟩, where sender denotes
+sender’s account address γ, to denotes the target’s account address γ′, value
+denotes the transaction amount in Wei, and data denotes the call data. That
+is an array comprising the hash of a public function exposed by the target to
+followed by the function arguments
+Deﬁnition 4.8. Transaction Execution
+T
+−→:
+15
+Tx-SUCCESS:
+⟨sender,to,value,data⟩←T
+M ←σ[to]c
+σ′ ←σ[to][balance 7→(σ[to][balance]+value)]
+⟨⟨to,M,0,data,ε⟩·ε,σ′⟩⇝∗⟨ε,σ′′⟩
+σ
+T
+−→σ′′
+Tx-EXCEPTION:
+⟨sender,to,value,data⟩←T
+M ←σ[to]c
+σ′ ←σ[to][balance 7→(σ[to][balance]+value)]
+⟨⟨to,M,0,data,ε⟩·ε,σ′⟩⇝∗⟨EXC ·ε,σ′′⟩
+σ
+T
+−→σ
+where Tx-SUCCESS represents a successfully completed transaction; while Tx-EXCEPTION
+represents a failed transaction ending with a thrown exception; σ, σ′′ represent the
+pre/post (global) states; while σ′ represents the interim (global) state which stores
+the new target account’s balance prior to smart contract execution; ⇝∗represents a
+sequence of 0 or more small-step evaluations (⇝), depending on whether the target
+address to is a smart contract account or not; and EXC is a thrown exception.
+While the transaction-level deﬁnitions are needed by the block-level ones, we deem
+IoCs at this level to be unnecessary. Detecting IoCs at this level would ﬁrst and fore-
+most accessing the state σ and σ′′, upon which IoCs at this level would be deﬁned.
+While transaction receipts at the block level (see Deﬁnition 4.11) can shed some light
+on the make-up of these states, their complete characterization is not. Rather, the only
+manner with which σ and σ′′ can be computed is by executing ⇝∗. Since this amounts
+to the same processing carried out at the EVM level, which also has access to σ and
+σ′′, EVM-level detection trumps the transaction level at no additional cost.
+Block level. This level is concerned with the execution of batched transaction se-
+quences TXs, as chosen out of a transaction pool set Γ, during successful block mining.
+Successful transaction execution results in transaction receipts Rx (we only consider
+the log entries logs and transaction status codes statusCode) to be added to the block’s
+receipt sequence RXs. A newly mined block β, therefore, performs a big-step evalu-
+ation, transitioning from the global state σ0 directly to σn after having batch-executed
+n transactions. Finally, β is appended to the blockchain BC, comprising a sequence of
+all the blocks mined so far. Overall we ignore details of the consensus protocol con-
+sidered to not contribute as a forensic evidence source, e.g. details of the block mining
+process, such as proof-of-work, or the propagation of successfully mined blocks across
+the entire Ethereum peer network. However, we are not concerned with executing the
+next block of transactions here, but rather with being able to fetch any past σ0/σn pair
+and verify whether the corresponding ⇓constitutes a transition during which an exploit
+transaction occurred. To add this capability to our model, we enhance the notion of the
+World State ω mapping with the ability to take any state root (a hash of the global state
+corresponding to a block β) from the past and return its corresponding σstateRoot. This
+enhanced deﬁnition naturally also applies to EVM-level IoCs, and through which they
+16
+obtain the ability to replay transaction traces in the ﬁrst place. Therefore we say that
+EtherClue operates on an Archive Node ⟨BC,ω⟩. The resulting deﬁnitions, omitting
+details unused by EtherClue and adding the concept of an archive node, are as follows.
+First, we use Oyente’s deﬁnition for a Transaction sequence:
+Deﬁnition 4.9. A Transaction sequence TXs is an ordered set of n transactions
+TXs
+def
+= (T1,...,Tn)
+Deﬁnition 4.10. We deﬁne a Transaction Pool Γ as a sequence of transactions
+Ti of arbitrary size m:
+Γ
+def
+= {T0,...,Tm}
+from which TXs of size n can be chosen in any order and m > n.
+Deﬁnition 4.11. We deﬁne a Transaction Receipt R as a tuple:
+R
+def
+= ⟨logs,statusCode⟩,
+where logs denote the event log entries as created by the EVM LOGX opcodes
+and statusCode denotes the transaction status code (success or failure).
+Deﬁnition 4.12. We deﬁne a Receipt Sequence RXs as an ordered sequence of
+n Transaction Receipts:
+RXs
+def
+= (R1,...,Rn)
+We use a subset of the Block deﬁnition from EYP as it is deemed relevant as a
+forensic source.
+17
+Deﬁnition 4.13. We deﬁne a Block β as the tuple:
+β
+de f
+= ⟨parent,TXs,RXs,stateRoot⟩,
+where parent refers to the block’s parent block through its hash, stateRoot
+denotes the root hash of the Merkle trie storing σ, and TXs, RXs denote a
+Transaction and Receipt Sequence, respectively.
+Deﬁnition 4.14. We deﬁne a Blockchain BC as a sequence of n blocks:
+BC
+def
+= (β0,...,βn)
+Deﬁnition 4.15. We deﬁne a World State ω as:
+ω
+def
+= stateRoot 7→σstateRoot,
+where σstateRoot: σ for some block β with β[stateRoot] = stateRoot
+Deﬁnition 4.16. We deﬁne an Archive Node A as a tuple of a blockchain BC
+and a world state ω:
+A = ⟨BC,ω⟩
+18
+Deﬁnition 4.17. For a given Transaction Pool Γ from which a transaction
+sequence TXs is selected by a miner at its discretion, and using ε to denote
+and empty sequence and ... to delimit the ﬁrst and last elements of a sequence;
+we deﬁne a Big-step evaluation, denoted as ⇓in the context of blockchain BC,
+and generating the Receipt Sequence RX, as :
+BIG-STEP:
+TXs ←select(Γ)
+(T1,...,Tn) ←TXs
+Rx ←ε
+βparent ←last(BC)
+σ0 ←ω[βparent[stateRoot]]
+∀i,
+1 ≤i ≤n : {
+σi-1
+Ti−→σi,Rx[i] ←generateReceipt(Ti)}
+β ←⟨βparent,TXs,RXs,rootHash(σn)⟩
+ω′ ←ω[β[stateRoot] 7→σn]
+⟨BC,σ0,ω⟩⇓⟨BC ·β,σn,ω′⟩
+where σ0,σn denote the global state prior/post β, respectively; BC · β de-
+notes the appending of block β to BC; ω,ω′ denote the world map updated
+to reﬂect β’s state root; select() denotes the miner’s process of choosing
+transactions from Γ at its discretion; and last() denotes the function that
+retrieves the last block (β) from blockchain BC; generateReceipt() returns a
+sequence of event logs for some T; while rootHash() denotes the function that
+computes the state root for some global state σ.
+Deﬁning block-level IoCs directly on the notion of a Big-step evaluation, as per
+Deﬁnition 3.18, is however counterproductive since it is requires replaying all the trans-
+actions belonging to the block β under investigation. In effect this approach would
+render block-level analysis completely useless since it requires redoing all the trace
+generation work carried out at the EVM level. Rather, beginning from a block β we
+want to investigate, we make use of ω computed during a big-step evaluation to lookup
+both the required ⟨BC,σ0⟩and its corresponding ⟨BC · β,σn⟩, as opposed to deriving
+the latter through full transaction replay. The net effect is that of coarse-grained replay,
+where the side-effects at the blockchain and the BC and the global state (σ) are made
+available at block batches i.e. for ⟨BC,σ0⟩and ⟨BC · β,σn⟩but not the interim σi, or
+any µ for that matter. To deﬁne the required partial replay, we make use of the Big-step
+lookup ⇕:
+19
+Deﬁnition 4.18. For a given block β in blockchain BC containing n transac-
+tions, we deﬁne its associated Big-step lookup ⇕as:
+BIG-STEP-LOOKUP:
+βparent ←β[parent]
+σ0 ←ω[βparent[stateRoot]]
+σn ←ω[β[stateRoot]]
+⟨BC,σ0⟩⇕⟨BC ·β,σn⟩
+where βparent represents β’s parent as retrieved through its block hash
+stored in β[parent]; σ0 and σn are the global states corresponding to βparent
+and β respectively, with σn reﬂecting a global state update once β’s n transac-
+tions get executed; both σ0 and σn are retrieved, rather than computed, through
+the world map ω.
+As for a common template, block-level IoCs are made up of expressions deﬁned
+over historical σ0/σn pairs, in turn, derived using the most recent ω and their corre-
+sponding βs. A block is ﬂagged as containing an exploit transaction when all predicate
+expressions evaluate to true.
+Deﬁnition 4.19. Block-level IoC template:
+Vulnerability:
+expression1(σ0,σn,βparent,β)
+expression2(σ0,σn,βparent,β)
+...
+expressionn(σ0,σn,βparent,β)
+⟨BC,σ0,⟩⇕⟨BC ·β,σn,⟩
+where Vulnerability is a vulnerability class name to which the IoC be-
+longs to; β,βparent denote the block under investigation and its parent,
+respectively; σ0,σn are the pre/post global states respectively; ⟨BC,σ0,⟩
+denotes the block-level pre-state comprising BC prior to β’s addition and its
+corresponding global state σ0; ⟨BC · β,σn,⟩denotes the block-level post-state
+reﬂecting the new global state σn resulting from when beta is appended to
+BC and its n transaction executed; expressioni are operational semantics
+expressions deﬁned over σ0, σn, βparent, β, with an IoC match occurring
+whenever all predicate expressions evaluate to true.
+4.2. IoCs for exploit transactions
+In what follows, we use some vulnerable code snippets from [41] to illustrate how
+our IoCs are derived using IoC templates from Deﬁnitions 4.6 and 4.19.
+Arithmetic over/underﬂow. Listing 3 is a code snippet with integer under/overﬂow
+vulnerabilities on lines 8 and 9, respectively, as a consequence of the absence of bounds
+checking in both cases.
+Listing 3: Integer over/underﬂow in Exchange.sol.
+20
+1 mapping ( address => uint256 )
+public
+balanceOf ;
+2
+3 // INSECURE
+4 function
+tr a n s fe r ( address
+to ,
+uint256
+v a l u e ) {
+5
+/* Check if sender has balance */
+6
+require ( balanceOf [ msg . sender ] >=
+v a l u e ) ;
+7
+/* Add and subtract new balances */
+8
+balanceOf [ msg . sender ] −=
+v a l u e ;
+9
+balanceOf [
+t o ] +=
+v a l u e ;
+10 }
+The EVM-level IoC, shown in Deﬁnition 4.20, is deﬁned over instruction class
+grouping all integer arithmetic operation ⊗INT. While this IoC applies to any over/un-
+derﬂow IoC, the TYPE parameter is contract-speciﬁc, identifying the lower/upper
+bounds of the integer type concerned. In the case of Listing 3, we are concerned with
+an overﬂow in the value of the balanceOf mapping in the contract’s storage, which is
+of type uint256. Therefore TYPE in this case has to be instantiated as ⟨0,2256 −1⟩.
+Similarly, VULN LOC is a place-holder for the instruction offsets related to the cor-
+responding integer arithmetic opcodes. Any ⊗INT in this region is checked for an
+out-of-bounds condition, verifying whether ⇝results in an over/underﬂow. By ﬁrst
+casting, the integer operation to its Z equivalent (⊙INT), exploit veriﬁcation reduces to
+checking whether ⊙INT’s evaluation falls outside of the TYPE’s range.
+Deﬁnition 4.20. EVM-level integer over/underﬂow IoC.
+⊗INT
+TYPE:
+pc ∈VULN LOC
+a′,b′ ∈Z ←cast(a,b)
+v′ ←a′ ⊙INT b′
+v′ < TYPE.min∨v′ > TYPE.max
+v ∈TYPE ←cast(v′)
+⟨⟨id,M, pc,l,a·b·s⟩·A,σ⟩
+⇝⟨⟨id,M, pc+1,l,v·s⟩·A,σ⟩
+where ⊗INT de f
+= ADD | MUL | SUB | SDIV | ADDMOD | MULMOD | EXP ;
+TYPE.min/max: deﬁne the lower/upper bounds for the EVM integer type of
+a given contract; ⊙INT maps ⊗INT to its (inﬁnite) Z counterpart; and cast()
+maps arguments between EVM integer types and Z.
+Example 4.1 describes the block-level IoC, with the out-of-bounds condition in
+Listing 3 detectable at the contract storage level, rendering it contract-speciﬁc. In this
+case, the expressions are deﬁned over the content of block β, and the global states prior
+and post its mining, σ0 and σn respectively. The expressions constraining the coarsely
+replayed ⇓, represented by ⇕, check for the existence of a T from β’s TXs which: has
+Exchange.sol’s contract as its destination; compares the pre/post balances (bal and
+bal′) of the T’s sender, and that of the account speciﬁed in the call data argument to.
+Given that the transfer function is intended to shift funds from the sender’s to to
+accounts, the side-effect of an over/underﬂow is one where either the prior’s balance
+ends up increasing or vice-versa. When all these expressions evaluate to true, the block
+in question is ﬂagged as containing an exploit transaction.
+21
+Example 4.1. Contract-speciﬁc block-level integer over/underﬂow IoC.
+o/u ﬂow:
+TXs ←β[TXs]
+∃T ∈TXs : {
+⟨sender,to,value,data⟩←T
+to == γExchange.sol
+bal ←σ0[to]s[balanceOf]
+bal′ ←σn[to]s[balanceOf]
+to ←T[data][to]
+bal′[sender] > bal[sender]∨bal′[ to] < bal[ to]}
+⟨BC,σ0⟩⇕⟨BC ·β,σn⟩
+where
+γExchange.sol
+denotes
+Exchange.sol’s
+contract
+account
+address
+DoS with (unexpected) revert. Listing 4 is a highest-bidder type of contract, that
+on receipt of a bid exceeding the current highest one, the contract-held funds are trans-
+ferred back to the old bidder. Line 9, however, can be abused by an attacker making use
+of a destination contract account with a fallback payable function that always reverts.
+Line 9 therefore, always fails, pulling off a DoS on Auction.sol.
+Listing 4: DoS vulnerability in Auction.sol.
+1 // INSECURE
+2 contract
+Auction {
+3
+address
+c u r r e n t L e a d e r ;
+4
+uint
+h i g h e s t B i d ;
+5
+6
+function
+bid ( )
+payable {
+7
+require ( msg . value > h i g h e s t B i d ) ;
+8
+9
+require ( c u r r e n t L e a d e r . send ( h i g h e s t B i d ) ) ;
+// Refund the old
+leader , if it fails then revert
+10
+11
+c u r r e n t L e a d e r = msg . sender ;
+12
+h i g h e s t B i d = msg . value ;
+13
+}
+14 }
+In this case, the EVM-level IoC in Deﬁnition 4.21 captures the small-step calcula-
+tion (⇝) resulting in a failed CALL (returns 0), and which happens speciﬁcally at the
+vulnerable location. Temporarily, we ignore the possibility of a similar issue happen-
+ing with a DELEGATECALL. By deﬁnition, we do not expect that a STATICCALL can ever
+result in a DoS of this type. No additional parameters apply in this case.
+22
+Deﬁnition 4.21. EVM-level DoS with (unexpected) revert IoC.
+⊗CALL:
+pc ∈VULN LOC
+r = 0
+⟨⟨id,M, pc,l,s⟩·A,σ⟩
+⇝⟨⟨id,M, pc+1,l,r ·s⟩·A,σ⟩
+where ⊗CALL de f
+= CALL.
+At the block level Example 4.2 captures a Big-step lookup (⇕) where, due to the
+vulnerability in Listing 4, despite comprising a transaction value higher than the current
+highest bid, the highest bid remains the same. Once again, we note its contract-speciﬁc
+nature and that block-level ﬂagging still applies.
+Example 4.2. Contract-speciﬁc block-level DoS with (unexpected) revert
+IoC.
+DoS:
+TXs ←β[TXs]
+∃T ∈TXs : {
+⟨sender,to,value,data⟩←T
+to == γAuction.sol
+hbid ←σ0[to]s[highestBid]
+hbid′ ←σn[to]s[highestBid]
+value > hbid ∧hbid′ == hbid}
+⟨BC,σ0⟩⇕⟨BC ·β,σn⟩
+where γAuction.sol: Auction.sol’s contract account address
+Reentrancy. Back to Exchange.sol, Listing 5 this time shows a reentrancy issue in
+line 6. The contract wrongly assumes that line 8 will always be called prior to the same
+sender account attempting a further withdrawal. Yet, this is perfectly possible by a
+callback to withdrawBalance() performed by a malicious payable fallback function
+in the called contract.
+Listing 5: Reentrancy vulnerability in Exchange.sol.
+1 // INSECURE
+2 mapping ( address => uint )
+private
+userBalances ;
+3
+4 function
+withdrawBalance ( )
+public {
+5
+uint
+amountToWithdraw = userBalances [ msg . sender ] ;
+6
+( bool
+success ,
+) = msg . sender . c a l l . value ( amountToWithdraw ) ( "" ) ;
+//
+At this point , the caller’s code is executed , and can call
+withdrawBalance again
+7
+require ( success ) ;
+8
+userBalances [ msg . sender ] = 0;
+9 }
+The IoC reﬂects this exploit in Deﬁnition 4.22, where during a small-step evalua-
+tion that updates the contract storage (and therefore σ), the activation record stack A
+23
+includes at least one entry; besides the one top, with the same id (the contract address).
+This IoC evaluating to true implies that when the sender’s balance is being zeroed out
+(line 8), this step is not being performed by the outermost call but rather as a result of
+an internal transaction. This is exactly the scenario that the contract’s programmer was
+wrongly assuming as not being possible.
+Deﬁnition 4.22. EVM-level reentrancy IoC.
+⊗STORAGE:
+pc ∈VULN LOC
+∃a ∈A : a[id] = id
+⟨⟨id,M, pc,l,v·s⟩·A,σ⟩
+⇝⟨⟨id,M, pc+1,l,s⟩·A,σ′⟩
+where ⊗STORAGE de f
+= SSTORE.
+At the block level, the IoC in Example 4.3 identiﬁes the event of a withdrawal
+transaction resulting in a σn where the contract’s balance (contractval′) does not tally
+with the correct user balance withdrawal (̸= contractval −user), possibly even fully
+emptied, as a consequence of the vulnerability in Listing 5.
+Example 4.3. Contract-speciﬁc block-level reentrancy IoC.
+Reentr:
+TXs ←β[TXs]
+∃T ∈TXs : {
+⟨sender,to,value,data⟩←T
+to == γExchange.sol
+contractval ←σ0[to][balance]
+contractval′ ←σn[to][balance]
+user ←σ0[to]s[userBalances][sender]
+contractval′ ̸= (contractval −user)}
+⟨BC,σ0⟩⇕⟨BC ·β,σn⟩
+where γExchange.sol: Exchange.sol’s contract account address
+5. The EtherClue tool
+The EtherClue prototype is written in JavaScript, and its codebase is open-source3.
+It is intended to be connected either to a private Ethereum node or to a public cloud
+service. In either case, the nodes must be full archive nodes, meaning that they contain
+a full copy of mainnet, as they have to process all the code and transactions and not
+a fragment of them like, e.g. ArchiveNode4. In the case of EVM-level detection, the
+nodes must offer full transaction tracing capabilities, i.e. single-stepping over EVM
+3https://gitlab.com/simonjaquilina/etherclue
+4http://archivenode.io
+24
+instructions with full access to the EVM state. Its main components and their corre-
+sponding interfaces are depicted in Figure 5. Once a vulnerable contract is identiﬁed
+post-deployment, its blockchain address and the corresponding vulnerable bytecode
+offsets are passed to EtherClue via its user interface. Additionally, further parameters
+such as ﬁlters, IoC detectors, and blockchain explorer components, are incorporated to
+automate the investigation accordingly. These main components, along with support-
+ing ones, are described in the next paragraphs.
+ 
+ 
+Archive
+Archive
+Filters
+Web3 over
+JSON RPC
+Web APIs
+fs, neat-csv
+Orchestrator
+Explorer
+Web3 over
+JSON RPC
+Address
+Vulnerability location
+Input:
+Smart
+Contract
+Cache
+Block/EVM 
+IoC detector
+Address
+Vulnerability locations
+Filter/Detector/Explorer config.
+<<Context tracker>>
+EVM-level
+IoC rules
+Block-level
+IoC rules
+1.
+2.
+3.
+4.
+5a.
+5b.
+6a.
+6b.
+txList()
+TXs
+processTXs(TXs)
+collectBockDetails()→              
+<Block­1, Block>, historical global states/
+TxTrace()→ op1, op2, …, opn
+consider()
+Output:
+Tx: 0x662e6…
+Tx: 0x318be…
+Tx: 0xbed0d...
+7.
+...
+...
+Figure 5: EtherClue’s architecture and the main investigation workﬂow steps.
+The Orchestrator receives user inputs and loads the necessary components, fol-
+lowed by coordinating the ﬁrst four steps of an investigation workﬂow. Given the
+address of a vulnerable contract among the input parameters (step 1) it proceeds to
+call the speciﬁed ﬁlter’s txList() interface to obtain the relevant transactions (TXs)
+(steps 2 and 3). All those external and internal transactions featuring the vulnerable
+contract’s address as their target comprise the ﬁrst automatic ﬁltering stage. Addition-
+ally, any other ﬁlter parameters are also applied, e.g. the transactions’ target public
+function. The retrieved transactions are then used to feed the block or EVM-level IoC
+detectors (step 4). IoC detectors ﬁrstly obtain the required block or EVM-level in-
+formation from an explorer component, by calling its collectBlockDetails(), and
+possibly also TxTrace(), or by retrieving cached responses (steps 5a and 5b respec-
+tively). The obtained block information or transaction traces are sent to the IoC rule
+components (steps 6a or 6b) by calling their exposed consider() method, ﬂagging any
+exploits. Finally, EtherClue outputs the list of any exploit blocks or transactions found
+25
+(step 7).
+Filters. We have implemented four ﬁlters: The ﬁrst one connects to any Ethereum
+archive node listening over a JSON-RPC5 interface using web3.js6. Two additional
+ﬁlters are designed to connect to Etherscan7 and Blockchair8 blockchain explorers
+through their web APIs. These ﬁlters can be useful, for example, to retrieve all in-
+ternal transactions associated with a speciﬁc external transaction directly from their
+transaction cache. Finally, a fourth ﬁlter provides the convenience of supplying basic
+blockchain transaction information inside ofﬂine CSV ﬁles. Developing ﬁlters to pro-
+vide customized functionalities, such as for an analytics service, e.g. Bloxy9, requires
+speciﬁc development and is left to future work.
+IoC detectors are tasked with steps 5-7 according to the different orchestrator calls
+as deﬁned by the user input. In this respect, the explorer component provides a crit-
+ical supporting service since it leverages a full archive node to retrieve the relevant
+historical global states. Given the time-consuming process involved, EtherClue can be
+conﬁgured to cache explorer output. The core task of an IoC detector is to call the user-
+speciﬁed IoC rule in step 6. In this regard, the EVM-level detector also needs to pass
+any additional user parameters, e.g. TYPE.MIN/MAX for the integer over/underﬂow
+IoC (see Deﬁnition 4.20).
+IoC rules are JavaScript objects called by detectors per block/trace. A block-
+level object prototype (or “class”) must implement the method consider, providing
+the encoding of IoC semantics, which is called for each block retrieved by its corre-
+sponding IoC detector. It exposes the following interface: function(blockNumber,
+txs, accounts, blockBefore, blockAfter); where the parameters stand for the
+block number, its vulnerability-relevant transactions, the relevant historical accounts
+states, and the pre/post blocks.
+The EVM-level objects are called per transaction
+trace.
+Their consider method is exposed as: function(address, tx, trace,
+callback); where parameters stand for the contract address, transaction hash and its
+trace, along with callback function for reporting alert details. For both object types, a
+number of helper components are also needed10.
+Context tracker. This component is used by the EVM-level IoC detector. When-
+ever a message call-generating instruction is encountered, e.g. CALL and STATICCALL,
+it ensures that IoC detection is disabled until a RETURN or REVERT appears, otherwise
+this would create a conﬂict to the expressions deﬁned over code locations.
+Modes of operation. The entire investigation workﬂow of Figure 5 supports three
+speciﬁc modes of operation according to the speciﬁc choice of components, or their
+supported functionality. In local mode EtherClue is conﬁgured to connect to a lo-
+cal archive node, by both the ﬁlter and the explorer components. When operating in
+cached mode we refer to IoC detectors using the local cache (step 5b) whenever pos-
+5https://geth.ethereum.org/docs/rpc/server
+6https://web3js.readthedocs.io
+7https://etherscan.io/apis
+8https://blockchair.com/api/docs
+9https://bloxy.info/
+10See example objects for further details at: https://gitlab.com/simonjaquilina/etherclue/-
+/tree/master/src/detectors
+26
+sible. Finally, the explorer component offers a custom tracer mode to the EVM IoC
+detector. In this mode, TxTrace() accepts a tracer JavaScript object, which is used
+as input to the debug traceTransaction RPC endpoint to pre-ﬁlter the instruction
+trace according to the chosen EVM-level IoC rule, and thus reduce the size of the trace
+transferred from the archive node.
+The command-line interface. The following is an example EtherClue invocation
+using its command line interface:
+node EtherClue -c "./db" -t "5482796-5488697[blockchair+fs][web3][evm[geth]]"
+-p address=0xc5d105e63711398af9bbff092d4b6769c82f793d
+-f blockchair[from=5482796,to=5488697,fs=["batchTransfer(address[],uint256)"]]
+-e web3[provider=https://api.archivenode.io/XXXXXXXXXXXXXXXX/erigon]
+-d evm[pattern=GethOverflowIoCDetector]
+where the -t tag switch identiﬁes the name of the output log, which in this ex-
+ample reﬂects the ensuing user conﬁguration; the -p shared parameter switch is used
+for key/value pairs to be made available to all EtherClue components, such as contract
+addresses; the -f ﬁlter switch identiﬁes the ﬁlter, with further component-speciﬁc
+parameters inside the square brackets[]. In this example the blockchair ﬁlter is
+chosen, with the from/to parameters deﬁning the block range to be considered.
+Moreover, the fs function selector parameter deﬁnes a further ﬁltering option based on
+the target public function name. The -e explorer switch identiﬁes the web3 explorer;
+the only one developed so far, and with its component-speciﬁc parameter provider
+specifying the archivenode.io API server. Finally, the -d detector switch speciﬁes
+the use of the EVM-level IoC detector, along with the corresponding IoC Rule
+speciﬁed by the pattern parameter. Vulnerable contract code locations are supplied
+by an associated JSON ﬁle. The -c switch can be used to enable result caching which
+expects the name of the directory where the cache ﬁles will be stored.
+6. Evaluation
+A number of diverse experiments were carried out to provide further insight into
+EtherClue’s IoC effectiveness and performance and are presented in the following para-
+graphs.
+6.1. Experimental Setup
+First, we employed a mix of synthetic contracts embedding common vulnerabili-
+ties and smart contracts from Ethereum mainnet. In this manner, we strike a balance
+between control over blockchain content and realism. The former were speciﬁcally
+created to maximise variation in blockchain content, thereby enabling a more compre-
+hensive insight into EtherClue than what is possible with exiting mainnet content. The
+latter provides an opportunity to demonstrate practical deployment. In the former setup,
+we connect EtherClue to a private geth 1.9.21-stable node whose blockchain is
+populated with multiple benign and exploit transactions. Both geth and EtherClue
+are hosted on an Intel Core i5 1.3 GHz with 4GB of RAM machine. For the mainnet
+27
+setup, we connected EtherClue to both Etherscan and ArchiveNode to obtain the full
+internal transaction list for each external transaction of interest and the EVM traces per
+external/internal transaction, respectively.
+The datasets11 used for experimentation have been publicly released to facilitate
+further experimentation with Ethereum forensics. It includes a private blockchain, aim-
+ing to emulate real vulnerable smart contracts and exploit transactions, but purposely
+aiming to maximise content variation, along with labelled (manually veriﬁed) attack
+transactions for the Ethereum mainnet case studies.
+The synthetic smart contracts are:
+Underﬂow - TargetUnderflow and
+DelayedUnderflow that include underﬂow vulnerabilities that directly or indirectly
+(i.e. overﬂow impact on control-ﬂow) affect contract storage respectively; Overﬂow
+-SimulationBECToken which embeds the BECToken overﬂow vulnerability12; Reen-
+trancy - Bank and ProductVote that insecurely allow recursive Ether withdrawal and
+multiple-voting at the cost of a single vote respectively; DoS - SimulationKotET
+which embeds the King-of-the-Ether-Throne (KotET)13 DoS vulnerability. The main-
+net contracts are: BECToken (Overﬂow), KotET (Dos), The DAO14 (Reentrancy),
+SpankPay15 (Reentrancy), PrivateBank16 (Reentrancy) and Ammbr17 (Overﬂow).
+6.2. Results
+Exploit transaction detection.
+Table 2 illustrates the detection results of exploit
+transactions targeting the synthetic contracts at both the EVM and block levels. For
+each vulnerability, a session of transactions was submitted, consisting of both benign
+and exploit transactions. Benign transactions comprise vulnerable smart contract de-
+ployment and subsequently bring them to a state that renders them appealing for ex-
+ploitation, e.g. setting up products and votes in ProductVote or the highest bidder in
+SimulationKotET. Further transactions are sent to the server as background noise in
+parallel to exploit transactions, enabling a realistic block mining process. The case of
+TargetUnderflow is quite particular. It represents the case where an underﬂow results
+in a storage variable that is propagated to other variables in the same storage, with all
+transactions ending up being exploits. As such, the benign transaction count varies per
+smart contract.
+Notably, no false positives (FP) were registered in either case, while the EVM-
+level returned fully accurate detection in all cases i.e. the True Positives (TP) equaled
+the actual number of exploit transactions, and there were no FP or false negatives
+(FN). Nevertheless, the block-level missed out on four malicious transactions target-
+ing SimulationBECToken. Three of them were missed since the transactions were
+11https://gitlab.com/simonjaquilina/etherclue/-/tree/master/datasets
+12https://peckshield.medium.com/alert-new-batchoverflow-bug-in-multiple-erc20-
+smart-contracts-cve-2018-10299-511067db6536
+13https://www.kingoftheether.com/postmortem.html
+14https://www.coindesk.com/understanding-dao-hack-journalists
+15https://medium.com/spankchain/we-got-spanked-what-we-know-so-far-d5ed3a0f38fe
+16https://www.reddit.com/r/ethdev/comments/7x5rwr/trickedbyahoneypotcontractorbeatenby/
+17https://medium.com/coinmonks/an-inspection-on-ammbr-amr-bug-a53b4050d52, https://
+4hou.win/wordpress/?p=21704
+28
+Table 2: Exploit transaction detection at the EVM and Block-level IoCs.
+†-Over/underﬂow ‡-DoS ⋆-Reentrancy
+Contract Account
+TXs
+TP
+FP
+FN
+Blocks
+TP
+FP
+FN
+No.
+EVM
+EVM
+EVM
+No.
+Block
+Block
+Block
+Bank⋆
+82
+6
+0
+0
+42
+3
+0
+0
+DelayedUnderflow†
+23
+11
+0
+0
+22
+11
+0
+0
+ProductVote⋆
+115
+20
+0
+0
+38
+15
+0
+0
+SimulationBECToken†
+56
+12
+0
+0
+25
+4
+0
+4
+SimulationKotET‡
+151
+4
+0
+0
+24
+4
+0
+0
+TargetUnderflow†
+20
+20
+0
+0
+20
+20
+0
+0
+internal ones, and their information is not retained at the block level (i.e. by β) that is
+investigated. The remaining transaction was missed since the affected storage variable
+was overridden by a subsequent update in the same block, occluding the attack side-
+effect in question. It is noteworthy to mention that these limitations were exposed by
+our approach aiming to maximise variation of blockchain content rather than limiting
+experimentation solely to currently available mainnet transactions.
+Performance. We measured EtherClue’s performance in terms of investigation work-
+ﬂow duration for gradual increases in contract size. The contract size varies in terms
+of instruction counts, bound to affect EVM-level IoC detectors due to an increase in
+small-steps, and storage size, bound to affect block-level IoC detectors when fetching
+contract storage. For the former, we modiﬁed DelayedUnderflow.sol with additional
+ADD instructions (serving as a NOP) until we reached the 2 million gas unit utilization
+mark, far exceeding typical transaction trace size (including the internal calls). For the
+latter, we took a similar approach with TargetUnderflow.sol, this time by making
+use of an mapping(uint=>uint) storage variable, conveniently allowing one of its
+functions to add a key/value pair at each invocation. In both cases, we do not factor in
+the network latency portions as part of the processing times since they are the same for
+both the EVM and block-level IoC detectors. Moreover, we did not apply any paral-
+lelisation or further optimisations in EtherClue’s implementation, leaving this task for
+future research. In fact, the lack of parallelisation, illustrates the efﬁcacy of our pro-
+posed solution since the results can be linearly improved, in terms of time, using more
+cores.
+Figure 6 (upper) shows how an increase in the instruction count, as expected, only
+affects the EVM-level. However, the slow-down can be mitigated by the custom tracer
+mode. Whenever cached entries can be used, the slow-down can be mitigated even
+further. In any case, the increase in processing time is linear. On the other hand,
+Block-level IoCs are slowed down by an increase in contract storage size, as shown in
+Figure 6 (lower). In this case, we did not bother with the custom tracer mode since
+the processing times for local modes remained constant. Once again, results demon-
+strate that caching can drastically decrease processing time while the slow-down is
+linear.
+Contract size varied in terms of instruction counts, bound to affect EVM-
+level IoC detectors due to an increase in small-steps and storage size, bound to affect
+block-level IoC detectors when fetching contract storage. For the former, we modi-
+ﬁed DelayedUnderflow.sol with additional ADD instructions (serving as a NOP) un-
+til we reached the 2 million gas unit utilization mark, far exceeding typical transaction
+29
+trace size (including the internal calls). For the latter, we took a similar approach with
+TargetUnderflow.sol, this time by making use of an mapping(uint=>uint) stor-
+age variable, conveniently allowing one of its functions to add a key/value pair at each
+invocation. In both cases, we do not factor in the network latency portions as part of
+the processing time, since they are the same for both the EVM and block-level IoC
+detectors. Moreover, we did not apply any parallelisation or further optimisations in
+EtherClue’s implementation, leaving this task for future research.
+21
+42
+63
+84
+105
+210
+420
+630
+10−2
+10−1
+100
+101
+No. EVM instructions - K
+Time (s)
+EVM-Local-NoCache
+EVM-Local-Cache
+EVM-CustomTracer
+Block-NoCache
+Block-Cache
+(a) Performance analysis for a gradual increase in contract size in terms of instructions.
+0.5
+1
+2
+4
+8
+16
+32
+65
+131
+262
+10−3
+10−1
+101
+103
+Storage size - Kb
+Time (s)
+EVM-Local-NoCache
+EVM-Local-Cache
+Block-NoCache
+Block-Cache
+(b) Performance analysis for a gradual increase in contract size in terms of storage
+Figure 6: Performance analysis for a gradual increase in contract size.
+Practicality. Table 3 shows detection/duration details of the four mainnet case studies
+30
+Table 3: Ethereum mainnet case studies (EVM-level detection).
+†-Overﬂow ‡-DoS ⋆-Reentrancy
+Contract
+Date
+Block
+Blocks
+TX
+TX
+TP
+FP
+Duration
+Range
+No.
+Full
+Relevant
+(s)
+BECToken†
+22/04/18
+5482796-5488697
+5902
+748858
+17
+1
+0
+113
+Ammbr†
+07/07/18
+5918554-5924373
+5820
+478209
+20
+1
+0
+9
+KotET‡
+07/02/16
+964910-969996
+5087
+14264
+9
+2
+0
+3
+TheDAO⋆
+17/06/16
+1717562-1723410
+5849
+66558
+5666
+448
+0
+1838
+SpankPay⋆
+07/10/18
+6467090-6473330
+6241
+497767
+201
+7
+0
+172
+PrivateBank⋆
+30/01/18
+5000001-6000000
+1000000
+125256429
+5
+2
+0
+3
+-20/07/18
+(column 1) conducted over ArchiveNode using the EVM-level IoC detector in custom
+tracer mode. Based on the result attained using the synthetic accounts, this conﬁg-
+uration provides the best option for effectiveness and performance. The EVM-level
+IoC detector used the Blockchair connector to retrieve all internal transactions result-
+ing from external ones that belong to the chosen block range. Columns 2-4 show the
+attack date range, followed by the block ranges and their corresponding number of
+blocks. In all cases, these comprise all the blocks mined in the date range. This range
+includes just the ﬁrst day of the attack in each case, except for PrivateBank. In the
+latter, the related documentation did not specify when the incident occurred. The ﬁfth
+column shows the full external transaction count included in that block range. Column
+6 shows the number of those (external) transactions actually considered to be rele-
+vant by the IoC detector. For BECToken, given that the vulnerability is located in the
+batchTransfer() public function, which is never called internally by the smart con-
+tract itself, we investigated all external transactions calling batchTransfer() directly,
+or indirectly via an internal transaction. As for Ammbr, a similar ﬁlter was not appli-
+cable so we considered all transactions targeting the vulnerable smart contract. In the
+case of KotET, all transactions targeting its address are considered, since any of them
+could result in an internal call that reverts unexpectedly. For TheDAO, SpankPay and
+PrivateBank, the IoC detector considers all external transactions, targeting any smart
+contract address, with at least one internal transaction targeting their own address.
+The results conﬁrm the efﬁcacy of EVM-level detection in the case of synthetic
+contracts. TP and FP were computed through manual veriﬁcation of all ﬂagged trans-
+actions using EtherScan18. In the case of BECtoken and Ammbr, only one transaction
+was ﬂagged in each case, coinciding with the transaction hashes found in their corre-
+sponding investigation reports. For KotET, we checked that the ﬂagged transactions
+had errors (reverted with an out-of-gas exception) but were still completed. As for the
+TheDao and SpankPay we checked that the detected transactions had multiple internal
+message calls to TheDarkDAO (attacker’s source account). As seen in the state-of-the-
+art [27], in the lack of appropriate ground truth, false negatives could no be accounted
+for in a precise manner. However, for TheDAO, SpankPay and PrivateBank, we con-
+ﬁrmed that EtherClue was able to detect all exploit transactions detected by Sereum
+[28]. Duration times include the entire period as of when the EtherClue orchestrator
+18https://etherscan.io/
+31
+is invoked with the given block range until all transaction processing terminate. Even
+though EVM-level processing can end up being time-consuming due to large traces,
+results show that the investigation duration times remain practical throughout the case
+studies. As already discussed, the time taken to investigate a single transaction depends
+on contract sizes, both in terms of instruction counts and storage sizes (see Figure 6).
+Moreover, the total investigation time is impacted by the total number of transac-
+tions considered relevant for the case in hand. Taking the case of the TheDAO, which is
+by far the most expensive among the four case studies, a non-parallel implementation
+of EtherClue can process a block in 0.3s. This is already faster than the rate at which
+a new block is currently mined in mainnet, falling in the 10-20s range19, and there-
+fore implying that EtherClue can even be deployed as a real-time detector of exploit
+transactions.
+Comparison with state of the art. As described in Section 1, EtherClue’s scope com-
+plements smart contract-centric vulnerability detection tools with a transaction-centric
+one intended for incident response. In this respect, TxSpector [27], Sereum [28] and
+DEFIER [29] fall into this category, presenting candidate comparison targets. However,
+one of the main issues of this research topic is that it lacks a standardised framework to
+leverage a sound comparison between the state of the art methods. The main implica-
+tions, also mentioned in the literature [27], are: the lack of comprehensive ground truth
+beyond the transaction hashes detected and manually followed up by individual efforts
+and the availability of openly available rules/analysis routines.
+Nevertheless, given that TxSpector’s rulesets are openly available, while the trans-
+actions detected by Sereum are available in a properly labelled way, we are in a position
+to compare EtherClue’s EVM-level IoCs with TxSpector based on ruleset deﬁnition
+and to cross-check the detected reentrancy exploit transactions with Sereum’s. No
+form of comparisons with DEFIER is yet possible since, ﬁrstly, DEFIER requires a set
+of seed transactions to be made available, something that EtherClue does not assume,
+while the notion of an attack transaction in DEFIER goes beyond strictly that of ex-
+ploit transactions to also include the entire attack kill-chain. Moreover, block-level IoC
+comparison is not possible since none of the existing tools provide it. We expand fur-
+ther on the requirements for a standardised framework for sound and fair comparison
+in the ensuing discussion (Section 6.3).
+We start by comparing ruleset deﬁnition between EtherClue and TxSpector. There-
+fore, for EtherClue we consider its IoC rules and for TxSpector, its detection rules.
+Taking the DoS with (unexpected) revert as a case study, Listing 6 shows TxSpector’s
+corresponding detection rule. Its detection engine is implemented using the Souffl´e
+high-performance Datalog query tool. Control and data ﬂow dependencies, such as op-
+code sequences and information ﬂow, are extracted from transactions traces and pop-
+ulate a knowledge base, in turn, queried using relational logic rules. This declarative
+approach is a strong point for TxSpector; however, it is clear from this example that
+this tool is intended primarily for users knowledgeable of program analysis. Ultimately,
+this is the same approach used for static code analysis but adapted to work on runtime
+traces. In Listing 6, line 7 extracts all CALL opcodes, while line 8 checks whether their
+19see https://etherscan.io/blocks
+32
+return values are eventually used by a JUMPI opcode (a conditional jump). Yet, the
+JUMPI opcode may not immediately follow its corresponding CALL, nor act directly on
+the returned value itself. Therefore, the rule on lines 1-4 is required to capture this
+additional complication, using further control/data ﬂow dependencies.
+Listing 6: TxSpector detection rule for DoS.
+1 jumpiDep ( jumpiIdx ,
+jumpiDepth ,
+depIdx ,
+depVal )
+: −
+2
+op JUMPI (
+,
+,
+jumpiCond ,
+jumpiIdx ,
+jumpiDepth ,
+) ,
+3
+jumpiIdx > depIdx ,
+4
+depends ( jumpiCond ,
+depVal ) .
+5
+6 UncheckedCall ( args )
+: −
+7
+op CALL (
+,
+,
+,
+c a l l R e t ,
+c a l l I d x ,
+1 ,
+) ,
+8
+! jumpiDep ( jumpiIdx ,
+1 ,
+c a l l I d x ,
+c a l l R e t ) .
+In EtherClue’s case, given IoCs are deﬁned as attack side-effects, it only requires
+reasoning about individual EVM-level steps. Furthermore, EtherClue is meant to com-
+plement vulnerability detectors and so can avail from known vulnerability locations
+inside the compiled EVM code. Starting with Deﬁnition 4.21, the IoC rule veriﬁes
+whether: i) the current opcode is a CALL, ii) it falls within the vulnerability location,
+and iii) the return value is 0. These three checks are simpler and more elegant than
+TxSpector’s detection rule (Listing 6), which is burdened with ascertaining whether
+the EVM trace being analyzed corresponds to a vulnerability. Therefore, EtherClue’s
+IoC rules do not have to follow the complex control/data ﬂow dependency analysis
+which impedes TxSpector’s rules.
+Notably, the IoC’s implementation is not restricted to a speciﬁc programming
+paradigm either. The current EtherClue prototype implements IoC rules in JavaScript,
+an example fragment of which is shown in Listing 7. arStack on line 2 is an instance
+of the call context tracker described in Section 5, and which is used to step through
+the transaction trace while keeping track of call-depths and activation records corre-
+sponding to internal transactions. Recall from Deﬁnition 4.2 that the activation record
+includes all runtime information, encompassing stack/memory content, EVM code and
+the program counter. arStack is therefore central for the IoC rule veriﬁcation (i.e., the
+three previously stated checks related to Deﬁnition 4.21) performed in lines 3, 7 and
+9. Finally, the callback() in line 10 ﬂags the transaction as an exploit. This occurs
+whenever all checks succeed as per the IoC template in Deﬁnition 4.6.
+Listing 7: EtherClue IoC rule for DoS.
+1 . . .
+2
+var
+p r e v i o u s S t e p = arSt a c k . a c t i v e ( ) . nthStep ( 1 ) ;
+3
+i f ( p r e v i o u s S t e p . op === Op .CALL) {
+4
+var
+s t a c k A f t e r = s t e p . s t a c k ;
+5
+var
+r = BigInt ( s t a c k A f t e r [ s t a c k A f t e r . length −1] ,
+16) ;
+6
+// Check if the result is an IoC for DoS.
+7
+i f ( r . eq ( 0 ) ) {
+8
+t r a c e . s t r u c t L o g s . forEach ( function ( step2 ,
+i ) {
+9
+i f ( step2 . pc == 940
+| |
+step2 . pc == 941) {
+10
+c a l l b a c k ( arS t a c k . a c t i v e ( ) . id ,
+tx ,
+previousStep ,
+index ,
+""
+) ;
+11
+}
+12
+}) ;
+33
+13
+}
+14
+}
+15 . . .
+The main observation here is that it should be simpler to implement a series of checks
+on the pre/post states of EVM instructions rather than deﬁning vulnerabilities using
+program analysis. Furthermore, EtherClue’s IoCs can also be used at the block level,
+something that TxSpector does not provide. We elaborate further on this point in the
+upcoming discussion.
+Another important aspect that prevents a fair comparison is that, for instance,
+TxSpector discards transactions not processed according to a timeout threshold. There-
+fore, the sample set may vary when comparing with other tools such as EtherClue, since
+the latter analyses all the transactions and is not restricted by performance thresholds.
+While we believe that the detection tools’ performance is relevant, enabling a timeout
+requires further discussion since individuals may not care about the time analysis if
+their losses are enormous.
+Finally, we further elaborate on the outcomes of TheDAO experiment. Accord-
+ing to the original reports, Sereum ﬂagged 2112 transactions whilst TxSpector ﬂagged
+2008. EtherClue was able to ﬂag 2208, since it identiﬁed 96 exploit transactions that
+ended up with an exception, and therefore failed to update the blockchain state. Ac-
+cording to Sereum documentation, it does not consider non-successful exploit transac-
+tions, yet during our analysis, we found out that 7 of such transactions were included in
+their outcomes, probably due to a bug/error. The latter means that EtherClue achieved
+the same performance as Sereum (i.e., a total of 2015 transactions if we remove the
+non-successful ones), which is a tool focused on this speciﬁc exploit.
+6.3. Discussion
+Our research and experimental ﬁndings provide some rather interesting insights
+about blockchain forensics and the corresponding IoCs. In the following paragraphs
+we discuss their main points.
+EVM-level IoCs provide the best option. EVM-level IoCs can carry a considerably
+larger computational load as transaction traces get larger. This property of EtherClue
+can be emphasised for transactions involving multiple internal message calls. On the
+other hand, this is not an issue for block-level IoCs since contract storage size is inde-
+pendent of the number of executed internal transactions. Nonetheless, one should take
+into consideration that such IoCs can generalise over an entire exploit class. Moreover,
+they can speciﬁcally ﬂag exploit transactions within their block, and their effectiveness
+cannot undermined neither by the ‘unavailable internal transactions’ nor by the ‘oc-
+cluded side-effect’ issues of the block level. Therefore, EVM-level IoC-centric inves-
+tigations can be more effective. While such IoCs may impose a much larger computa-
+tional load, our extended experiments illustrate that the cost is tolerable and applicable
+in real-world scenarios. Beyond a pre-processing step involving transaction tracing, a
+larger number of analysis steps is also required due to the small-step execution seman-
+tics. Yet, the mainnet case studies show that processing times remain practical even for
+transactions that consume the largest possible amount of gas.
+Block-level IoCs can still be of value. During investigations in which response times
+are critical, the lightweight nature of IoCs at this level may still render them useful in
+34
+the form of an ‘approximate’ triage-pass. Albeit not fully accurate, this pass can still
+help with the quick identiﬁcation of a sub-set of exploit transactions, especially given
+that IoCs at this level err on false negatives rather than false positives.
+Automated IoC deﬁnition/code generation.
+The potential value of a triage-pass
+based on block-level IoCs, however, is undermined by the fact that they are contract-
+speciﬁc, and IoC deﬁnition followed by IoC Rule implementation can be time-
+consuming. Yet, the formal semantics upon which IoCs are deﬁned can provide a
+solid basis for automation. More precisely, the symbolic execution of a sample exploit
+transaction could provide the basis for automation by generating all the states associ-
+ated with successful exploitation and from which to derive IoCs directly in code form.
+Given that symbolic execution does not require concrete inputs, this enables the gen-
+eration of IoCs in a generic manner through symbolic inputs. Furthermore, symbolic
+execution engines for the EVM, e.g. Manticore [42], are already available.
+A standardised framework for comparison. Ultimately, given the limited way we
+were able to compare EtherClue with existing tools so far, further enhancements re-
+quire the support of clear comparisons for proper evaluation. Speciﬁcally, we encoun-
+tered substantial difﬁculties in making use of datasets, at least beyond the limited one
+provided by Sereum [28], due to the lack of properly labelled ground truth and har-
+monized deﬁnitions of what constitutes an exploit transaction, amongst others. There-
+fore, we believe that studying standardised criteria to measure the quality of the tools
+with uniﬁed benchmarks and metrics is a promising research line in its own right.
+From our own experience, we propose that such a framework should at least cover: i)
+Tool categorisation in terms of which modes they can operate in, i.e. contract, block,
+transaction, or individual EVM instruction levels; ii) In the case of tools supporting a
+contract-level operation mode, whether they require the source code or whether they
+can work with just the decompiled bytecode; iii) Make the ruleset/analysis routines
+available for comparison, at least in object form, but more importantly highlighting the
+exact scope of their detection; iv) A ground-truth dataset that uses different labels for
+attack transactions at the different stages of the attack kill-chains, speciﬁcally identify-
+ing exploit transactions as only those that directly exercise a security bug; v) Finally,
+enhance all exploit transaction labels with related block-level, internal message call
+and instruction-level annotations.
+7. Conclusions
+In this work, we showed that IoCs deﬁned over the side-effects of Ethereum smart
+contract execution is an effective way to identify exploit transactions. The primary con-
+tribution is EtherClue, a DFIR tool that complements vulnerability detectors by post-
+factum exploit transaction detection. A model that abstracts smart contract execution
+underpins the method for deﬁning IoCs, and which in turn builds upon a formalism;
+previously used for symbolic smart contract execution, to ﬁt the needs of digital foren-
+sics. Experimentation with common exploit classes demonstrates the effectiveness and
+real-world practicality of EtherClue compared with other state-of-the-art approaches.
+Results point towards deﬁning IoCs at the EVM level, rather than the block level since
+IoCs can generalise over exploit classes and achieve better precision.
+35
+Future work will focus on deﬁning further IoCs for the ever-growing list of ex-
+ploit classes, along with further experimentation on mainnet. This effort will, however,
+ﬁrstly require a parallel implementation of EtherClue IoC detectors. This optimised
+implementation will also be useful to experiment further with the idea of applying
+EtherClue real-time detection, and perhaps even for early detection inside transaction
+pools. Deriving IoCs automatically from exploit samples is also a possibility given
+EtherClue’s operational semantics foundation. Finally, by integrating EtherClue with
+data mining tools, e.g. DEFIER, and blockchain analytics, e.g. Bloxy, it will be possi-
+ble to automate the process of forensic timeline analysis, providing investigators with
+a complete insight into an incident with minimal manual effort. Moreover, we argue
+that a standardised framework for tool comparison can be a catalyst for advancing the
+state of the art in Ethereum forensics and blockchain technologies in general.
+Acknowledgements
+This work was supported by the European Commission under the Horizon 2020
+Programme (H2020), as part of the LOCARD (https://locard.eu) (Grant Agree-
+ment no. 832735) project.
+The content of this article does not reﬂect the ofﬁcial opinion of the European
+Union. Responsibility for the information and views expressed therein lies entirely
+with the authors.
+References
+[1] N. Atzei, M. Bartoletti, T. Cimoli, A survey of attacks on Ethereum smart con-
+tracts (SoK), in: International conference on principles of security and trust,
+Springer, 2017, pp. 164–186.
+[2] H. Chen, M. Pendleton, L. Njilla, S. Xu, A survey on Ethereum systems security:
+Vulnerabilities, attacks, and defenses, ACM Computing Surveys (CSUR) 53 (3)
+(2020) 1–43.
+[3] D. Branch,
+dApps:
+Beyond germs transmitted by handshakes,
+https:
+//blog.securityevaluators.com/dapps-beyond-germs-transmitted-
+by-handshakes-edb48b468922, accessed: 2021-01-12 (2019).
+[4] G. Prisco, Understanding the DAO attack, https://bitcoinmagazine.com/
+articles/the-dao-raises-more-than-million-in-world-s-largest-
+crowdfunding-to-date-1463422191, accessed: 2021-01-12 (2016).
+[5] K. O’hara, Smart contracts-dumb idea, IEEE Internet Computing 21 (2) (2017)
+97–101.
+[6] Y. Smaragdakis, Ethereum Pawn Stars: “$5.7M in hard assets? Best I can do
+is $2.3M”, https://medium.com/dedaub/ethereum-pawn-stars-5-7m-in-
+hard-assets-best-i-can-do-is-2-3m-b93604be503e, accessed: 2021-01-
+12 (2021).
+36
+[7] L. Luu, D.-H. Chu, H. Olickel, P. Saxena, A. Hobor, Making smart contracts
+smarter, in: Proceedings of the 2016 ACM SIGSAC conference on computer and
+communications security, 2016, pp. 254–269.
+[8] N. Grech, L. Brent, B. Scholz, Y. Smaragdakis, Gigahorse: thorough, declarative
+decompilation of smart contracts, in: 2019 IEEE/ACM 41st International Confer-
+ence on Software Engineering (ICSE), IEEE, 2019, pp. 1176–1186.
+[9] G. Grieco, W. Song, A. Cygan, J. Feist, A. Groce, Echidna: effective, usable,
+and fast fuzzing for smart contracts, in: Proceedings of the 29th ACM SIGSOFT
+International Symposium on Software Testing and Analysis, 2020, pp. 557–560.
+[10] P. Tsankov, A. Dan, D. Drachsler-Cohen, A. Gervais, F. Buenzli, M. Vechev,
+Securify: Practical security analysis of smart contracts, in: Proceedings of the
+2018 ACM SIGSAC Conference on Computer and Communications Security,
+2018, pp. 67–82.
+[11] S. Kalra, S. Goel, M. Dhawan, S. Sharma, Zeus: Analyzing safety of smart con-
+tracts., in: NDSS, 2018, pp. 1–12.
+[12] S. Grossman, I. Abraham, G. Golan-Gueta, Y. Michalevsky, N. Rinetzky, M. Sa-
+giv, Y. Zohar, Online detection of effectively callback free objects with applica-
+tions to smart contracts, Proceedings of the ACM on Programming Languages
+2 (POPL) (2017) 1–28.
+[13] B. Jiang, Y. Liu, W. Chan, ContractFuzzer: Fuzzing smart contracts for vulner-
+ability detection, in: 2018 33rd IEEE/ACM International Conference on Auto-
+mated Software Engineering (ASE), IEEE, 2018, pp. 259–269.
+[14] C. Liu, H. Liu, Z. Cao, Z. Chen, B. Chen, B. Roscoe, Reguard: ﬁnding reentrancy
+bugs in smart contracts, in: 2018 IEEE/ACM 40th International Conference on
+Software Engineering: Companion (ICSE-Companion), IEEE, 2018, pp. 65–68.
+[15] D.-Y. Kao, S.-C. Hsiao, The dynamic analysis of wannacry ransomware, in:
+2018 20th International Conference on Advanced Communication Technology
+(ICACT), IEEE, 2018, pp. 159–166.
+[16] FireEye,
+SMB
+exploited:
+WannaCry
+use
+of
+“EternalBlue”,
+https:
+//www.fireeye.com/blog/threat-research/2017/05/smb-exploited-
+wannacry-use-of-eternalblue.html, Accessed: 2021-06-28 (2017).
+[17] G. Wood, et al., Ethereum: A secure decentralised generalised transaction ledger,
+Ethereum project yellow paper 151 (2014) (2014) 1–32.
+[18] V. Buterin, Ethereum white paper, https://ethereum.org/en/whitepaper/,
+accessed: 2021-01-12 (2020).
+[19] Ethereum, Solidity, https://docs.soliditylang.org/en/latest, accessed:
+2021-01-12 (2020).
+37
+[20] Ethervm, EVM opcode reference, https://ethervm.io, accessed: 2021-30-06
+(2021).
+[21] Go-Ethereum,
+EVM
+tracing,
+https://geth.ethereum.org/docs/dapp/
+tracing, accessed: 2021-01-12 (2020).
+[22] I. Grishchenko, M. Maffei, C. Schneidewind, A semantic framework for the se-
+curity analysis of ethereum smart contracts, in: International Conference on Prin-
+ciples of Security and Trust, Springer, 2018, pp. 243–269.
+[23] A. Hern´andez Cerezo, Analysis techniques for smart contracts: generation of
+complete control ﬂow graphs (2020).
+[24] T. Cook, A. Latham, J. H. Lee, DappGuard: Active monitoring and defense for
+solidity smart contracts, Retrieved July 18 (2017) 2018.
+[25] S. Farrugia, J. Ellul, G. Azzopardi, Detection of illicit accounts over the Ethereum
+blockchain, Expert Systems with Applications 150 (2020) 113318.
+[26] N. Kumar, A. Singh, A. Handa, S. K. Shukla, Detecting malicious accounts on
+the Ethereum blockchain with supervised learning, in: International Symposium
+on Cyber Security Cryptography and Machine Learning, Springer, 2020, pp. 94–
+109.
+[27] M. Zhang, X. Zhang, Y. Zhang, Z. Lin, TXPTECTOR: Uncovering attacks in
+Ethereum from transactions, in: 29th USENIX Security Symposium (USENIX
+Security 20), 2020, pp. 2775–2792.
+[28] M. Rodler, W. Li, G. O. Karame, L. Davi, Sereum: Protecting existing smart
+contracts against re-entrancy attacks, arXiv preprint arXiv:1812.05934 (2018).
+[29] L. Su, X. Shen, X. Du, X. Liao, X. Wang, L. Xing, B. Liu, Evil under the sun:
+Understanding and discovering attacks on ethereum decentralized applications,
+in:
+30th USENIX Security Symposium (USENIX Security 21), USENIX
+Association, Vancouver, B.C., 2021.
+URL
+https://www.usenix.org/conference/usenixsecurity21/
+presentation/su
+[30] S. Bragagnolo, M. Marra, G. Polito, E. G. Boix, Towards scalable blockchain
+analysis, in: 2019 IEEE/ACM 2nd International Workshop on Emerging Trends
+in Software Engineering for Blockchain (WETSEB), IEEE, 2019, pp. 1–7.
+[31] L. Wu, S. Wu, Y. Zhou, R. Li, Z. Wang, X. Luo, C. Wang, K. Ren, EthScope:
+A transaction-centric security analytics framework to detect malicious smart con-
+tracts on Ethereum, arXiv preprint arXiv:2005.08278 (2020).
+[32] M. Wohrer, U. Zdun, Smart contracts: security patterns in the Ethereum ecosys-
+tem and solidity, in: 2018 International Workshop on Blockchain Oriented Soft-
+ware Engineering (IWBOSE), IEEE, 2018, pp. 2–8.
+38
+[33] ConsenSys, Ethereum smart contract best practices, https://consensys.
+github.io/smart-contract-best-practices/general_philosophy/, ac-
+cessed: 2021-01-12 (2021).
+[34] M. Rodler, W. Li, G. O. Karame, L. Davi, Evmpatch: Timely and automated
+patching of ethereum smart contracts, arXiv preprint arXiv:2010.00341 (2020).
+[35] Z. Cheng, X. Hou, R. Li, Y. Zhou, X. Luo, J. Li, K. Ren, Towards a ﬁrst step
+to understand the cryptocurrency stealing attack on Ethereum, in: 22nd inter-
+national Symposium on research in Attacks, Intrusions and Defenses ({RAID}
+2019), 2019, pp. 47–60.
+[36] C. Colombo, J. Ellul, G. J. Pace, Contracts over smart contracts: Recovering from
+violations dynamically, in: International Symposium on Leveraging Applications
+of Formal Methods, Springer, 2018, pp. 300–315.
+[37] M. Weber, G. Domeniconi, J. Chen, D. K. I. Weidele, C. Bellei, T. Robinson,
+C. E. Leiserson, Anti-money laundering in bitcoin: Experimenting with graph
+convolutional networks for ﬁnancial forensics, arXiv preprint arXiv:1908.02591
+(2019).
+[38] L. Zarpala, F. Casino, A blockchain-based forensic model for ﬁnancial crime in-
+vestigation: the embezzlement scenario, Digital Finance (2021) 1–32.
+[39] A. H. Lone, R. N. Mir, Forensic-chain: Blockchain based digital forensics chain
+of custody with PoC in Hyperledger composer, Digital Investigation 28 (2019)
+44–55.
+[40] L. Ahmad, S. Khanji, F. Iqbal, F. Kamoun, Blockchain-based chain of custody:
+towards real-time tamper-proof evidence management, in: Proceedings of the
+15th International Conference on Availability, Reliability and Security, 2020, pp.
+1–8.
+[41] ConsenSys,
+Ethereum
+smart
+contract
+best
+practices:
+Known
+attacks,
+https://consensys.github.io/smart-contract-best-practices/
+known_attacks/, accessed: 2021-01-12 (2020).
+[42] M. Mossberg, F. Manzano, E. Hennenfent, A. Groce, G. Grieco, J. Feist, T. Brun-
+son, A. Dinaburg, Manticore: A user-friendly symbolic execution framework for
+binaries and smart contracts, in: 2019 34th IEEE/ACM International Conference
+on Automated Software Engineering (ASE), IEEE, 2019, pp. 1186–1189.
+39
