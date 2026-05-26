@@ -4,14 +4,14 @@ Unified Token Scanner — RugMunch Intelligence
 Ties together all existing infrastructure:
 - Bundle detection (degen_scan_endpoint)
 - Contract scanning (contract_deepscan — Slither/Mythril)
-- Security audit (GoPlus + Birdeye)
+- Security audit (GoPlus + Birdeye + Solana RPC)
 - Wallet intelligence (GMGN, Helius, entity labeler)
 - Cluster analysis (entity_clustering)
 - Whale tracking (Helius whale watcher)
 - Sniper detection (Helius sniper detector)
 - Holder analysis (Helius syndicate tracker)
 
-FREE tier: basic safety check, liquidity, age, taxes
+FREE tier: basic safety check, liquidity, age, taxes, mint/freeze authority
 PRO tier ($15/mo): full bundle analysis, wallet clustering, holder distribution
 ELITE tier ($100/mo): ML anomaly detection, mempool monitoring, cross-chain tracing
 """
@@ -21,6 +21,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
+
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -57,13 +59,97 @@ CHAIN_IDS = {
     "zksync": "324", "scroll": "534352", "mantle": "5000",
 }
 
+# Solana RPC endpoints (free, no key required)
+SOLANA_RPC_ENDPOINTS = [
+    "https://api.mainnet-beta.solana.com",
+    "https://solana-api.syndica.io/access-token/free",
+]
+
+
+async def _solana_get_mint_info(token_address: str) -> Dict[str, Any]:
+    """Fetch mint/freeze authority from Solana RPC (free, no API key needed)."""
+    result = {
+        "mint_authority": "unknown",
+        "freeze_authority": "unknown",
+        "decimals": None,
+        "supply": None,
+    }
+    
+    for rpc_url in SOLANA_RPC_ENDPOINTS:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(
+                    rpc_url,
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "getAccountInfo",
+                        "params": [token_address, {"encoding": "jsonParsed"}],
+                    },
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    val = (data.get("result") or {}).get("value")
+                    if val:
+                        parsed = (val.get("data") or {}).get("parsed", {})
+                        if parsed.get("type") == "mint":
+                            info = parsed.get("info", {})
+                            result["mint_authority"] = info.get("mintAuthority", "unknown")
+                            result["freeze_authority"] = info.get("freezeAuthority", "unknown")
+                            result["decimals"] = info.get("decimals")
+                            result["supply"] = info.get("supply")
+                            return result
+        except Exception as e:
+            logger.debug(f"Solana RPC {rpc_url} failed: {e}")
+            continue
+    
+    return result
+
+
+async def _dexscreener_lookup(token_address: str, chain: str, client: httpx.AsyncClient) -> Optional[list]:
+    """Fetch token data from DexScreener with fallback search for Solana tokens."""
+    # Primary: direct token lookup
+    try:
+        resp = await client.get(
+            f"https://api.dexscreener.com/latest/dex/tokens/{token_address}",
+        )
+        if resp.status_code == 200:
+            pairs = resp.json().get("pairs", []) or []
+            if pairs:
+                return pairs
+    except Exception as e:
+        logger.debug(f"DexScreener token lookup failed: {e}")
+    
+    # Fallback: search by address (works for Solana tokens that don't appear in /dex/tokens/)
+    try:
+        resp = await client.get(
+            "https://api.dexscreener.com/latest/dex/search",
+            params={"q": token_address},
+        )
+        if resp.status_code == 200:
+            pairs = resp.json().get("pairs", []) or []
+            # Filter to matching token address
+            matching = [
+                p for p in pairs
+                if p.get("baseToken", {}).get("address", "").lower() == token_address.lower()
+                or p.get("quoteToken", {}).get("address", "").lower() == token_address.lower()
+            ]
+            if matching:
+                return matching
+    except Exception as e:
+        logger.debug(f"DexScreener search fallback failed: {e}")
+    
+    return None
+
 
 async def free_scan(token_address: str, chain: str) -> Dict[str, Any]:
-    """FREE tier scan — basic safety + liquidity + age."""
-    import httpx
+    """FREE tier scan — basic safety + liquidity + age + mint/freeze authority."""
+    
     result = {
         "token": token_address,
         "chain": chain,
+        "symbol": "",
+        "name": "",
         "liquidity_usd": 0,
         "volume_24h": 0,
         "price_usd": 0,
@@ -79,46 +165,102 @@ async def free_scan(token_address: str, chain: str) -> Dict[str, Any]:
         "lp_burned": "unknown",
         "dex": "",
         "pair_address": "",
+        "top10_holder_pct": None,
+        "data_sources": [],
     }
     
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        # DexScreener data
-        try:
-            resp = await client.get(f"https://api.dexscreener.com/latest/dex/tokens/{token_address}")
-            if resp.status_code == 200:
-                pairs = resp.json().get("pairs", [])
-                if pairs:
-                    pair = pairs[0]
-                    result["dex"] = pair.get("dexId", "")
-                    result["pair_address"] = pair.get("pairAddress", "")
-                    result["liquidity_usd"] = float(pair.get("liquidity", {}).get("usd", 0))
-                    result["volume_24h"] = float(pair.get("volume", {}).get("h24", 0))
-                    result["price_usd"] = float(pair.get("priceUsd", 0))
-                    result["fdv"] = float(pair.get("fdv", 0))
-                    created = pair.get("pairCreatedAt")
-                    if created:
-                        age = (datetime.now(timezone.utc) - datetime.fromtimestamp(created / 1000, tz=timezone.utc)).total_seconds() / 3600
-                        result["age_hours"] = round(age, 1)
-                        result["created_at"] = datetime.fromtimestamp(created / 1000, tz=timezone.utc).isoformat()
-        except Exception as e:
-            logger.warning(f"DexScreener failed for {token_address}: {e}")
+    async with httpx.AsyncClient(timeout=15.0, headers={"User-Agent": "RMI-TokenScanner/2.0"}) as client:
+        # ── DexScreener data (primary, works for all chains) ──
+        pairs = await _dexscreener_lookup(token_address, chain, client)
+        if pairs:
+            pair = pairs[0]
+            result["dex"] = pair.get("dexId", "")
+            result["pair_address"] = pair.get("pairAddress", "")
+            result["liquidity_usd"] = float((pair.get("liquidity") or {}).get("usd", 0) or 0)
+            result["volume_24h"] = float((pair.get("volume") or {}).get("h24", 0) or 0)
+            result["price_usd"] = float(pair.get("priceUsd", 0) or 0)
+            result["fdv"] = float(pair.get("fdv", 0) or 0)
+            result["symbol"] = pair.get("baseToken", {}).get("symbol", "")
+            result["name"] = pair.get("baseToken", {}).get("name", "")
+            created = pair.get("pairCreatedAt")
+            if created:
+                try:
+                    age = (datetime.now(timezone.utc) - datetime.fromtimestamp(created / 1000, tz=timezone.utc)).total_seconds() / 3600
+                    result["age_hours"] = round(age, 1)
+                    result["created_at"] = datetime.fromtimestamp(created / 1000, tz=timezone.utc).isoformat()
+                except Exception:
+                    pass
+            result["data_sources"].append("dexscreener")
         
-        # GoPlus Security
+        # ── Solana: on-chain mint authority via free RPC (no API key needed) ──
+        if chain == "solana":
+            mint_info = await _solana_get_mint_info(token_address)
+            if mint_info.get("mint_authority") != "unknown":
+                result["mint_authority"] = mint_info["mint_authority"]
+                result["freeze_authority"] = mint_info["freeze_authority"]
+                result["data_sources"].append("solana_rpc")
+                # A renounced mint authority means the supply is fixed
+                if mint_info["mint_authority"] == "11111111111111111111111111111111":
+                    result["mint_authority"] = "renounced"
+                if mint_info["freeze_authority"] == "11111111111111111111111111111111":
+                    result["freeze_authority"] = "renounced"
+                # Null mint authority = fully fixed supply
+                if mint_info["mint_authority"] is None:
+                    result["mint_authority"] = "renounced"
+                if mint_info["freeze_authority"] is None:
+                    result["freeze_authority"] = "renounced"
+        
+        # ── GoPlus Security (works well for EVM chains, limited for Solana) ──
         chain_id = CHAIN_IDS.get(chain, chain)
         try:
             resp = await client.get(
                 f"https://api.gopluslabs.io/api/v1/token_security/{chain_id}",
-                params={"contract_addresses": token_address}
+                params={"contract_addresses": token_address},
             )
             if resp.status_code == 200:
-                data = resp.json().get("result", {}).get(token_address.lower(), {})
-                if data:
-                    result["honeypot_risk"] = "high" if data.get("is_honeypot") == "1" else "low"
-                    result["buy_tax"] = float(data.get("buy_tax", "0"))
-                    result["sell_tax"] = float(data.get("sell_tax", "0"))
-                    result["mint_authority"] = "active" if data.get("is_mintable") == "1" else "renounced"
-                    result["freeze_authority"] = "active" if data.get("transfer_pausable") == "1" else "none"
-                    result["lp_burned"] = "yes" if data.get("lp_holders") and float(data.get("lp_holders", "0")) < 0.01 else "no"
+                json_data = resp.json()
+                # GoPlus returns {"result": null} or {"result": {}} for unsupported chains
+                goplus_result = json_data.get("result")
+                if goplus_result and isinstance(goplus_result, dict):
+                    # For EVM chains, the result is keyed by lowercased address
+                    data = goplus_result.get(token_address.lower(), {})
+                    if not data and len(goplus_result) == 1:
+                        # Some chains return the data under the only key
+                        data = list(goplus_result.values())[0]
+                    if data and isinstance(data, dict):
+                        result["honeypot_risk"] = "high" if data.get("is_honeypot") == "1" else "low"
+                        result["buy_tax"] = float(data.get("buy_tax", "0") or 0)
+                        result["sell_tax"] = float(data.get("sell_tax", "0") or 0)
+                        # Mint/freeze for EVM chains (override Solana RPC data if available)
+                        if chain != "solana":
+                            result["mint_authority"] = "active" if data.get("is_mintable") == "1" else "renounced"
+                            result["freeze_authority"] = "active" if data.get("transfer_pausable") == "1" else "none"
+                        # LP burn status
+                        lp_holders = data.get("lp_holders")
+                        if isinstance(lp_holders, list):
+                            top_lp_pct = None
+                            for holder in lp_holders[:3]:
+                                pct = float(holder.get("percent", 0) or 0)
+                                if holder.get("is_locked") == "1":
+                                    result["lp_burned"] = "locked"
+                                    break
+                                if top_lp_pct is None or pct > (top_lp_pct or 0):
+                                    top_lp_pct = pct
+                            if result["lp_burned"] == "unknown" and top_lp_pct is not None:
+                                result["lp_burned"] = "yes" if top_lp_pct < 0.01 else "no"
+                        elif isinstance(lp_holders, str):
+                            try:
+                                lp_count = float(lp_holders)
+                                result["lp_burned"] = "yes" if lp_count < 0.01 else "no"
+                            except ValueError:
+                                pass
+                        # Top 10 holder percentage
+                        if data.get("holders"):
+                            try:
+                                result["top10_holder_pct"] = float(data.get("holders", 0))
+                            except (ValueError, TypeError):
+                                pass
+                        result["data_sources"].append("goplus")
         except Exception as e:
             logger.warning(f"GoPlus failed for {token_address}: {e}")
     
@@ -137,7 +279,6 @@ async def pro_scan(token_address: str, chain: str) -> Dict[str, Any]:
     }
     
     try:
-        # Bundle detection from existing degen scanner
         from app.degen_scan_endpoint import check_bundler as bundle_check
         bundle_result = await bundle_check(token_address, chain)
         if bundle_result:
@@ -150,7 +291,6 @@ async def pro_scan(token_address: str, chain: str) -> Dict[str, Any]:
         logger.warning(f"Bundle check failed: {e}")
     
     try:
-        # Entity clustering
         from app.entity_clustering import EntityClusteringEngine
         engine = EntityClusteringEngine()
         clusters = engine.find_clusters(token_address)
@@ -159,7 +299,6 @@ async def pro_scan(token_address: str, chain: str) -> Dict[str, Any]:
         logger.warning(f"Clustering failed: {e}")
     
     try:
-        # GMGN wallet intelligence
         from app.gmgn_client import GMGNClient
         gmgn = GMGNClient()
         wallet_data = await gmgn.get_wallet_intelligence(token_address)
@@ -238,16 +377,26 @@ async def scan_token(
     # FREE — always runs
     free_data = await free_scan(token_address, chain)
     scan.free = free_data
+    scan.symbol = free_data.get("symbol", "")
+    scan.name = free_data.get("name", "")
     
     # Calculate base safety score from free data
     risk_flags = []
     safety = 70  # start neutral
+    confidence = 30  # base confidence, increases with each data source
+    
+    # ── DexScreener signals ──
+    if "dexscreener" in free_data.get("data_sources", []):
+        confidence += 25  # we have real market data
     
     if free_data.get("honeypot_risk") == "high":
         safety -= 50
         risk_flags.append("HONEYPOT_DETECTED")
+        confidence += 10
+    elif free_data.get("honeypot_risk") == "low":
+        confidence += 10
     elif free_data.get("honeypot_risk") == "unknown":
-        safety -= 10
+        safety -= 5  # reduced penalty when we can't verify
     
     if free_data.get("buy_tax", 0) > 10:
         safety -= 15
@@ -256,19 +405,63 @@ async def scan_token(
         safety -= 15
         risk_flags.append(f"HIGH_SELL_TAX_{free_data['sell_tax']}%")
     
-    if free_data.get("mint_authority") == "active":
-        safety -= 10
+    # ── Mint/freeze authority (strong signal) ──
+    mint = free_data.get("mint_authority", "unknown")
+    freeze = free_data.get("freeze_authority", "unknown")
+    
+    if mint == "active":
+        safety -= 15
         risk_flags.append("MINTABLE")
-    if free_data.get("lp_burned") == "no":
+        confidence += 10
+    elif mint == "renounced":
+        safety += 10
+        confidence += 5
+    elif mint == "unknown":
+        safety -= 5  # minor penalty when we can't verify
+    
+    if freeze == "active":
         safety -= 10
+        risk_flags.append("FREEZABLE")
+        confidence += 10
+    elif freeze == "renounced" or freeze == "none":
+        safety += 5
+        confidence += 5
+    
+    if "solana_rpc" in free_data.get("data_sources", []):
+        confidence += 15  # on-chain verification
+    
+    # ── LP and liquidity ──
+    if free_data.get("lp_burned") == "yes" or free_data.get("lp_burned") == "locked":
+        safety += 10
+        confidence += 5
+    elif free_data.get("lp_burned") == "no":
+        safety -= 15
         risk_flags.append("LP_NOT_BURNED")
+        confidence += 5
     
     if free_data.get("liquidity_usd", 0) < 1000:
         safety -= 15
         risk_flags.append("LOW_LIQUIDITY")
+    elif free_data.get("liquidity_usd", 0) < 10000:
+        safety -= 10
+        risk_flags.append("MICRO_LIQUIDITY")
+    elif free_data.get("liquidity_usd", 0) > 100000:
+        safety += 5  # decent liquidity is a positive signal
+        confidence += 5
+    
     if free_data.get("age_hours") and free_data["age_hours"] < 1:
-        safety -= 5
+        safety -= 10
         risk_flags.append("VERY_NEW")
+    elif free_data.get("age_hours") and free_data["age_hours"] < 24:
+        safety -= 5
+        risk_flags.append("NEW_TOKEN")
+    
+    # ── GoPlus signals ──
+    if "goplus" in free_data.get("data_sources", []):
+        confidence += 15  # security audit data available
+    
+    # ── Confidence floor ──
+    confidence = max(30, min(95, confidence))
     
     scan.safety_score = max(0, min(100, safety))
     scan.risk_flags = risk_flags
@@ -307,6 +500,9 @@ async def scan_token(
     scan.safety_score = max(0, min(100, safety))
     scan.risk_flags = risk_flags
     
+    # Store confidence in free tier result
+    scan.free["confidence"] = confidence
+    
     return scan
 
 
@@ -329,7 +525,7 @@ async def quick_scan_text(token_address: str, chain: str = "solana") -> str:
         f"📊 Volume 24h: ${f.get('volume_24h', 0):,.0f}",
         f"⏰ Age: {f.get('age_hours', '?')}h",
         f"",
-        f"🛡️ *Safety: {safety}/100*",
+        f"🛡️ *Safety: {safety}/100* (confidence: {f.get('confidence', '?')}%)",
     ]
     
     if scan.risk_flags:
@@ -340,7 +536,9 @@ async def quick_scan_text(token_address: str, chain: str = "solana") -> str:
         f"🔒 Honeypot: {f.get('honeypot_risk', '?')}",
         f"💸 Tax: {f.get('buy_tax', 0)}% buy / {f.get('sell_tax', 0)}% sell",
         f"🔑 Mint: {f.get('mint_authority', '?')}",
+        f"❄️ Freeze: {f.get('freeze_authority', '?')}",
         f"🔥 LP: {f.get('lp_burned', '?')}",
+        f"📡 Sources: {', '.join(f.get('data_sources', []))}",
         f"",
         f"_Free scan. Upgrade to PRO for bundle detection, whale tracking & more._",
         f"/upgrade for details",
