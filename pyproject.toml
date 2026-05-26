@@ -4,15 +4,15 @@ build-backend = "hatchling.build"
 
 [project]
 name = "rug-munch-intelligence-mcp"
-version = "3.0.0"
-description = "Rug Munch Intelligence MCP Server — 59 tools for scam detection, rug pull prevention, and crypto intelligence across 7 chains"
+version = "3.1.0"
+description = "Rug Munch Intelligence MCP Server — 210 AI-powered crypto intelligence tools across 13 blockchains. Scam detection, rug pull prevention, wallet forensics, whale tracking, contract auditing, market analysis. x402 micropayments."
 readme = "README.md"
 license = "Proprietary"
 requires-python = ">=3.10"
 authors = [
     { name = "CryptoRugMunch" },
 ]
-keywords = ["mcp", "crypto", "rug-pull", "scam-detection", "blockchain", "intelligence", "solana", "ethereum", "base", "bsc"]
+keywords = ["mcp", "crypto", "rug-pull", "scam-detection", "blockchain", "intelligence", "solana", "ethereum", "base", "bsc", "arbitrum", "optimism", "polygon", "whale-tracking", "x402", "micropayments", "usdc"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
@@ -44,7 +44,7 @@ rug-munch-intelligence-mcp = "rug_munch_mcp.server:main"
 [project.urls]
 Homepage = "https://rugmunch.io"
 Repository = "https://github.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp"
-Documentation = "https://github.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp#readme"
+Documentation = "https://rugmunch.io/docs/mcp"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/rug_munch_mcp"]

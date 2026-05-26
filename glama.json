@@ -2,7 +2,7 @@
   "$schema": "https://glama.ai/mcp/schemas/server.json",
   "maintainers": ["cryptorugmuncher"],
   "name": "Rug Munch Intelligence",
-  "description": "225 crypto security & intelligence MCP tools across 13 blockchains. Real-time scam detection, wallet forensics, whale tracking, contract auditing, market analysis, sentiment tracking, arbitrage scanning, MEV protection, insider detection, syndicate mapping, and more. Free trials (1-5 calls/tool) + x402 micropayments ($0.01-$0.40/call). 10 payment facilitators: Coinbase CDP, PayAI, Cloudflare x402, Pieverse, AsterPay, MERX, Primev, Satoshi, x402-rs, EIP-7702. Pay with USDC, USDT, BTC, EUR. Full refund guarantee. Clean URL: rugmunch.io/mcp",
+  "description": "210 AI-powered crypto security & intelligence tools across 13 blockchains. Real-time scam detection, rug pull prevention, honeypot analysis, wallet forensics, whale tracking, smart money detection, contract auditing, MEV protection, market analysis, sentiment tracking, insider detection, syndicate mapping. 1-5 free trials per tool + x402 micropayments ($0.01-$0.40/call). 8 facilitators: Coinbase CDP (Base, Solana, Ethereum, Polygon), PayAI (Base, Solana), Cloudflare x402 (Base), EIP-7702 (BSC, Polygon, Avalanche, Fantom, Gnosis, Arbitrum, Optimism, Base), TRON Self-Verify (TRON), Bitcoin Self-Verify (Bitcoin), AsterPay (SEPA/EUR), x402-rs (multi-chain). Pay with USDC, USDT, BTC, EUR. Full refund if no data returned. MCP endpoint: rugmunch.io/mcp",
   "server": {
     "url": "https://rugmunch.io/mcp",
     "transport": "http",
@@ -11,5 +11,5 @@
   "logo": "https://rugmunch.io/logo.png",
   "homepage": "https://rugmunch.io",
   "documentation": "https://rugmunch.io/docs/mcp",
-  "tags": ["crypto", "blockchain", "security", "defi", "scam-detection", "intelligence", "mcp", "x402", "analytics", "whale-tracking", "rug-pull", "contract-audit", "solana", "ethereum", "base", "forensics", "ai-agents"]
+  "tags": ["crypto", "blockchain", "security", "defi", "scam-detection", "intelligence", "mcp", "x402", "analytics", "whale-tracking", "rug-pull", "contract-audit", "solana", "ethereum", "base", "forensics", "ai-agents", "smart-money", "honeypot-detection", "wallet-analysis", "market-analysis", "sentiment", "insider-detection", "mev", "arbitrage"]
 }
