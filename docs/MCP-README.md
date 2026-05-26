@@ -1,6 +1,6 @@
 # Rug Munch Intelligence — MCP Server Documentation
 
-> **201 crypto intelligence tools · 13 blockchains · x402 micropayments · Free trials**
+> **210 crypto intelligence tools · 13 blockchains · x402 micropayments · Free trials**
 
 [![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-6E40C9?logo=modelcontextprotocol&logoColor=white)](https://modelcontextprotocol.io)
 [![Smithery](https://img.shields.io/badge/Listed-Smithery-FF6900)](https://smithery.ai/server/@cryptorugmuncher/rug-munch-intelligence)
@@ -10,7 +10,7 @@
 
 ## Overview
 
-Rug Munch Intelligence (RMI) is a crypto security and market intelligence MCP server. It provides **201 tools** across **13 blockchains** for scam detection, rug pull prevention, wallet forensics, whale tracking, contract auditing, and market analysis — accessible via the Model Context Protocol.
+Rug Munch Intelligence (RMI) is a crypto security and market intelligence MCP server. It provides **210 tools** across **13 blockchains** for scam detection, rug pull prevention, wallet forensics, whale tracking, contract auditing, and market analysis — accessible via the Model Context Protocol.
 
 Every tool offers **1–5 free trial calls** (gated by device fingerprint) and **x402 micropayments** ($0.01–$0.40/call) via 8 payment facilitators across 13 chains.
 
@@ -27,7 +27,7 @@ Every tool offers **1–5 free trial calls** (gated by device fingerprint) and *
                         ▼
 ┌─────────────────────────────────────────────────────────┐
 │  rugmunch.io/mcp                                       │
-│  MCP Server — 201 tools, schema discovery              │
+│  MCP Server — 210 tools, schema discovery              │
 ├─────────────────────────────────────────────────────────┤
 │  x402 Payment Gatekeeper                               │
 │  Trial enforcement → Payment required → 402 response  │
@@ -115,19 +115,20 @@ result = requests.post(
 
 | Category | Count | Highlight Tools |
 |----------|-------|----------------|
-| 🔒 Security | 20 | `audit`, `rugshield`, `honeypot_check`, `urlcheck`, `clone_detect`, `sniper_detect` |
-| 🧠 Intelligence | 18 | `smartmoney`, `whale_scan`, `cluster_detection`, `insider_tracker`, `wallet_graph` |
-| 📊 Market | 15 | `pulse`, `market_price`, `trending_tokens`, `liquidity_depth`, `arbitrage_scan` |
-| 🔬 Analysis | 8 | `wallet`, `wallet_pnl`, `portfolio_tracker`, `token_comparison`, `forensics` |
-| 💬 Social | 6 | `sentiment`, `social_signal`, `twitter_profile`, `kol_performance` |
-| 🚀 Launch | 3 | `launch_radar`, `launch_intel`, `fresh_pair` |
-| 🔎 Premium | 3 | `forensic_valuation`, `osint_identity_hunt`, `investigation_report` |
-| 💎 DeFi | 2 | `defi_yield_scanner`, `liquidity_depth` |
-| 🖼 NFT | 2 | `nft_wash_detector`, `nft_rarity` |
-| 📦 API | 40+ | Chain-specific variants of core tools |
-| 🔄 Variant | 40+ | Parameter variations for comprehensive coverage |
+| 🔒 Security | 29 + 9 SENTINEL | `audit`, `rugshield`, `honeypot_check`, `sentinel_scan`, `holder_analysis`, `flash_loan_detect`, `governance_attack` |
+| 🧠 Intelligence | 27 | `smartmoney`, `whale_scan`, `cluster`, `insider`, `cross_chain_whale`, `degen_score`, `wallet_label_registry` |
+| 📊 Market | 15 | `pulse`, `market_overview`, `chain_health`, `funding_rate`, `options_flow`, `liquidation_heatmap`, `volatility_surface` |
+| 🔬 Analysis | 14 | `wallet`, `wallet_pnl`, `portfolio_tracker`, `forensics`, `correlation_matrix`, `drawdown_analyzer`, `volume_profile` |
+| 💬 Social | 11 | `sentiment`, `social_signal`, `tw_profile`, `meme_vibe_score`, `telegram_pump_detect`, `discord_alpha`, `reddit_sentiment` |
+| 🚀 Launch | 7 | `launch`, `launch_intel`, `airdrop_finder`, `presale_scanner`, `ido_tracker`, `fair_launch_detect` |
+| 🔎 Premium | 7 | `forensic_valuation`, `osint_identity_hunt`, `deep_forensics`, `whale_network_map`, `cross_chain_trace`, `full_wallet_dossier` |
+| 💎 DeFi | 4 | `defi_yield_scanner`, `yield_aggregator`, `impermanent_loss`, `protocol_risk` |
+| 🖼 NFT | 2 | `nft_wash_detector`, `nft_floor_analytics` |
+| 📦 Bundle | 4 | `security_pack`, `intelligence_pack`, `all_in_one`, `forensic_pack` |
+| 🔌 API | 3 | `catalog`, `mcp-proxy`, `human-execute` |
+| 🔄 Variant | 80 | Per-chain variants for Solana, Base, Ethereum, BSC |
 
-**Total: 201 tools**
+**Total: 210 tools**
 
 ---
 

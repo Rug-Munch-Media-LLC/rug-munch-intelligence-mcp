@@ -5,13 +5,13 @@
 <h1 align="center">🛡️ Rug Munch Intelligence — MCP Server</h1>
 
 <p align="center">
-  <strong>201 AI-Powered Crypto Intelligence Tools · 13 Blockchains · 8 Payment Rails</strong><br/>
+  <strong>210 AI-Powered Crypto Intelligence Tools · 13 Blockchains · 8 Payment Rails</strong><br/>
   <em>Don't get rugged. Let AI watch the chains so you don't have to.</em>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/MCP-Protocol-Compatible-6E40C9?logo=modelcontextprotocol&logoColor=white&style=for-the-badge" alt="MCP Compatible" />
-  <img src="https://img.shields.io/badge/Tools-201-00D4AA?style=for-the-badge" alt="201 Tools" />
+  <img src="https://img.shields.io/badge/Tools-210-00D4AA?style=for-the-badge" alt="210 Tools" />
   <img src="https://img.shields.io/badge/Chains-13-F7931A?style=for-the-badge" alt="13 Chains" />
   <img src="https://img.shields.io/badge/Payments-x402-FF6900?style=for-the-badge" alt="x402 Payments" />
 </p>
@@ -36,44 +36,44 @@
 
 ## ✨ What Is Rug Munch Intelligence?
 
-**Rug Munch Intelligence (RMI)** is the most comprehensive crypto security & intelligence MCP server ever built. With **201 tools** spanning **13 blockchains**, it gives any AI agent — Claude, Cursor, Windsurf, ChatGPT, or raw HTTP — superhuman ability to detect scams, track smart money, analyze wallets, monitor markets, and prevent rug pulls in real time.
+**Rug Munch Intelligence (RMI)** is the most comprehensive crypto security & intelligence MCP server ever built. With **210 tools** spanning **13 blockchains**, it gives any AI agent — Claude, Cursor, Windsurf, ChatGPT, or raw HTTP — superhuman ability to detect scams, track smart money, analyze wallets, monitor markets, and prevent rug pulls in real time.
 
-> 🧠 **One MCP endpoint. 201 tools. Zero API keys to start.**
+> 🧠 **One MCP endpoint. 210 tools. Zero API keys to start.**
 
 Every tool offers **free trials** (1–5 calls) with no signup. Connect a wallet for bonus calls, or pay per call for unlimited access via **8 payment facilitators** across 6+ chains.
 
 ### 🎯 Why RMI?
 
-| 🛡️ Security | 🧠 Intelligence | 📊 Market | 🔬 Analysis |
-|:---|:---|:---|:---|
-| 20 scam & rug-pull detection tools | 18 smart-money & insider tracking tools | 15 real-time market & DeFi tools | 8 wallet & forensic analysis tools |
-| Honeypot detection, MEV alerts, wash trading | Whale tracking, KOL scoring, alpha feeds | Trending tokens, yield scanners, arb | PnL, portfolio aggregation, TX decode |
+|| 🛡️ Security | 🧠 Intelligence | 📊 Market | 🔬 Analysis |
+||:---|:---|:---|:---|
+|| 29 core + 9 SENTINEL = 38 total | 27 tools | 15 tools | 14 tools |
+|| Honeypot detection, MEV alerts, SENTINEL scan | Whale tracking, KOL scoring, alpha feeds | Trending tokens, yield scanners, arb | PnL, portfolio, correlation, tax |
 
-| 🐦 Social | 🚀 Launch | 🖼️ NFT | 💎 Premium |
-|:---|:---|:---|:---|
-| 6 sentiment & Twitter tools | 3 launchpad & airdrop tools | 2 NFT analysis tools | 3 deep-forensic bundles |
-| Spike detection, meme vibes | Presale intel, airdrop finder | Collection health, snipe alerts | OSINT hunts, full investigation reports |
+|| 🐦 Social | 🚀 Launch | 💎 Premium | 💸 DeFi |
+||:---|:---|:---|:---|
+|| 11 tools | 7 tools | 7 tools | 4 tools |
+|| Spike detection, meme vibes, Discord/TG/Reddit | Presale intel, airdrop finder, IDO tracker | OSINT hunts, deep forensics, whale network | Yield aggregator, impermanent loss |
 
-Plus **40+ API tools** and **40+ chain-variant tools** for multi-chain coverage.
+Plus **80 per-chain variants** for multi-chain coverage and **4 bundle endpoints**.
 
 ---
 
 ## 🗂️ Tool Categories at a Glance
 
-| Category | Count | Highlights |
-|:---|:---:|:---|
-| 🔐 Security | 20 | `honeypot_check` · `rugshield` · `sniper_detect` · `rug_pull_predictor` · `bundler_detect` · `wash_trading` · `liquidity_migration` · `mev_alert` · `anomaly` · `risk_monitor` |
-| 🧠 Intelligence | 18 | `smartmoney` · `whale` · `whale_scan` · `insider` · `insider_network` · `syndicate_scan` · `copy_trade_finder` · `kol_performance` · `alpha_digest` · `smart_money_alpha` |
-| 📈 Market | 15 | `pulse` · `trending_tokens` · `liquidity_depth` · `yield_scanner` · `dex_activity` · `arbitrage_scan` · `chain_health` · `market_sectors` · `unlock_calendar` |
-| 🔬 Analysis | 8 | `wallet` · `wallet_pnl` · `portfolio_aggregate` · `forensics` · `tx_decoder` · `token_comparison` · `portfolio_tracker` |
-| 🐦 Social | 6 | `sentiment` · `sentiment_spike` · `tw_profile` · `tw_timeline` · `tw_search` · `meme_vibe_score` |
-| 🚀 Launchpad | 3 | `launch` · `launch_intel` · `airdrop_finder` |
-| 💎 Premium | 3 | `forensic_valuation` · `osint_identity_hunt` · `investigation_report` |
-| 💸 DeFi | 2 | `defi_yield_scanner` · `protocol_research` |
-| 🖼️ NFT | 2 | `nft_health` · `nft_snipe` |
-| 📦 Bundles | 4 | `security_bundle` · `intelligence_bundle` · `market_bundle` · `full_audit_bundle` |
-| 🔌 API | 40+ | Multi-format adapters — OpenAI, Anthropic, Gemini, LangChain |
-| 🔄 Variants | 40+ | Chain-specific overrides for 13 blockchains |
+|| Category | Count | Highlights ||
+||:---|:---:|:---|
+|| 🔐 Security | 29 + 9 SENTINEL = 38 | `honeypot_check` · `rugshield` · `sniper_detect` · `rug_pull_predictor` · `bundler_detect` · `wash_trading` · `sentinel_scan` · `holder_analysis` · `bundle_detect` · `dev_reputation` |
+|| 🧠 Intelligence | 27 | `smartmoney` · `whale` · `whale_scan` · `insider` · `insider_network` · `syndicate_scan` · `copy_trade_finder` · `cross_chain_whale` · `wallet_label_registry` · `degen_score` |
+|| 📈 Market | 15 | `pulse` · `trending_tokens` · `liquidity_depth` · `yield_scanner` · `dex_activity` · `arbitrage_scan` · `chain_health` · `funding_rate` · `options_flow` · `liquidation_heatmap` |
+|| 🔬 Analysis | 14 | `wallet` · `wallet_pnl` · `portfolio_tracker` · `forensics` · `token_comparison` · `correlation_matrix` · `drawdown_analyzer` · `sharpe_ratio_calc` · `volume_profile` |
+|| 🐦 Social | 11 | `sentiment` · `sentiment_spike` · `tw_profile` · `tw_timeline` · `tw_search` · `meme_vibe_score` · `telegram_pump_detect` · `discord_alpha` · `reddit_sentiment` · `influencer_impact_score` |
+|| 🚀 Launchpad | 7 | `launch` · `launch_intel` · `airdrop_finder` · `presale_scanner` · `ido_tracker` · `fair_launch_detect` · `vesting_schedule_analyzer` |
+|| 💎 Premium | 7 | `forensic_valuation` · `osint_identity_hunt` · `investigation_report` · `deep_forensics` · `whale_network_map` · `cross_chain_trace` · `full_wallet_dossier` |
+|| 💸 DeFi | 4 | `defi_yield_scanner` · `yield_aggregator` · `impermanent_loss` · `protocol_risk` |
+|| 🖼️ NFT | 2 | `nft_health` · `nft_floor_analytics` |
+|| 📦 Bundles | 4 | `security_pack` · `intelligence_pack` · `market_bundle` · `forensic_pack` |
+|| 🔌 API | 2 | `catalog` · `mcp-proxy` · `human-execute` |
+|| 🔄 Variants | 80 | Per-chain overrides for top tools across Solana, Base, Ethereum, BSC |
 
 ### 🌐 Supported Blockchains
 
@@ -113,7 +113,7 @@ pip install rug-munch-intelligence-mcp
 }
 ```
 
-3. Restart Claude Desktop — you'll see **201 tools** available.
+3. Restart Claude Desktop — you'll see **210 tools** available.
 
 > 💡 **No API key needed.** Free trials start automatically.
 
@@ -155,7 +155,16 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 
 ### Raw HTTP (No Install Needed)
 
-Call any tool directly — works with any language or HTTP client:
+Call any tool directly — works with any language or HTTP client. Six discovery endpoints are available:
+
+| Endpoint | Format | Description |
+|:---|:---|:---|
+| `GET /api/v1/x402-tools/discovery` | x402 v2 | Full x402 protocol discovery with tool metadata |
+| `GET /api/v1/x402-tools/catalog` | JSON | Human-readable organized tool catalog |
+| `GET /api/v1/x402-tools/openai-tools` | OpenAI | OpenAI function calling format (210 tools) |
+| `GET /api/v1/x402-tools/anthropic-tools` | Anthropic | Anthropic tool use format (210 tools) |
+| `GET /api/v1/x402-tools/gemini-tools` | Gemini | Google Gemini function declarations (210 tools) |
+| `GET /api/v1/x402-tools/langchain-tools` | LangChain | LangChain tool schema format (210 tools) |
 
 ```bash
 # List all tools in OpenAI function format
@@ -169,6 +178,9 @@ curl https://rugmunch.io/api/v1/x402-tools/gemini-tools
 
 # LangChain format
 curl https://rugmunch.io/api/v1/x402-tools/langchain-tools
+
+# x402 v2 protocol discovery
+curl https://rugmunch.io/api/v1/x402-tools/discovery
 
 # Call a specific tool
 curl -X POST https://rugmunch.io/api/v1/x402-tools/honeypot_check \
@@ -278,7 +290,7 @@ Connecting a wallet unlocks **bonus free calls** (+3 per tool) and is required f
 │                  (Thin wrapper · this package)                      │
 │  ┌─────────────────────────────────────────────────────────────┐   │
 │  │  • Protocol translation (MCP ↔ HTTP)                         │   │
-│  │  • Tool registration (201 tools)                            │   │
+│  │  • Tool registration (210 tools)                            │   │
 │  │  • Request routing & response formatting                     │   │
 │  └─────────────────────────────┬───────────────────────────────┘   │
 └────────────────────────────────┼────────────────────────────────────┘
@@ -290,7 +302,7 @@ Connecting a wallet unlocks **bonus free calls** (+3 per tool) and is required f
 │                    ⚡ RMI BACKEND (FastAPI)                         │
 │                  13 Blockchain Connectors                           │
 │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐             │
-│  │ 🔐 Sec   │ │ 🧠 Intel │ │ 📈 Market│ │ 🐦 Social│  ...×201   │
+│  │ 🔐 Sec   │ │ 🧠 Intel │ │ 📈 Market│ │ 🐦 Social│  ...×210   │
 │  │  20 tools │ │  18 tools│ │  15 tools│ │   6 tools│             │
 │  └──────────┘ └──────────┘ └──────────┘ └──────────┘             │
 │  ┌──────────────────────────────────────────────────────────────┐  │

@@ -8,11 +8,11 @@
 
 ### What is Rug Munch Intelligence?
 
-Rug Munch Intelligence (RMI) is an AI-powered crypto security platform that provides **201 tools** across **13 blockchains** for scam detection, rug pull prevention, wallet forensics, whale tracking, contract auditing, and market analysis. It's built for AI agents via the Model Context Protocol (MCP) and accessible to humans through our web platform.
+Rug Munch Intelligence (RMI) is an AI-powered crypto security platform that provides **210 tools** across **13 blockchains** for scam detection, rug pull prevention, wallet forensics, whale tracking, contract auditing, and market analysis. It's built for AI agents via the Model Context Protocol (MCP) and accessible to humans through our web platform.
 
 ### What is MCP?
 
-The **Model Context Protocol** is an open standard that allows AI assistants (like Claude, Cursor, Windsurf, ChatGPT) to discover and call external tools. RMI implements MCP so any MCP-compatible agent can use our 201 crypto intelligence tools directly.
+The **Model Context Protocol** is an open standard that allows AI assistants (like Claude, Cursor, Windsurf, ChatGPT) to discover and call external tools. RMI implements MCP so any MCP-compatible agent can use our 210 crypto intelligence tools directly.
 
 ### How do I connect RMI to my AI assistant?
 
@@ -48,7 +48,39 @@ We support **13 chains**: Solana, Base, Ethereum, BSC (BNB Chain), Arbitrum, Opt
 
 ### How many tools are available?
 
-**201 tools** across 13 categories: Security (20), Intelligence (18), Market (15), Analysis (8), Social (6), Launch (3), Premium (3), DeFi (2), NFT (2), API (40+), Bundle (4), and Variant (40+).
+**210 tools** across multiple categories: Security (29 + 9 SENTINEL), Intelligence (27), Market (15), Analysis (14), Social (11), Launchpad (7), Premium (7), DeFi (4), NFT (2), Bundles (4), API (3), and Variants (80 per-chain).
+
+### What endpoint formats are available?
+
+Six discovery and tool-format endpoints are available:
+
+| Endpoint | Format | Description |
+|:---|:---|:---|
+| `GET /api/v1/x402-tools/discovery` | x402 v2 | Full x402 protocol discovery with payment metadata |
+| `GET /api/v1/x402-tools/catalog` | JSON | Human-readable organized tool catalog |
+| `GET /api/v1/x402-tools/openai-tools` | OpenAI | OpenAI function calling format (210 tools) |
+| `GET /api/v1/x402-tools/anthropic-tools` | Anthropic | Anthropic tool use format (210 tools) |
+| `GET /api/v1/x402-tools/gemini-tools` | Gemini | Google Gemini function declarations (210 tools) |
+| `GET /api/v1/x402-tools/langchain-tools` | LangChain | LangChain tool schema format (210 tools) |
+
+All return the same 210 tools in their respective formats.
+
+### What are the SENTINEL modules?
+
+SENTINEL is our deep scanning suite — 9 specialized modules that can run individually ($0.05–$0.08 each) or as a full parallel scan ($0.15):
+
+| Module | Price | Description |
+|:---|:---|:---|
+| `holder_analysis` | $0.05 | HHI concentration, fake diversification detection |
+| `bundle_detect` | $0.08 | Bundle/sniper detection, funding chain analysis |
+| `exchange_fund_check` | $0.05 | CEX-funded wallet detection |
+| `liquidity_verify` | $0.05 | Lock verification, fake locker detection |
+| `dev_reputation` | $0.05 | Serial rugg detection, cross-chain dev tracking |
+| `wash_trading` (SENTINEL) | $0.08 | Circular transfer detection, cross-DEX loops |
+| `metadata_fingerprint` | $0.05 | HTML structure hashing, description similarity |
+| `pumpfun_analysis` | $0.08 | Bonding curve, bot detection (Solana only) |
+| `sentiment_check` | $0.05 | Social sentiment scoring, bot campaign detection |
+| `sentinel_scan` (all 9) | $0.15 | Full parallel deep scan with graded risk score |
 
 ---
 
