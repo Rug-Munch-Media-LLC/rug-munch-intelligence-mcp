@@ -477,6 +477,7 @@ def build_402_response(tool_id: str, client_id: str = "") -> JSONResponse:
         "error": "PAYMENT-SIGNATURE header is required",
         "resource": resource,
         "accepts": accepts,
+        "extensions": {"bazaar": bazaar},
     }
     payment_required_b64 = _base64.b64encode(
         json.dumps(payment_required_header_obj, separators=(",", ":")).encode()
