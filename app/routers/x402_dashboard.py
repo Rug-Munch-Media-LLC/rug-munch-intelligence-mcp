@@ -104,7 +104,7 @@ async def _sync_spent_tx_to_supabase():
                     continue
                 try:
                     data = json.loads(r.get(key))
-                    tool = "unknown"  # Not stored in spent_tx, derive later
+                    tool = data.get("tool", "unknown")
                     amount_atoms = data.get("amount", "0")
                     chain = data.get("chain", "unknown")
                     payer = data.get("payer", "unknown")

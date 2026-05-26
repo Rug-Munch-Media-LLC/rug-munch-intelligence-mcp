@@ -102,6 +102,26 @@ app.include_router(x402_forensic_router)
 app.include_router(x402_tools_router)
 app.include_router(x402_dashboard_router)
 
+# ── security.txt (RFC 9116) ──
+SECURITY_TXT = """Contact: admin@rugmunch.io
+Preferred-Languages: en
+Canonical: https://cryptorugmunch.com/.well-known/security.txt
+Canonical: https://rugmunch.io/.well-known/security.txt
+
+This policy outlines the vulnerability disclosure process for Rug Munch Media.
+We encourage responsible disclosure of security vulnerabilities.
+
+Expected response time: 48 hours
+Please report security issues to admin@rugmunch.io
+"""
+
+@app.get("/.well-known/security.txt")
+@app.get("/security.txt")
+async def security_txt():
+    return Response(content=SECURITY_TXT.strip(), media_type="text/plain", headers={
+        "Cache-Control": "max-age=3600",
+    })
+
 # ── App startup: facilitators, x402_payments Supabase, gateways ──
 @app.on_event("startup")
 async def _startup():
