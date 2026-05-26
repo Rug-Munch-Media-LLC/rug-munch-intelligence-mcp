@@ -18,7 +18,7 @@ from mcp.server.fastmcp import FastMCP
 # Configuration — NO secrets, only public endpoints
 # ---------------------------------------------------------------------------
 
-API_BASE = os.environ.get("RUG_MUNCH_API_BASE", "https://rugmunch.io/api/v1")
+API_BASE = os.environ.get("RUG_MUNCH_API_BASE", "https://mcp.rugmunch.io/api/v1")
 API_KEY = os.environ.get("RUG_MUNCH_API_KEY", "")
 
 SUPPORTED_CHAINS = ["base", "solana", "ethereum", "bsc", "arbitrum", "optimism", "polygon"]

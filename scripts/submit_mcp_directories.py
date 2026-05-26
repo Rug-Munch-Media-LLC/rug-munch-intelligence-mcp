@@ -14,8 +14,8 @@ BRIGHTDATA_PROXY = {
 
 SERVER_INFO = {
     "name": "Rug Munch Intelligence",
-    "url": "https://rugmunch.io/mcp",
-    "discovery": "https://rugmunch.io/.well-known/mcp.json",
+    "url": "https://mcp.rugmunch.io/mcp",
+    "discovery": "https://mcp.rugmunch.io/.well-known/mcp.json",
     "github": "https://github.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp",
     "website": "https://rugmunch.io",
     "docs": "https://rugmunch.io/docs/mcp",

@@ -106,7 +106,7 @@ pip install rug-munch-intelligence-mcp
       "command": "python3",
       "args": ["-m", "rug_munch_mcp"],
       "env": {
-        "RUG_MUNCH_API_BASE": "https://rugmunch.io/api/v1"
+        "RUG_MUNCH_API_BASE": "https://mcp.rugmunch.io/api/v1"
       }
     }
   }
@@ -128,7 +128,7 @@ Add to your `.cursor/mcp.json` in your project root:
       "command": "python3",
       "args": ["-m", "rug_munch_mcp"],
       "env": {
-        "RUG_MUNCH_API_BASE": "https://rugmunch.io/api/v1"
+        "RUG_MUNCH_API_BASE": "https://mcp.rugmunch.io/api/v1"
       }
     }
   }
@@ -146,7 +146,7 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
       "command": "python3",
       "args": ["-m", "rug_munch_mcp"],
       "env": {
-        "RUG_MUNCH_API_BASE": "https://rugmunch.io/api/v1"
+        "RUG_MUNCH_API_BASE": "https://mcp.rugmunch.io/api/v1"
       }
     }
   }
@@ -168,22 +168,22 @@ Call any tool directly — works with any language or HTTP client. Six discovery
 
 ```bash
 # List all tools in OpenAI function format
-curl https://rugmunch.io/api/v1/x402-tools/openai-tools
+curl https://mcp.rugmunch.io/api/v1/x402-tools/openai-tools
 
 # Anthropic format
-curl https://rugmunch.io/api/v1/x402-tools/anthropic-tools
+curl https://mcp.rugmunch.io/api/v1/x402-tools/anthropic-tools
 
 # Google Gemini format
-curl https://rugmunch.io/api/v1/x402-tools/gemini-tools
+curl https://mcp.rugmunch.io/api/v1/x402-tools/gemini-tools
 
 # LangChain format
-curl https://rugmunch.io/api/v1/x402-tools/langchain-tools
+curl https://mcp.rugmunch.io/api/v1/x402-tools/langchain-tools
 
 # x402 v2 protocol discovery
-curl https://rugmunch.io/api/v1/x402-tools/discovery
+curl https://mcp.rugmunch.io/api/v1/x402-tools/discovery
 
 # Call a specific tool
-curl -X POST https://rugmunch.io/api/v1/x402-tools/honeypot_check \
+curl -X POST https://mcp.rugmunch.io/api/v1/x402-tools/honeypot_check \
   -H "Content-Type: application/json" \
   -d '{"address": "0x...", "chain": "ethereum"}'
 ```
@@ -196,7 +196,7 @@ Point any MCP client at our endpoint:
 https://rugmunch.io/mcp
 ```
 
-Discovery: `https://rugmunch.io/.well-known/mcp.json`
+Discovery: `https://mcp.rugmunch.io/.well-known/mcp.json`
 
 ---
 
@@ -334,8 +334,8 @@ Connecting a wallet unlocks **bonus free calls** (+3 per tool) and is required f
 | 🌐 Website | [rugmunch.io](https://rugmunch.io) |
 | 📖 MCP Docs | [rugmunch.io/docs/mcp](https://rugmunch.io/docs/mcp) |
 | 🔗 MCP Endpoint | [rugmunch.io/mcp](https://rugmunch.io/mcp) |
-| 🔍 MCP Discovery | [rugmunch.io/.well-known/mcp.json](https://rugmunch.io/.well-known/mcp.json) |
-| 💳 x402 Discovery | [rugmunch.io/.well-known/x402](https://rugmunch.io/.well-known/x402) |
+| 🔍 MCP Discovery | [rugmunch.io/.well-known/mcp.json](https://mcp.rugmunch.io/.well-known/mcp.json) |
+| 💳 x402 Discovery | [rugmunch.io/.well-known/x402](https://mcp.rugmunch.io/.well-known/x402) |
 | 📦 GitHub | [github.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp](https://github.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp) |
 | 🛠️ Smithery | [smithery.ai/server/@cryptorugmuncher/rug-munch-intelligence](https://smithery.ai/server/@cryptorugmuncher/rug-munch-intelligence) |
 | 🪞 Glama | [glama.ai/mcp/servers/@cryptorugmuncher/rug-munch-intelligence](https://glama.ai/mcp/servers/@cryptorugmuncher/rug-munch-intelligence) |
