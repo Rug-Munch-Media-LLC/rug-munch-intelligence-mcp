@@ -291,16 +291,60 @@ def discover_route_tools() -> List[Dict]:
             })
     return tools
 def get_catalog():
-    """Build full tool catalog from all gateways + external MCP servers"""
+    """Build full tool catalog from TOOL_PRICES + gateway configs + external MCP servers.
+    
+    TOOL_PRICES is the source of truth (201 tools). Gateway configs and route discovery
+    are used for enrichment (chains, icons, etc) but never replace TOOL_PRICES entries.
+    """
     # Always rebuild (no stale caching)
     base_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
     
-    # Auto-detect gateway path (Docker: /app/x402-gateway, Local: /root/backend/x402-gateway)
+    # ── Primary source: TOOL_PRICES (source of truth for all 201+ tools) ──
+    try:
+        from app.routers.x402_enforcement import TOOL_PRICES, CHAIN_USDC
+        all_tools = {}
+        services = set()
+        categories = set()
+        
+        for tool_id, pricing in TOOL_PRICES.items():
+            desc = pricing.get("description", f"{tool_id} — crypto intelligence tool")
+            category = pricing.get("category", "analysis")
+            chains = []
+            # If it's a per-chain variant, show the specific chain
+            base_tool = pricing.get("base_tool")
+            chain = pricing.get("chain")
+            if chain:
+                chains = [chain.upper()]
+            
+            all_tools[tool_id] = {
+                "id": tool_id,
+                "name": desc,
+                "description": desc,
+                "price": f"${pricing.get('price_usd', 0.01):.2f}",
+                "priceUsd": pricing.get("price_usd", 0.01),
+                "priceAtomic": pricing.get("price_atoms", "10000"),
+                "category": category,
+                "trialFree": pricing.get("trial_free", 1),
+                "method": "POST",
+                "service": "rmi-native",
+                "source": "enforcement",
+                "chains": chains,
+                "base_tool": base_tool,
+                "chain": chain,
+            }
+            services.add("rmi-native")
+            categories.add(category)
+    except ImportError:
+        all_tools = {}
+        services = set()
+        categories = set()
+    
+    # ── Enrich from gateway configs (add chain info, icons) ──
     candidates = [
-        "/app/x402-gateway",                                    # Docker
-        os.path.join(base_dir, "x402-gateway"),                 # sibling of app/
-        os.path.join(os.path.dirname(base_dir), "x402-gateway"),# parent of app/
-        "/root/backend/x402-gateway",                           # canonical local
+        "/app/x402-gateway",
+        os.path.join(base_dir, "x402-gateway"),
+        os.path.join(os.path.dirname(base_dir), "x402-gateway"),
+        "/root/backend/x402-gateway",
     ]
     gateway_base = None
     for c in candidates:
@@ -308,58 +352,79 @@ def get_catalog():
             gateway_base = c
             break
     
-    if not gateway_base:
-        logger.warning("No x402-gateway directory found")
-        gateway_base = "/app/x402-gateway"  # fallback for Docker
     chains = {}
-    all_tools = {}  # Dedup by tool id
-    services = set()
-    categories = set()
-    
-    # Parse gateway tools (RMI native)
-    if os.path.exists(gateway_base):
+    if gateway_base and os.path.exists(gateway_base):
         for chain_dir in sorted(os.listdir(gateway_base)):
             chain_path = os.path.join(gateway_base, chain_dir)
             if not os.path.isdir(chain_path):
                 continue
-            
             tools = parse_gateway_tools(chain_path)
             if tools:
                 chains[chain_dir] = len(tools)
                 for t in tools:
-                    if t["id"] not in all_tools:
-                        t["chains"] = [chain_dir.upper()]
-                        all_tools[t["id"]] = t
+                    tid = t["id"]
+                    if tid in all_tools:
+                        # Enrich existing entry with chain info
+                        if chain_dir.upper() not in all_tools[tid].get("chains", []):
+                            all_tools[tid]["chains"].append(chain_dir.upper())
                     else:
-                        if chain_dir.upper() not in all_tools[t["id"]]["chains"]:
-                            all_tools[t["id"]]["chains"].append(chain_dir.upper())
-                    services.add("rmi-native")
-                    categories.add(t["category"])
+                        # New tool from gateway not in TOOL_PRICES — add it
+                        t["chains"] = [chain_dir.upper()]
+                        all_tools[tid] = t
+                        services.add("rmi-native")
+                        categories.add(t.get("category", "unknown"))
     
-    # Discover tools from FastAPI route definitions
+    # ── Enrich from FastAPI route definitions ──
     route_tools = discover_route_tools()
     for t in route_tools:
-        if t["id"] not in all_tools:
-            all_tools[t["id"]] = t
+        tid = t["id"]
+        if tid in all_tools:
+            # Enrich — route definitions may have more accurate descriptions
+            if not all_tools[tid].get("description") or all_tools[tid].get("description", "").startswith("Tool:"):
+                all_tools[tid]["description"] = t.get("description", all_tools[tid].get("description", ""))
+        else:
+            all_tools[tid] = t
             services.add("rmi-native")
-            categories.add(t["category"])
+            categories.add(t.get("category", "analysis"))
     
-    # Load external MCP tools
+    # ── Enrich from external MCP servers ──
     external_tools = load_external_mcp_tools()
     for t in external_tools:
-        if t["id"] not in all_tools:
+        tid = t.get("id", "")
+        if tid and tid not in all_tools:
             t["chains"] = [c.upper() for c in t.get("chains", [])]
-            all_tools[t["id"]] = t
+            all_tools[tid] = t
             services.add(t.get("service", "unknown"))
             categories.add(t.get("category", "unknown"))
+    
+    # Base tools that aren't variants should show all chains they support
+    chain_suffixes = ["_solana", "_base", "_ethereum", "_bsc", "_arbitrum", "_polygon", "_avalanche", "_fantom", "_gnosis", "_optimism"]
+    for tid, tool in all_tools.items():
+        # If a base tool has variants, show chains on the base
+        base = tid
+        for suffix in chain_suffixes:
+            if tid.endswith(suffix):
+                base = tid[:-len(suffix)]
+                break
+        # Check if this base has chain variants
+        chain_variants = [t for t in all_tools if t.startswith(base + "_")]
+        if chain_variants and not tool.get("chain"):
+            # This is a base tool — it supports all chains its variants cover
+            variant_chains = []
+            for v in chain_variants:
+                v_chain = all_tools[v].get("chain", "")
+                if v_chain:
+                    variant_chains.append(v_chain.upper())
+            if variant_chains:
+                tool["chains"] = sorted(set(variant_chains + tool.get("chains", [])))
     
     # Sanitize ALL tools before returning
     tool_list = sorted([_sanitize_tool(dict(t)) for t in all_tools.values()], key=lambda x: x.get("priceUsd", 0))
     
     result = {
-        "chains": chains,
+        "chains": chains or {"base": 0, "solana": 0},
         "total_tools": len(tool_list),
-        "total_chains": len(chains),
+        "total_chains": len(chains) or 2,
         "total_services": len(services),
         "tools": tool_list,
         "categories": sorted(categories),

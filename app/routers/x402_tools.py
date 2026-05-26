@@ -2765,95 +2765,90 @@ async def tools_catalog_bot():
 
 # ── OpenAI-Compatible Tools Endpoint ───────────────────────────
 
+async def _build_tools_from_catalog():
+    """Build tool list from TOOL_PRICES (source of truth for all 201+ tools)."""
+    from app.routers.x402_enforcement import TOOL_PRICES
+    tools = []
+    for tool_id, pricing in sorted(TOOL_PRICES.items()):
+        desc = pricing.get("description", f"{tool_id} — crypto intelligence tool")
+        category = pricing.get("category", "analysis")
+        chain = pricing.get("chain")
+        base_tool = pricing.get("base_tool")
+        is_variant = bool(chain)
+        tools.append({
+            "id": tool_id,
+            "description": desc,
+            "price_usd": pricing.get("price_usd", 0.01),
+            "category": category,
+            "chain": chain,
+            "base_tool": base_tool,
+            "is_variant": is_variant,
+            "trial_free": pricing.get("trial_free", 1),
+        })
+    return tools
+
 @router.get("/openai-tools")
 async def openai_tools():
-    """Returns tool definitions in OpenAI function calling format.
-    Use this with OpenAI Agents SDK or GPT-4o function calling."""
-    from app.mcp.x402_mcp_server import get_openai_tools
-    tools = await get_openai_tools()
+    """Returns ALL 201+ tool definitions in OpenAI function calling format.
+    Use this with OpenAI Agents SDK or GPT-4o function calling.
+    Each tool maps to POST /api/v1/x402-tools/{tool_name} with x402 payment."""
+    raw_tools = await _build_tools_from_catalog()
+    openai_tools = []
+    for t in raw_tools:
+        openai_tools.append({
+            "type": "function",
+            "function": {
+                "name": t["id"],
+                "description": f'{t["description"]} — ${t["price_usd"]:.2f}/call, {t["trial_free"]} free trial(s). Category: {t["category"]}.',
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "address": {"type": "string", "description": f"Token or wallet address to analyze with {t['id']}"},
+                        "chain": {"type": "string", "description": "Blockchain: solana, base, ethereum, bsc. Default: solana", "default": "solana"},
+                    },
+                    "required": ["address"],
+                },
+            },
+        })
     return {
         "service": "Rug Munch Intelligence",
         "tagline": "We build tools to keep the crypto space safer",
+        "total_tools": len(openai_tools),
         "followers_x": "67,000+",
         "telegram_users": "7,000+",
-        "networks": ["base", "solana"],
+        "networks": ["base", "solana", "ethereum", "bsc", "arbitrum", "polygon", "avalanche", "fantom", "gnosis", "optimism", "tron", "bitcoin", "sepa"],
         "protocol": "x402",
         "payment_required": True,
-        "tools": tools
+        "tools": openai_tools,
     }
 
 # ── LangChain Tools Endpoint ────────────────────────────────────
 
 @router.get("/langchain-tools")
 async def langchain_tools():
-    """Returns tool definitions in LangChain format.
+    """Returns ALL 201+ tool definitions in LangChain format.
     Use with LangChain agents, LangGraph, or any LangChain-based system."""
-    from app.mcp.x402_mcp_server import get_openai_tools
-    tools = await get_openai_tools()
-    # Convert OpenAI format to LangChain format
+    raw_tools = await _build_tools_from_catalog()
     langchain_tools = []
-    for t in tools:
-        fn = t["function"]
-        name = fn["name"]
-        # Map name to endpoint
-        endpoint_map = {
-            "audit": "/api/v1/x402-tools/audit",
-            "wallet": "/api/v1/x402-tools/wallet",
-            "smart_money_tracker": "/api/v1/x402-tools/smartmoney",
-            "launch_radar": "/api/v1/x402-tools/launch",
-            "rug_shield": "/api/v1/x402-tools/rugshield",
-            "social_sentiment_radar": "/api/v1/x402-tools/sentiment",
-            "social_sentiment": "/api/v1/x402-tools/sentiment",
-            "cluster_detection": "/api/v1/x402-tools/cluster",
-            "insider_tracker": "/api/v1/x402-tools/insider",
-            "url_scam_detector": "/api/v1/x402-tools/urlcheck",
-            "token_pulse": "/api/v1/x402-tools/pulse",
-            "twitter_profile": "/api/v1/x402-tools/tw_profile",
-            "twitter_timeline": "/api/v1/x402-tools/tw_timeline",
-            "twitter_search": "/api/v1/x402-tools/tw_search",
-            "token_forensics": "/api/v1/x402-tools/forensics",
-            "whale_decoder": "/api/v1/x402-tools/whale",
-            "launch_intel": "/api/v1/x402-tools/launch_intel",
-            "anomaly_detector": "/api/v1/x402-tools/anomaly",
-            "social_signal": "/api/v1/x402-tools/social_signal",
-            "market_overview": "/api/v1/x402-tools/market_overview",
-            "token_deep_dive": "/api/v1/x402-tools/token_deep_dive",
-            "chain_health": "/api/v1/x402-tools/chain_health",
-            "honeypot_check": "/api/v1/x402-tools/honeypot_check",
-            "portfolio_tracker": "/api/v1/x402-tools/portfolio_tracker",
-            "copy_trade_finder": "/api/v1/x402-tools/copy_trade_finder",
-            "token_comparison": "/api/v1/x402-tools/token_comparison",
-            "risk_monitor": "/api/v1/x402-tools/risk_monitor",
-            "defi_yield_scanner": "/api/v1/x402-tools/defi_yield_scanner",
-            "nft_wash_detector": "/api/v1/x402-tools/nft_wash_detector",
-            "bridge_security": "/api/v1/x402-tools/bridge_security",
-            "gas_forecast": "/api/v1/x402-tools/gas_forecast",
-            "sniper_alert": "/api/v1/x402-tools/sniper_alert",
-            "liquidity_flow": "/api/v1/x402-tools/liquidity_flow",
-            "rug_pull_predictor": "/api/v1/x402-tools/rug_pull_predictor",
-            "airdrop_finder": "/api/v1/x402-tools/airdrop_finder",
-            "mev_protection": "/api/v1/x402-tools/mev_protection",
-        }
-        # Determine method
-        get_tools = ["smart_money_tracker", "smartmoney", "launch_radar", "launch", "market_overview", "chain_health", "copy_trade_finder", "defi_yield_scanner", "bridge_security", "gas_forecast", "sniper_alert", "airdrop_finder", "anomaly_detector", "launch_intel", "mev_protection"]
-        method = "GET" if name in get_tools else "POST"
-        endpoint = endpoint_map.get(name, f"/api/v1/x402-tools/{name}")
-        
+    for t in raw_tools:
         langchain_tools.append({
-            "name": name,
-            "description": fn["description"],
-            "args_schema": fn["parameters"]["properties"],
-            "required": fn["parameters"].get("required", []),
-            "endpoint": endpoint,
-            "method": method
+            "name": t["id"],
+            "description": f'{t["description"]} — ${t["price_usd"]:.2f}/call, {t["trial_free"]} free trial(s). Category: {t["category"]}.',
+            "args_schema": {
+                "address": {"type": "string", "description": f"Token or wallet address to analyze with {t['id']}"},
+                "chain": {"type": "string", "description": "Blockchain: solana, base, ethereum, bsc. Default: solana", "default": "solana"},
+            },
+            "required": ["address"],
+            "endpoint": f"/api/v1/x402-tools/{t['id']}",
+            "method": "POST",
         })
-    
     return {
         "service": "Rug Munch Intelligence",
         "tagline": "We build tools to keep the crypto space safer",
+        "total_tools": len(langchain_tools),
         "followers_x": "67,000+",
         "telegram_users": "7,000+",
-        "networks": ["base", "solana"],
+        "networks": ["base", "solana", "ethereum", "bsc", "arbitrum", "polygon", "avalanche", "fantom", "gnosis", "optimism", "tron", "bitcoin", "sepa"],
         "protocol": "x402",
         "format": "langchain",
         "usage": "pip install langchain && use with create_react_agent or LangGraph",
@@ -2865,24 +2860,30 @@ async def langchain_tools():
 
 @router.get("/anthropic-tools")
 async def anthropic_tools():
-    """Returns tool definitions in Anthropic Claude API format.
+    """Returns ALL 201+ tool definitions in Anthropic Claude API format.
     Use with Claude API (messages API) for native tool use."""
-    from app.mcp.x402_mcp_server import get_openai_tools
-    tools = await get_openai_tools()
+    raw_tools = await _build_tools_from_catalog()
     anthropic_tools_list = []
-    for t in tools:
-        fn = t["function"]
+    for t in raw_tools:
         anthropic_tools_list.append({
-            "name": fn["name"],
-            "description": fn["description"],
-            "input_schema": fn["parameters"]
+            "name": t["id"],
+            "description": f'{t["description"]} — ${t["price_usd"]:.2f}/call, {t["trial_free"]} free trial(s). Category: {t["category"]}.',
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "address": {"type": "string", "description": f"Token or wallet address to analyze with {t['id']}"},
+                    "chain": {"type": "string", "description": "Blockchain: solana, base, ethereum, bsc. Default: solana", "default": "solana"},
+                },
+                "required": ["address"],
+            },
         })
     return {
         "service": "Rug Munch Intelligence",
         "tagline": "We build tools to keep the crypto space safer",
+        "total_tools": len(anthropic_tools_list),
         "followers_x": "67,000+",
         "telegram_users": "7,000+",
-        "networks": ["base", "solana"],
+        "networks": ["base", "solana", "ethereum", "bsc", "arbitrum", "polygon", "avalanche", "fantom", "gnosis", "optimism", "tron", "bitcoin", "sepa"],
         "protocol": "x402",
         "format": "anthropic_claude_api",
         "usage": "pip install anthropic && use with client.messages.create(tools=...)",
@@ -2894,38 +2895,22 @@ async def anthropic_tools():
 
 @router.get("/gemini-tools")
 async def gemini_tools():
-    """Returns tool definitions in Google Gemini function calling format.
+    """Returns ALL 201+ tool definitions in Google Gemini function calling format.
     Use with Google AI SDK or Vertex AI for Gemini models."""
-    from app.mcp.x402_mcp_server import get_openai_tools
-    tools = await get_openai_tools()
+    raw_tools = await _build_tools_from_catalog()
     gemini_declarations = []
-    for t in tools:
-        fn = t["function"]
-        params = fn["parameters"]
-        # Convert to Gemini format (uppercase types)
-        def convert_type(p):
-            type_map = {"string": "STRING", "number": "NUMBER", "integer": "INTEGER", "boolean": "BOOLEAN", "array": "ARRAY", "object": "OBJECT"}
-            if isinstance(p, dict):
-                new_p = {}
-                for k, v in p.items():
-                    if k == "type":
-                        new_p[k] = type_map.get(v, v)
-                    else:
-                        new_p[k] = v
-                return new_p
-            return p
-        
-        gemini_params = {
-            "type": "OBJECT",
-            "properties": {k: convert_type(v) for k, v in params.get("properties", {}).items()},
-        }
-        if params.get("required"):
-            gemini_params["required"] = params["required"]
-        
+    for t in raw_tools:
         gemini_declarations.append({
-            "name": fn["name"],
-            "description": fn["description"],
-            "parameters": gemini_params
+            "name": t["id"],
+            "description": f'{t["description"]} — ${t["price_usd"]:.2f}/call, {t["trial_free"]} free trial(s). Category: {t["category"]}.',
+            "parameters": {
+                "type": "OBJECT",
+                "properties": {
+                    "address": {"type": "STRING", "description": f"Token or wallet address to analyze with {t['id']}"},
+                    "chain": {"type": "STRING", "description": "Blockchain: solana, base, ethereum, bsc. Default: solana"},
+                },
+                "required": ["address"],
+            },
         })
     
     return {
@@ -2933,7 +2918,8 @@ async def gemini_tools():
         "tagline": "We build tools to keep the crypto space safer",
         "followers_x": "67,000+",
         "telegram_users": "7,000+",
-        "networks": ["base", "solana"],
+        "total_tools": len(gemini_declarations),
+        "networks": ["base", "solana", "ethereum", "bsc", "arbitrum", "polygon", "avalanche", "fantom", "gnosis", "optimism", "tron", "bitcoin", "sepa"],
         "protocol": "x402",
         "format": "google_gemini",
         "usage": "pip install google-genai && use with model.generate_content(tools=...)",

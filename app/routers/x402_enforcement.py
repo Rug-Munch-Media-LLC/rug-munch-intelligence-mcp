@@ -1016,35 +1016,57 @@ async def x402_enforcement_middleware(request: Request, call_next) -> Response:
     if request.method == "OPTIONS":
         return await call_next(request)
     
+    # ── Free endpoints — always accessible, no payment required ──────
+    # These MUST be checked before bot detection so AI agents can discover us.
+    # Discovery/catalog/framework endpoints are useless if bots can't reach them.
+    FREE_GET_PATHS = {
+        "/api/v1/x402-tools/discovery",
+        "/api/v1/x402-tools/frameworks",
+        "/api/v1/x402-tools/openai-tools",
+        "/api/v1/x402-tools/anthropic-tools",
+        "/api/v1/x402-tools/gemini-tools",
+        "/api/v1/x402-tools/langchain-tools",
+        "/api/v1/x402-tools/catalog",
+        "/api/v1/x402-tools/bundles",
+        "/api/v1/x402-tools/payment-methods",
+    }
+    FREE_PATHS = {
+        "/api/v1/x402-tools/discovery",
+        "/api/v1/x402-tools/frameworks",
+        "/api/v1/x402-tools/openai-tools",
+        "/api/v1/x402-tools/anthropic-tools",
+        "/api/v1/x402-tools/gemini-tools",
+        "/api/v1/x402-tools/langchain-tools",
+        "/api/v1/x402-tools/catalog",
+        "/api/v1/x402-tools/bundles",
+        "/api/v1/x402-tools/payment-methods",
+        "/api/v1/x402-tools/human-execute",
+    }
+    # Also exempt all /api/v1/x402/ admin endpoints
+    if path.rstrip("/") in FREE_PATHS or path.startswith("/api/v1/x402/"):
+        return await call_next(request)
+    # GET requests to free paths are always allowed (discovery for agents)
+    if request.method == "GET" and path.rstrip("/") in FREE_GET_PATHS:
+        return await call_next(request)
+    
     # ── Bot / abuse detection ─────────────────────────────────────
+    # Only block bots on PAID tool endpoints, not discovery
     user_agent = (request.headers.get("User-Agent", "") or "").lower()
     
-    # Block known bot/scanner user agents
+    # Block known bot/scanner user agents ONLY on paid endpoints
     BLOCKED_AGENTS = [
-        "python-requests", "python-httpx", "python-urllib",
-        "go-httpclient", "go-resty",
-        "httpclient", "java/", "apachehttpclient",
-        "node-fetch", "node-superagent",
-        "curl/", "wget/", "httpie/",
         "masscan", "nmap", "nikto", "sqlmap", "dirbuster", "gobuster",
         "zgrab", "censysinspect", "cloudflare-speedtest",
     ]
-    if any(bot in user_agent for bot in BLOCKED_AGENTS):
-        # Allow curl/wget/etc for legitimate API use with x-pay header
-        # Also allow human-execute endpoint (wallet-based payment, not x402)
-        is_human_execute = path.rstrip("/").endswith("/human-execute")
-        if not (request.headers.get("x-pay") or request.headers.get("X-Pay") or is_human_execute):
-            return JSONResponse(
-                status_code=403,
-                content={"error": "Automated access requires x402 payment. Use x-pay header or a proper API client.", "docs": "https://rugmunch.io/docs"},
-                headers=SECURITY_HEADERS,
-            )
-    
-    # Block empty user agent (bots trying to evade detection)
-    if not user_agent.strip():
+    # Legitimate API clients (curl, python, etc.) are welcome — just need payment
+    SCANNER_AGENTS = [
+        "masscan", "nmap", "nikto", "sqlmap", "dirbuster", "gobuster",
+        "zgrab", "censysinspect",
+    ]
+    if any(bot in user_agent for bot in SCANNER_AGENTS):
         return JSONResponse(
             status_code=403,
-            content={"error": "User-Agent header required"},
+            content={"error": "Automated access requires x402 payment. Use x-pay header or a proper API client.", "docs": "https://rugmunch.io/docs"},
             headers=SECURITY_HEADERS,
         )
     
@@ -1074,19 +1096,7 @@ async def x402_enforcement_middleware(request: Request, call_next) -> Response:
         except Exception:
             pass  # Don't block on burst tracking errors
     
-    # Free endpoints — no payment required
-    FREE_PATHS = {
-        "/api/v1/x402-tools/discovery",
-        "/api/v1/x402-tools/frameworks",
-        "/api/v1/x402-tools/human-execute",
-        "/api/v1/x402/stats",
-        "/api/v1/x402/trial-status",
-        "/api/v1/x402/dashboard",
-    }
-    # Also exempt all /api/v1/x402/ admin endpoints (refund, receipt, ledger, transparency)
-    if path.rstrip("/") in FREE_PATHS or path.startswith("/api/v1/x402/"):
-        return await call_next(request)
-    
+    # Free paths already checked above — flow continues to paid tool enforcement
     # Extract tool name
     tool_id = path.rstrip("/").split("/")[-1]
     
