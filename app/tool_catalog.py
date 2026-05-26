@@ -190,8 +190,8 @@ def get_bot_catalog() -> Dict[str, Any]:
     return {
         "protocol": "x402",
         "version": "2",
-        "endpoint": "https://api.rugmunch.io/api/v1/x402-tools/{tool_id}",
-        "discovery": "https://api.rugmunch.io/.well-known/x402",
+        "endpoint": "https://mcp.rugmunch.io/api/v1/x402-tools/{tool_id}",
+        "discovery": "https://mcp.rugmunch.io/.well-known/x402",
         "total_tools": len(tools),
         "chains_supported": 13,
         "tools": sorted(tools, key=lambda t: t["category"]),

@@ -208,15 +208,15 @@ def _build_discovery():
             "github": "https://github.com/cryptorugmuncher",
         },
         "homepage": "https://rugmunch.io",
-        "documentation": "https://api.rugmunch.io/docs/mcp",
+        "documentation": "https://mcp.rugmunch.io/docs/mcp",
         "repository": "https://github.com/cryptorugmuncher/rug-munch-intelligence",
-        "endpoint": "https://api.rugmunch.io/mcp",
+        "endpoint": "https://mcp.rugmunch.io/mcp",
         "icon": "https://rugmunch.io/logo.png",
         "transports": ["http"],
         "authentication": {
             "type": "x402",
             "description": f"Pay-per-use. 1-5 free trials per tool. USDC on {len(chains)} chains, USDT, BTC, EUR. Full refund if no data returned.",
-            "discovery_url": "https://api.rugmunch.io/.well-known/x402",
+            "discovery_url": "https://mcp.rugmunch.io/.well-known/x402",
         },
         "capabilities": {"tools": True, "resources": False, "prompts": False},
         "directories": {
@@ -260,7 +260,7 @@ async def ai_plugin_manifest():
         "description_for_human": f"{SERVER_NAME} -- crypto intelligence: scam detection, wallet forensics, whale tracking, contract auditing. {count} tools, {len(data['chains'])} chains.",
         "description_for_model": f"Use for crypto security: check tokens for scams, honeypots, rug pulls. Analyze wallets for PnL, clusters, insider trading. Track whales, smart money, syndicates. Audit smart contracts. Market intelligence: fear & greed, chain health, gas forecasts, DeFi yields, arbitrage. Social signals: Twitter/X sentiment, KOL performance. {count} tools, {len(data['chains'])} chains. Free trials + x402 micropayments.",
         "auth": {"type": "none"},
-        "api": {"type": "openapi", "url": "https://api.rugmunch.io/openapi.json"},
+        "api": {"type": "openapi", "url": "https://mcp.rugmunch.io/openapi.json"},
         "logo_url": "https://rugmunch.io/logo.png",
         "contact_email": "mcp@rugmunch.io",
         "legal_info_url": "https://rugmunch.io/terms",
@@ -284,10 +284,10 @@ async def llms_txt():
 > {len(prices)} crypto intelligence tools. {len(chains)} chains. Free trials + x402 micropayments.
 
 ## Quick Start
-- MCP Endpoint: https://api.rugmunch.io/mcp
-- Discovery: https://api.rugmunch.io/.well-known/mcp
-- Payment: https://api.rugmunch.io/.well-known/x402
-- Docs: https://api.rugmunch.io/docs/mcp
+- MCP Endpoint: https://mcp.rugmunch.io/mcp
+- Discovery: https://mcp.rugmunch.io/.well-known/mcp
+- Payment: https://mcp.rugmunch.io/.well-known/x402
+- Docs: https://mcp.rugmunch.io/docs/mcp
 - GitHub: https://github.com/cryptorugmuncher/rug-munch-intelligence
 
 ## Directory Listings
@@ -309,8 +309,8 @@ async def llms_txt():
 {chain_list}
 
 ## Integration
-curl https://api.rugmunch.io/.well-known/mcp
-curl https://api.rugmunch.io/mcp/tools
+curl https://mcp.rugmunch.io/.well-known/mcp
+curl https://mcp.rugmunch.io/mcp/tools
 """, media_type="text/plain; charset=utf-8")
 
 
