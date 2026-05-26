@@ -52,6 +52,7 @@ from app.helius_tools.helius_whale_watcher import WhaleWatcher
 from app.helius_tools.helius_sniper_detector import SniperDetector
 from app.helius_tools.helius_syndicate_tracker import SyndicateTracker
 from app.free_solscan_client import FreeSolscanClient
+from app.scan_rate_limiter import check_scan_limit, increment_scan_usage, get_identity, is_internal_request, is_x402_paid_request, FREE_DAILY_LIMIT
 from app.degen_security_scanner import DegenSecurityScanner, SecurityReport
 from app.gmgn_client import GMGNClient
 from app.tools_integration import (
@@ -1507,7 +1508,11 @@ async def audit_contract(request: Request, data: dict):
 
 @app.post("/api/v1/token/scan")
 async def scan_token(request: Request, data: dict):
-    """Unified token scanner — ties together all RugMunch intelligence."""
+    """Unified token scanner — ties together all RugMunch intelligence.
+    
+    Freemium: 5 free scans/day (IP-based), then upsell to PRO.
+    Internal (X-RMI-Key) and x402 paid calls bypass limits.
+    """
     token_address = data.get("token_address") or data.get("address")
     chain = data.get("chain", "solana")
     tier = data.get("tier", "free")
@@ -1515,8 +1520,49 @@ async def scan_token(request: Request, data: dict):
     if not token_address:
         raise HTTPException(status_code=400, detail="token_address required")
     
+    # ── Freemium rate limit check ──
+    is_internal = is_internal_request(request)
+    is_paid = is_x402_paid_request(request)
+    identity, identity_type = get_identity(request)
+    limit_check = check_scan_limit(
+        identity=identity,
+        identity_type=identity_type,
+        tier=tier,
+        is_internal=is_internal,
+        is_x402_paid=is_paid,
+    )
+    
+    if not limit_check["allowed"]:
+        return {
+            "status": "limit_reached",
+            "error": "daily_scan_limit_reached",
+            "message": f"You've used your {FREE_DAILY_LIMIT} free scans for today. Upgrade to PRO for 100/day or ELITE for unlimited.",
+            "scans_used": limit_check.get("scans_used", FREE_DAILY_LIMIT),
+            "daily_limit": limit_check.get("daily_limit", FREE_DAILY_LIMIT),
+            "resets_at": limit_check.get("resets_at"),
+            "upgrade": {
+                "url": "https://rugmunch.io/pricing",
+                "tiers": {
+                    "free": {"daily_limit": FREE_DAILY_LIMIT, "price": "$0/mo", "features": ["5 scans/day", "Basic safety score", "DexScreener data"]},
+                    "pro": {"daily_limit": 100, "price": "$29.99/mo", "features": ["100 scans/day", "Full risk analysis", "Honeypot detection", "Mint/freeze authority"]},
+                    "elite": {"daily_limit": "unlimited", "price": "$99.99/mo", "features": ["Unlimited scans", "All 12 SENTINEL modules", "MEV analysis", "Dev reputation"]},
+                    "scan_packs": {"starter": {"price": "$4.99", "scans": 25}},
+                },
+                "x402": "Pay per scan with crypto at /api/v1/x402-tools/sentinel_scan",
+            },
+        }
+    
     from app.token_scanner import scan_token as unified_scan
     scan = await unified_scan(token_address, chain, tier=tier)
+    
+    # Track usage (after successful scan)
+    increment_scan_usage(
+        identity=identity,
+        identity_type=identity_type,
+        tier=tier,
+        is_internal=is_internal,
+        is_x402_paid=is_paid,
+    )
     
     # Auto-feed RAG knowledge base (background, don't block response)
     try:
@@ -1531,6 +1577,18 @@ async def scan_token(request: Request, data: dict):
         }), {"source": "token_scan", "chain": chain, "tier": tier}))
     except: pass
     
+    # Build response with usage info
+    usage_info = {}
+    if not is_internal and not is_paid:
+        usage_info = {
+            "usage": {
+                "scans_today": limit_check.get("remaining", FREE_DAILY_LIMIT) - 1,  # This scan counts
+                "daily_limit": limit_check.get("limit", FREE_DAILY_LIMIT),
+                "remaining": max(0, limit_check.get("remaining", FREE_DAILY_LIMIT) - 1),
+            },
+            "upgrade_hint": "Upgrade to PRO for 100 scans/day — rugmunch.io/pricing" if limit_check.get("remaining", 99) <= 2 else None,
+        }
+    
     return {
         "token": scan.token_address,
         "chain": scan.chain,
@@ -1543,7 +1601,7 @@ async def scan_token(request: Request, data: dict):
         "pro": scan.pro if tier in ("pro", "elite") else None,
         "elite": scan.elite if tier == "elite" else None,
         "scanned_at": scan.scanned_at,
-        "upgrade_message": "Upgrade to PRO for bundle detection, whale tracking, wallet clustering" if tier == "free" else None,
+        **usage_info,
     }
 
 @app.get("/api/v1/token/scan/{token_address}")
@@ -1566,21 +1624,186 @@ async def scan_token_get(request: Request, token_address: str, chain: str = "sol
 
 @app.get("/api/v1/wallet/scan/{address}")
 async def scan_wallet(request: Request, address: str, chain: str = "solana", tier: str = "free"):
-    """Multi-chain wallet scanner — 100+ risk factors."""
+    """Multi-chain wallet scanner — 100+ risk factors. Freemium: 5 free/day."""
+    is_internal = is_internal_request(request)
+    is_paid = is_x402_paid_request(request)
+    identity, identity_type = get_identity(request)
+    limit_check = check_scan_limit(identity=identity, identity_type=identity_type, tier=tier, is_internal=is_internal, is_x402_paid=is_paid)
+    if not limit_check["allowed"]:
+        return JSONResponse(status_code=429, content={"error": "daily_scan_limit_reached", "message": f"Free limit ({FREE_DAILY_LIMIT}/day) reached. Upgrade at rugmunch.io/pricing", "upgrade_url": "https://rugmunch.io/pricing", "resets_at": limit_check.get("resets_at")})
     from app.unified_scanner import scan_wallet as wallet_scan
     result = await wallet_scan(address, chain, tier=tier)
+    increment_scan_usage(identity=identity, identity_type=identity_type, tier=tier, is_internal=is_internal, is_x402_paid=is_paid)
+    if not is_internal and not is_paid:
+        result["usage"] = {"remaining": max(0, limit_check.get("remaining", FREE_DAILY_LIMIT) - 1), "daily_limit": limit_check.get("limit", FREE_DAILY_LIMIT)}
     return result
 
 @app.post("/api/v1/wallet/scan")
 async def scan_wallet_post(request: Request, data: dict):
-    """POST wallet scanner."""
+    """POST wallet scanner. Freemium: 5 free/day."""
     address = data.get("address") or data.get("wallet_address")
     chain = data.get("chain", "solana")
     tier = data.get("tier", "free")
     if not address:
         raise HTTPException(status_code=400, detail="address required")
+    is_internal = is_internal_request(request)
+    is_paid = is_x402_paid_request(request)
+    identity, identity_type = get_identity(request)
+    limit_check = check_scan_limit(identity=identity, identity_type=identity_type, tier=tier, is_internal=is_internal, is_x402_paid=is_paid)
+    if not limit_check["allowed"]:
+        return JSONResponse(status_code=429, content={"error": "daily_scan_limit_reached", "message": f"Free limit ({FREE_DAILY_LIMIT}/day) reached. Upgrade at rugmunch.io/pricing", "upgrade_url": "https://rugmunch.io/pricing", "resets_at": limit_check.get("resets_at")})
     from app.unified_scanner import scan_wallet as wallet_scan
-    return await wallet_scan(address, chain, tier=tier)
+    result = await wallet_scan(address, chain, tier=tier)
+    increment_scan_usage(identity=identity, identity_type=identity_type, tier=tier, is_internal=is_internal, is_x402_paid=is_paid)
+    if not is_internal and not is_paid:
+        result["usage"] = {"remaining": max(0, limit_check.get("remaining", FREE_DAILY_LIMIT) - 1), "daily_limit": limit_check.get("limit", FREE_DAILY_LIMIT)}
+    return result
+
+@app.get("/api/v1/scan/usage")
+async def get_scan_usage(request: Request):
+    """Get current scan usage stats for the requesting identity."""
+    from app.scan_rate_limiter import get_usage_stats
+    identity, identity_type = get_identity(request)
+    stats = get_usage_stats(identity, identity_type)
+    return {
+        "status": "ok",
+        **stats,
+        "pricing": {
+            "free": {"daily_limit": FREE_DAILY_LIMIT, "price": "$0/mo"},
+            "pro": {"daily_limit": 100, "price": "$29.99/mo"},
+            "elite": {"daily_limit": "unlimited", "price": "$99.99/mo"},
+            "scan_packs": {"starter": {"price": "$4.99", "scans": 25, "description": "25 token/wallet scans"}},
+        },
+        "upgrade_url": "https://rugmunch.io/pricing",
+    }
+
+@app.get("/api/v1/intel/leaderboard")
+async def get_intel_leaderboard(request: Request, period: str = "daily"):
+    """RMI Intelligence Leaderboard — safest, most dangerous, and fastest tokens from our scan data.
+    
+    Reads accumulated scan data from /root/.hermes/scans/ and builds a leaderboard.
+    """
+    import glob
+    from datetime import datetime, timezone, timedelta
+    
+    scan_dir = "/root/.hermes/scans"
+    now = datetime.now(timezone.utc)
+    
+    # Time window
+    if period == "weekly":
+        cutoff = now - timedelta(days=7)
+    elif period == "hourly":
+        cutoff = now - timedelta(hours=1)
+    else:
+        cutoff = now - timedelta(hours=24)
+    
+    all_tokens = []
+    safest = []
+    most_dangerous = []
+    
+    try:
+        for fpath in sorted(glob.glob(f"{scan_dir}/token_scan_*.json")):
+            fmod = os.path.getmtime(fpath)
+            if datetime.fromtimestamp(fmod, tz=timezone.utc) < cutoff:
+                continue
+            try:
+                with open(fpath) as f:
+                    data = json.load(f)
+                if isinstance(data, list):
+                    all_tokens.extend(data)
+            except Exception:
+                continue
+        
+        # Also load trending reports
+        for fpath in sorted(glob.glob(f"{scan_dir}/trending_*.json")):
+            fmod = os.path.getmtime(fpath)
+            if datetime.fromtimestamp(fmod, tz=timezone.utc) < cutoff:
+                continue
+            try:
+                with open(fpath) as f:
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    all_tokens.extend(data.get("trending", []))
+            except Exception:
+                continue
+        
+        # Deduplicate by chain:address
+        seen = {}
+        for t in all_tokens:
+            key = f"{t.get('chain')}:{t.get('address')}"
+            if key not in seen or (t.get("safety_score") is not None and seen[key].get("safety_score") is None):
+                seen[key] = t
+        unique = list(seen.values())
+        
+        # Build leaderboard
+        scored = [t for t in unique if t.get("safety_score") is not None]
+        scored.sort(key=lambda x: x.get("safety_score", 50), reverse=True)
+        safest = [
+            {"chain": t.get("chain"), "symbol": t.get("symbol"), "address": t.get("address"),
+             "safety_score": t.get("safety_score"), "risk_flags": t.get("risk_flags", []),
+             "liquidity_usd": t.get("liquidity_usd"), "confidence": t.get("confidence")}
+            for t in scored[:10]
+        ]
+        most_dangerous = [
+            {"chain": t.get("chain"), "symbol": t.get("symbol"), "address": t.get("address"),
+             "safety_score": t.get("safety_score"), "risk_flags": t.get("risk_flags", []),
+             "liquidity_usd": t.get("liquidity_usd"), "confidence": t.get("confidence")}
+            for t in scored[-10:]
+        ]
+        
+        # Velocity leaders (tokens with acceleration data)
+        velocity = [t for t in unique if t.get("velocity") is not None and t.get("velocity", 0) > 0]
+        velocity.sort(key=lambda x: x.get("velocity", 0), reverse=True)
+        top_velocity = [
+            {"chain": t.get("chain"), "symbol": t.get("symbol"), "address": t.get("address"),
+             "velocity": t.get("velocity"), "volume_24h": t.get("volume_24h"),
+             "price_change_24h": t.get("price_change_24h")}
+            for t in velocity[:10]
+        ]
+        
+    except Exception as e:
+        return {"status": "error", "error": str(e), "leaderboard": {"safest": [], "most_dangerous": []}}
+    
+    return {
+        "status": "ok",
+        "period": period,
+        "total_tokens_scanned": len(unique) if 'unique' in dir() else 0,
+        "scored_tokens": len(scored) if 'scored' in dir() else 0,
+        "leaderboard": {
+            "safest": safest,
+            "most_dangerous": most_dangerous,
+        },
+        "top_velocity": top_velocity if 'top_velocity' in dir() else [],
+        "updated_at": now.isoformat(),
+    }
+
+@app.get("/api/v1/intel/digest")
+async def get_intel_digest(request: Request):
+    """Latest intelligence digest from accumulated scan data."""
+    import glob
+    
+    scan_dir = "/root/.hermes/scans"
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    digest_file = f"{scan_dir}/intel_digest_{today}.json"
+    
+    # Try today's digest first
+    if os.path.exists(digest_file):
+        try:
+            with open(digest_file) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    
+    # Fall back to most recent digest
+    digests = sorted(glob.glob(f"{scan_dir}/intel_digest_*.json"))
+    if digests:
+        try:
+            with open(digests[-1]) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    
+    return {"status": "no_data", "message": "No intelligence digest available yet. Crons build this data over time."}
 
 @app.get("/api/v1/trending")
 async def get_trending(request: Request, chain: str = None, limit: int = 20):
@@ -2597,7 +2820,15 @@ async def scanner_fingerprint(request: Request, data: dict):
 
 @app.post("/api/v1/scanner/unified")
 async def scanner_unified(request: Request, data: dict):
-    """Unified token + wallet scan with fingerprinting."""
+    """Unified token + wallet scan with fingerprinting. Freemium: 5 free/day."""
+    # Rate limit check
+    is_internal = is_internal_request(request)
+    is_paid = is_x402_paid_request(request)
+    identity, identity_type = get_identity(request)
+    limit_check = check_scan_limit(identity=identity, identity_type=identity_type, tier=data.get("tier", "free"), is_internal=is_internal, is_x402_paid=is_paid)
+    if not limit_check["allowed"]:
+        return JSONResponse(status_code=429, content={"error": "daily_scan_limit_reached", "message": f"Free limit ({FREE_DAILY_LIMIT}/day) reached. Upgrade at rugmunch.io/pricing", "upgrade_url": "https://rugmunch.io/pricing", "resets_at": limit_check.get("resets_at")})
+    
     from app.unified_scanner import scan_wallet
     from app.tool_fingerprint import fingerprint_token
     wallet = data.get("wallet", data.get("address", ""))
@@ -2622,6 +2853,11 @@ async def scanner_unified(request: Request, data: dict):
             results["flags"] = (results.get("wallet", {}).get("risk_flags", []) + fp.get("flags", []))
         except Exception as e:
             results["fingerprint"] = {"error": str(e)}
+    
+    # Track usage
+    increment_scan_usage(identity=identity, identity_type=identity_type, tier=tier, is_internal=is_internal, is_x402_paid=is_paid)
+    if not is_internal and not is_paid:
+        results["usage"] = {"remaining": max(0, limit_check.get("remaining", FREE_DAILY_LIMIT) - 1), "daily_limit": limit_check.get("limit", FREE_DAILY_LIMIT)}
     return results
 
 @app.get("/api/v1/scanner/tools")
