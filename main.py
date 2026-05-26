@@ -2836,10 +2836,9 @@ async def x402_tools_discovery(request: Request):
         "payment_chains": ["base", "solana", "ethereum", "bsc", "arbitrum", "optimism", "polygon"],
         "refund_policy": "Full refund if tool returns no data. Request within 48h via POST /api/v1/x402/refund.",
         "discovery_urls": {
-            "x402": "https://rugmunch.io/.well-known/x402",
-            "mcp": "https://x402-base.cryptorugmuncher.workers.dev/mcp",
-            "catalog": "https://rugmunch.io/api/v1/x402/tools-catalog",
-            "openapi": "https://rugmunch.io/openapi.json",
+            "x402": "https://api.rugmunch.io/.well-known/x402",
+            "catalog": "https://api.rugmunch.io/api/v1/x402/tools-catalog",
+            "openapi": "https://api.rugmunch.io/openapi.json",
         },
     }
 

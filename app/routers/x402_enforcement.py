@@ -1036,7 +1036,7 @@ async def x402_enforcement_middleware(request: Request, call_next) -> Response:
         if not (request.headers.get("x-pay") or request.headers.get("X-Pay") or is_human_execute):
             return JSONResponse(
                 status_code=403,
-                content={"error": "Automated access requires x402 payment. Use x-pay header or a proper API client.", "docs": "https://rugmunch.io/docs"},
+                content={"error": "Automated access requires x402 payment. Use x-pay header or a proper API client.", "docs": "https://api.rugmunch.io/docs"},
                 headers=SECURITY_HEADERS,
             )
     
@@ -1309,8 +1309,8 @@ def _build_discovery_response():
                 "x402_rs": "Self-hosted x402-rs — multi-chain (requires Docker)",
             },
         },
-        "gateway_url": "https://rugmunch.io",
-        "payment_endpoint": "https://rugmunch.io/api/v1/x402-tools",
+        "gateway_url": "https://api.rugmunch.io",
+        "payment_endpoint": "https://api.rugmunch.io/api/v1/x402-tools",
         "supported_chains": list(CHAIN_USDC.keys()),
         "chain_count": len(CHAIN_USDC),
         "facilitator_count": 8,  # dynamic: primev, coinbase_cdp, payai, cloudflare_x402, eip7702, asterpay, tron_selfverify, bitcoin_selfverify
