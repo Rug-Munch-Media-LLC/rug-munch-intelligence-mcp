@@ -116,7 +116,7 @@ async def query_rag_citations(
 
     try:
         # Query primary collections first (higher min_similarity)
-        # Timeout: 10s max to avoid blocking the scan pipeline
+        # Timeout: 30s max on first call (model loading), then 10s
         primary_results = await asyncio.wait_for(
             search_multi_collection(
                 query=enriched_query,
@@ -124,7 +124,7 @@ async def query_rag_citations(
                 limit=max_citations,
                 min_similarity=min_similarity,
             ),
-            timeout=10.0,
+            timeout=30.0,
         )
 
         for r in primary_results:

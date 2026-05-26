@@ -76,7 +76,28 @@ async def ingest_document(
         "content": content[:5000],
         "stored_at": datetime.now(timezone.utc).isoformat(),
     }
-    await r.setex(f"rag:{collection}:{doc_id}", 86400 * 30, json.dumps(doc))
+    # TTL by collection type:
+    #   Permanent (0 = no expiry): scam_patterns, contract_audits, transaction_patterns, forensic_reports
+    #   Long-lived (365 days): wallet_profiles, known_scams, market_intel
+    #   Short-lived (30 days): news_articles, general, token_analysis (volatile data)
+    _TTL_MAP = {
+        "scam_patterns": 0,
+        "contract_audits": 0,
+        "transaction_patterns": 0,
+        "forensic_reports": 0,
+        "wallet_profiles": 86400 * 365,
+        "known_scams": 86400 * 365,
+        "market_intel": 86400 * 365,
+        "news_articles": 86400 * 30,
+        "token_analysis": 86400 * 90,
+        "general": 86400 * 30,
+    }
+    ttl = _TTL_MAP.get(collection, 86400 * 30)
+    key = f"rag:{collection}:{doc_id}"
+    if ttl == 0:
+        await r.set(key, json.dumps(doc))  # permanent, no expiry
+    else:
+        await r.setex(key, ttl, json.dumps(doc))
     await r.sadd(f"rag:idx:{collection}", doc_id)
 
     logger.info(f"Ingested {collection}/{doc_id}: {content[:60]}...")
@@ -319,7 +340,8 @@ async def seed_known_scams() -> Dict[str, Any]:
                 "content": pattern["description"],
                 "stored_at": datetime.now(timezone.utc).isoformat(),
             }
-            await r.setex(f"rag:known_scams:{pid}", 86400 * 365, json.dumps(doc))
+            key = f"rag:known_scams:{pid}"
+            await r.set(key, json.dumps(doc))  # permanent — seed data should never expire
             await r.sadd("rag:idx:known_scams", pid)
             count += 1
             logger.info(f"Seeded scam pattern: {pattern['name']}")
