@@ -29,12 +29,12 @@ commands:
     args:
       - -y
       - mcp-remote@latest
-      - https://rugmunch.io/mcp
+      - https://mcp.rugmunch.io/mcp
 
 environment:
   RUG_MUNCH_API_BASE:
     description: API base URL
-    default: https://rugmunch.io/api/v1
+    default: https://mcp.rugmunch.io/api/v1
     required: false
   RUG_MUNCH_API_KEY:
     description: API key for premium access (optional)
@@ -68,19 +68,19 @@ facilitators:
 
 x402:
   enabled: true
-  discovery_url: https://rugmunch.io/.well-known/x402
+  discovery_url: https://mcp.rugmunch.io/.well-known/x402
   network: base
   token: USDC
   pricing_per_call: $0.01–$0.40
   free_trials: 1–5 calls per tool
 
 discovery:
-  mcp: https://rugmunch.io/.well-known/mcp.json
-  x402: https://rugmunch.io/.well-known/x402
+  mcp: https://mcp.rugmunch.io/.well-known/mcp.json
+  x402: https://mcp.rugmunch.io/.well-known/x402
 
 links:
   homepage: https://rugmunch.io
-  documentation: https://rugmunch.io/docs/mcp
+  documentation: https://mcp.rugmunch.io/docs/mcp
   repository: https://github.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp
   smithery: https://smithery.ai/server/@cryptorugmuncher/rug-munch-intelligence
   glama: https://glama.ai/mcp/servers/@cryptorugmuncher/rug-munch-intelligence

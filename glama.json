@@ -1,28 +1,88 @@
 {
   "$schema": "https://glama.ai/mcp/schemas/server.json",
-  "maintainers": ["cryptorugmuncher"],
+  "maintainers": [
+    "cryptorugmuncher"
+  ],
   "name": "Rug Munch Intelligence",
-  "description": "201 crypto security & intelligence MCP tools across 13 blockchains (Solana, Base, Ethereum, BSC, Arbitrum, Optimism, Polygon, Avalanche, Fantom, Gnosis, TRON, Bitcoin, SEPA). Real-time scam detection, rug pull prevention, wallet forensics, whale tracking, smart contract auditing, market analysis, sentiment monitoring, arbitrage scanning, MEV protection, insider detection, and syndicate mapping. Free trials (1–5 calls/tool) + x402 micropayments ($0.01–$0.40/call). 8 payment facilitators: Coinbase CDP, PayAI, Cloudflare x402, EIP-7702, TRON Self-Verify, Bitcoin Self-Verify, AsterPay, x402-rs. Pay with USDC, USDT, BTC, EUR. Full refund guarantee.",
+  "description": "201 crypto security & intelligence MCP tools across 13 blockchains (Solana, Base, Ethereum, BSC, Arbitrum, Optimism, Polygon, Avalanche, Fantom, Gnosis, TRON, Bitcoin, SEPA). Real-time scam detection, rug pull prevention, wallet forensics, whale tracking, smart contract auditing, market analysis, sentiment monitoring, arbitrage scanning, MEV protection, insider detection, and syndicate mapping. Free trials (1\u20135 calls/tool) + x402 micropayments ($0.01\u2013$0.40/call). 8 payment facilitators: Coinbase CDP, PayAI, Cloudflare x402, EIP-7702, TRON Self-Verify, Bitcoin Self-Verify, AsterPay, x402-rs. Pay with USDC, USDT, BTC, EUR. Full refund guarantee.",
   "server": {
-    "url": "https://rugmunch.io/mcp",
+    "url": "https://mcp.rugmunch.io/mcp",
     "transport": "http",
-    "capabilities": { "tools": { "listChanged": true } }
+    "capabilities": {
+      "tools": {
+        "listChanged": true
+      }
+    }
   },
   "logo": "https://rugmunch.io/logo.png",
   "homepage": "https://rugmunch.io",
-  "documentation": "https://rugmunch.io/docs/mcp",
+  "documentation": "https://mcp.rugmunch.io/docs/mcp",
   "repository": "https://github.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp",
   "contact": "mcp@rugmunch.io",
   "tools_count": 201,
-  "chains": ["solana", "base", "ethereum", "bsc", "arbitrum", "optimism", "polygon", "avalanche", "fantom", "gnosis", "tron", "bitcoin", "sepa"],
-  "facilitators": ["coinbase-cdp", "payai", "cloudflare-x402", "eip-7702", "tron-self-verify", "bitcoin-self-verify", "asterpay", "x402-rs"],
+  "chains": [
+    "solana",
+    "base",
+    "ethereum",
+    "bsc",
+    "arbitrum",
+    "optimism",
+    "polygon",
+    "avalanche",
+    "fantom",
+    "gnosis",
+    "tron",
+    "bitcoin",
+    "sepa"
+  ],
+  "facilitators": [
+    "coinbase-cdp",
+    "payai",
+    "cloudflare-x402",
+    "eip-7702",
+    "tron-self-verify",
+    "bitcoin-self-verify",
+    "asterpay",
+    "x402-rs"
+  ],
   "discovery": {
-    "mcp": "https://rugmunch.io/.well-known/mcp.json",
-    "x402": "https://rugmunch.io/.well-known/x402"
+    "mcp": "https://mcp.rugmunch.io/.well-known/mcp.json",
+    "x402": "https://mcp.rugmunch.io/.well-known/x402"
   },
   "links": {
     "smithery": "https://smithery.ai/server/@cryptorugmuncher/rug-munch-intelligence",
     "glama": "https://glama.ai/mcp/servers/@cryptorugmuncher/rug-munch-intelligence"
   },
-  "tags": ["crypto", "blockchain", "security", "defi", "scam-detection", "intelligence", "mcp", "x402", "analytics", "whale-tracking", "rug-pull", "contract-audit", "solana", "ethereum", "base", "bsc", "arbitrum", "optimism", "polygon", "avalanche", "fantom", "gnosis", "tron", "bitcoin", "sepa", "forensics", "ai-agents", "market-analysis", "sentiment", "mev-protection"]
+  "tags": [
+    "crypto",
+    "blockchain",
+    "security",
+    "defi",
+    "scam-detection",
+    "intelligence",
+    "mcp",
+    "x402",
+    "analytics",
+    "whale-tracking",
+    "rug-pull",
+    "contract-audit",
+    "solana",
+    "ethereum",
+    "base",
+    "bsc",
+    "arbitrum",
+    "optimism",
+    "polygon",
+    "avalanche",
+    "fantom",
+    "gnosis",
+    "tron",
+    "bitcoin",
+    "sepa",
+    "forensics",
+    "ai-agents",
+    "market-analysis",
+    "sentiment",
+    "mev-protection"
+  ]
 }

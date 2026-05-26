@@ -13,7 +13,7 @@
               Cloudflare Tunnel (rmi-cloudflare)
               ┌─────────────────────────────┐
               │  rugmunch.io                │
-              │  api.rugmunch.io            │
+              │  mcp.rugmunch.io            │
               │  n8n.rugmunch.io            │
               └─────────────┬───────────────┘
                             │
