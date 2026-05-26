@@ -248,18 +248,26 @@ if _bad_keys:
 for _k in _bad_keys:
     del TOOL_PRICES[_k]
 
-# ── 402 response builder ──
-def build_402_response(tool_id: str, client_id: str = "") -> JSONResponse:
-    """Build a proper x402 Payment Required response with payment chain requirements"""
-    pricing = TOOL_PRICES.get(tool_id, {"price_usd": 0.01, "price_atoms": "10000", "trial_free": 3})
-    trial_free = pricing.get("trial_free", 3)
+# ── Chain display names (used in human-readable messages) ──
+CHAIN_NAMES = {
+    "base": "Base", "solana": "Solana", "ethereum": "Ethereum",
+    "bsc": "BNB Chain", "tron": "TRON", "bitcoin": "Bitcoin",
+    "arbitrum": "Arbitrum", "optimism": "Optimism", "polygon": "Polygon",
+    "avalanche": "Avalanche", "fantom": "Fantom", "gnosis": "Gnosis",
+    "sepa": "SEPA (EUR)",
+}
+
+# ── x402 v2 spec helpers ──
+import base64 as _base64
+
+def _build_accepts_list(tool_id: str, pricing: dict) -> list:
+    """Build x402 v2 spec 'accepts' array from TOOL_PRICES and CHAIN_USDC.
     
-    # Check actual remaining trials for this client
-    remaining = 0
-    if client_id:
-        can_use, remaining = check_trial(tool_id, client_id)
-    
-    requirements = []
+    This produces the canonical PaymentRequirements format that official
+    x402 SDKs (@x402/fetch, x402 Python, x402 MCP) parse via PAYMENT-REQUIRED
+    header or response body.
+    """
+    accepts = []
     for chain_key, cfg in CHAIN_USDC.items():
         method = cfg["method"]
 
@@ -278,7 +286,6 @@ def build_402_response(tool_id: str, client_id: str = "") -> JSONResponse:
         # Determine asset (primary token for the chain)
         asset = cfg.get("usdc", "")
         if not asset and "tokens" in cfg:
-            # For chains without USDC, use first available token
             first_token = next(iter(cfg["tokens"].values()), "")
             asset = first_token if first_token != "native" else ""
 
@@ -322,20 +329,121 @@ def build_402_response(tool_id: str, client_id: str = "") -> JSONResponse:
         if "tokens" in cfg:
             requirement["supportedTokens"] = list(cfg["tokens"].keys())
 
-        requirements.append(requirement)
+        accepts.append(requirement)
 
-    # Build comprehensive payment message
-    chain_names = {
-        "base": "Base", "solana": "Solana", "ethereum": "Ethereum",
-        "bsc": "BNB Chain", "tron": "TRON", "bitcoin": "Bitcoin",
-        "arbitrum": "Arbitrum", "optimism": "Optimism", "polygon": "Polygon",
-        "avalanche": "Avalanche", "fantom": "Fantom", "gnosis": "Gnosis",
-        "sepa": "SEPA (EUR)"
+    return accepts
+
+
+def _build_bazaar_extension(tool_id: str, pricing: dict) -> dict:
+    """Build x402 v2 bazaar extension for facilitator discovery indexing.
+    
+    The bazaar extension tells CDP Bazaar and other x402 discovery services
+    what this tool does, its input/output schema, and how to call it.
+    """
+    # Map our categories to bazaar-standard categories
+    CATEGORY_MAP = {
+        "security": "security",
+        "intelligence": "intelligence",
+        "market": "market-data",
+        "analysis": "analytics",
+        "social": "social",
+        "launchpad": "launchpad",
+        "bundle": "bundles",
+        "defi": "defi",
+        "premium": "premium",
+        "api": "api",
+        "variant": "crypto",
     }
-    chain_list = ", ".join(chain_names.get(c, c) for c in CHAIN_USDC.keys())
+    category = pricing.get("category", "analysis")
+    bazaar_category = CATEGORY_MAP.get(category, category)
+    
+    return {
+        "discoverable": True,
+        "category": bazaar_category,
+        "tags": ["crypto", "security", "blockchain", tool_id],
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "address": {"type": "string", "description": f"Blockchain address or identifier for {tool_id}"},
+                "chain": {"type": "string", "enum": list(CHAIN_USDC.keys()), "description": "Blockchain to query"},
+            },
+            "required": ["address"],
+        },
+        "outputSchema": {
+            "type": "object",
+            "properties": {
+                "data": {"type": "object"},
+                "sources_used": {"type": "array", "items": {"type": "string"}},
+            },
+        },
+    }
 
-    content = {
-        "error": "Payment Required",
+
+def _build_resource_info(tool_id: str, pricing: dict) -> dict:
+    """Build x402 v2 resource object for PaymentRequired response.
+    
+    The resource object describes WHAT is being paid for — required by
+    the v2 spec for PaymenRequired responses.
+    """
+    description = pricing.get("description", f"Rug Munch Intelligence — {tool_id}")
+    # Truncate description to 200 chars for spec compliance
+    if len(description) > 200:
+        description = description[:197] + "..."
+    
+    return {
+        "url": f"https://rugmunch.io/api/v1/x402-tools/{tool_id}",
+        "description": description,
+        "mimeType": "application/json",
+        "serviceName": "Rug Munch Intelligence",
+        "tags": ["crypto", pricing.get("category", "analysis"), "x402"],
+        "iconUrl": "https://rugmunch.io/logo.png",
+    }
+
+
+# ── 402 response builder ──
+def build_402_response(tool_id: str, client_id: str = "") -> JSONResponse:
+    """Build an x402 v2 compliant Payment Required response.
+    
+    Returns both:
+    - V2 spec format (x402Version, resource, accepts) for official SDK compatibility
+    - Legacy format (error, tool, price, x402.requirements) for backward compat
+    - PAYMENT-REQUIRED base64 header for @x402/fetch and x402 Python SDK
+    
+    The v2 spec requires:
+    - Top-level x402Version: 2
+    - Top-level resource: {url, description, mimeType, serviceName, tags, iconUrl}
+    - Top-level accepts: [{scheme, network, asset, amount, payTo, maxTimeoutSeconds, extra}]
+    - PAYMENT-REQUIRED header: base64 JSON of {x402Version, resource, accepts}
+    - Optional extensions: {bazaar: {discoverable, category, tags, inputSchema, outputSchema}}
+    """
+    pricing = TOOL_PRICES.get(tool_id, {"price_usd": 0.01, "price_atoms": "10000", "trial_free": 3})
+    trial_free = pricing.get("trial_free", 3)
+    
+    # Check actual remaining trials for this client
+    remaining = 0
+    if client_id:
+        can_use, remaining = check_trial(tool_id, client_id)
+    
+    # Build v2 spec accepts array (shared by both body and header)
+    accepts = _build_accepts_list(tool_id, pricing)
+    
+    # Build v2 spec resource object
+    resource = _build_resource_info(tool_id, pricing)
+    
+    # Build bazaar extension for discovery indexing
+    bazaar = _build_bazaar_extension(tool_id, pricing)
+    
+    # ── V2 spec body format (what official SDKs parse) ──
+    v2_body = {
+        "x402Version": 2,
+        "error": "PAYMENT-SIGNATURE header is required",
+        "resource": resource,
+        "accepts": accepts,
+        "extensions": {
+            "bazaar": bazaar,
+        },
+        # ── Legacy compat fields (not in spec but needed for our gateway clients) ──
+        "error_legacy": "Payment Required",
         "tool": tool_id,
         "price": f"${pricing['price_usd']:.2f}",
         "trial_free": trial_free,
@@ -345,7 +453,7 @@ def build_402_response(tool_id: str, client_id: str = "") -> JSONResponse:
         "message": (
             f"Connect a wallet to continue. Your 1 free trial is used — link MetaMask or Phantom to get {trial_free} free calls per tool. From ${pricing['price_usd']:.2f}/call after that."
             if remaining == -1
-            else f"All {trial_free} free trial{'s' if trial_free != 1 else ''} used. Pay {pricing['price_atoms']} atoms to use {tool_id}. Pay on {chain_list}."
+            else f"All {trial_free} free trial{'s' if trial_free != 1 else ''} used. Pay {pricing['price_atoms']} atoms to use {tool_id}. Pay on {', '.join(CHAIN_NAMES.get(c, c) for c in CHAIN_USDC.keys())}."
         ),
         "accepted_chains": list(CHAIN_USDC.keys()),
         "chain_details": {
@@ -356,43 +464,80 @@ def build_402_response(tool_id: str, client_id: str = "") -> JSONResponse:
             }
             for k, v in CHAIN_USDC.items()
         },
+        # ── Legacy compat: nested requirements for our Cloudflare workers ──
         "x402": {
             "version": "2",
-            "requirements": requirements,
+            "requirements": accepts,  # Same array, different field name for backward compat
         },
     }
     
+    # ── Build PAYMENT-REQUIRED header (base64 JSON of v2 spec PaymentRequired) ──
+    payment_required_header_obj = {
+        "x402Version": 2,
+        "error": "PAYMENT-SIGNATURE header is required",
+        "resource": resource,
+        "accepts": accepts,
+    }
+    payment_required_b64 = _base64.b64encode(
+        json.dumps(payment_required_header_obj, separators=(",", ":")).encode()
+    ).decode("ascii")
+    
     return JSONResponse(
         status_code=402,
-        content=content,
+        content=v2_body,
         headers={
+            "PAYMENT-REQUIRED": payment_required_b64,
             "X-Paywall-Version": "2",
             "Content-Type": "application/json",
             **SECURITY_HEADERS,
         },
     )
 
-# ── Payment header parser ──
+# ── Payment header parser (supports v1 x-pay and v2 PAYMENT-SIGNATURE) ──
 def parse_x_pay_header(header_value: str) -> Optional[dict]:
-    """Parse x-pay / X-Pay header into payment payload"""
+    """Parse payment payload from x-pay / PAYMENT-SIGNATURE header.
+    
+    Supports three formats:
+    1. v2 spec: base64-encoded JSON (PAYMENT-SIGNATURE header)
+    2. v1 legacy: "x402 <json>" or "X-Pay: <json>" (x-pay header)
+    3. Plain JSON
+    """
+    if not header_value or not header_value.strip():
+        return None
     try:
-        # Format could be: "x402 <json>" or just JSON
-        if header_value.startswith("x402 "):
-            payload_str = header_value[5:].strip()
-        elif header_value.startswith("X-Pay: "):
-            payload_str = header_value[7:].strip()
+        stripped = header_value.strip()
+        
+        # v2 spec: PAYMENT-SIGNATURE is base64-encoded JSON
+        # Try base64 decode first (will fail fast if it's not base64)
+        try:
+            decoded = _base64.b64decode(stripped).decode("utf-8")
+            if decoded.startswith("{"):
+                payload = json.loads(decoded)
+                # v2 format: normalize PaymentPayload to our expected structure
+                # v2 PaymentPayload has: x402Version, resource, accepted, payload, extensions
+                # Our verifier expects: accepted (dict), payload (with signature/authorization)
+                if "x402Version" in payload:
+                    # v2 PaymentPayload — our verifier already handles this format
+                    # It extracts network from payload.accepted and routes to facilitator
+                    return payload
+                return payload
+        except Exception:
+            pass  # Not base64, try other formats
+        
+        # v1 legacy: "x402 <json>" or "X-Pay: <json>"
+        if stripped.startswith("x402 "):
+            payload_str = stripped[5:].strip()
+        elif stripped.startswith("X-Pay: "):
+            payload_str = stripped[7:].strip()
         else:
-            payload_str = header_value.strip()
+            payload_str = stripped
         
         if payload_str.startswith("{"):
             return json.loads(payload_str)
         
-        # Could be base64
-        import base64
-        decoded = base64.b64decode(payload_str)
-        return json.loads(decoded)
+        return None
     except Exception as e:
-        logger.warning(f"Failed to parse x-pay header: {e}")
+        logger.warning(f"Failed to parse payment header: {e}")
         return None
 
 # ── Verification via Facilitator Router ──
@@ -1110,10 +1255,18 @@ async def x402_enforcement_middleware(request: Request, call_next) -> Response:
     
     client_id = get_client_id(request)
     
-    # Check for x-pay header
+    # ── Payment header parsing: support both v1 (x-pay) and v2 (PAYMENT-SIGNATURE) ──
+    # v2 specifies PAYMENT-SIGNATURE header (base64 JSON), v1 uses X-Pay or x-pay
+    pay_sig = request.headers.get("PAYMENT-SIGNATURE", "") or request.headers.get("Payment-Signature", "")
     x_pay = request.headers.get("x-pay", "") or request.headers.get("X-Pay", "")
     
     # Reject oversized payment headers (DoS protection)
+    if pay_sig and len(pay_sig) > 16384:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Payment header too large"},
+            headers=SECURITY_HEADERS,
+        )
     if x_pay and len(x_pay) > 8192:
         return JSONResponse(
             status_code=400,
@@ -1121,8 +1274,20 @@ async def x402_enforcement_middleware(request: Request, call_next) -> Response:
             headers=SECURITY_HEADERS,
         )
     
-    if x_pay:
+    # Parse payment payload from whichever header is present
+    # v2 PAYMENT-SIGNATURE takes priority over v1 x-pay
+    payload = None
+    if pay_sig:
+        payload = parse_x_pay_header(pay_sig)  # parse_x_pay handles base64 too
+        if payload:
+            # v2 spec: payload should have top-level x402Version, accepted, payload, resource
+            # Normalize: make sure "accepted" is available at top level for our verifier
+            if "accepted" not in payload and "payload" in payload:
+                # This is a v2 PaymentPayload format — extract payment info
+                pass  # The verify_payment_via_router already handles this format
+    elif x_pay:
         payload = parse_x_pay_header(x_pay)
+    
         if payload:
             # Validate payment payload structure
             if not isinstance(payload, dict):
@@ -1150,6 +1315,27 @@ async def x402_enforcement_middleware(request: Request, call_next) -> Response:
                 
                 response = await call_next(request)
                 response.headers["X-RMI-Payment"] = "verified"
+                
+                # ── x402 v2: PAYMENT-RESPONSE header (base64 SettlementResponse) ──
+                # The v2 spec requires a PAYMENT-RESPONSE header on 200 responses
+                # after successful settlement, containing base64 JSON:
+                # {success: true, transaction: "0x...", network: "eip155:8453", payer: "0x..."}
+                settlement_response = {
+                    "success": True,
+                    "transaction": result.get("tx_hash", ""),
+                    "network": CHAIN_USDC.get(result.get("chain", ""), {}).get("network", result.get("chain", "")),
+                    "payer": result.get("payer", ""),
+                }
+                if result.get("amount"):
+                    settlement_response["amount"] = result.get("amount")
+                try:
+                    payment_response_b64 = _base64.b64encode(
+                        json.dumps(settlement_response, separators=(",", ":")).encode()
+                    ).decode("ascii")
+                    response.headers["PAYMENT-RESPONSE"] = payment_response_b64
+                except Exception:
+                    pass  # Don't fail on settlement header encoding errors
+                
                 # Add security headers to successful responses too
                 for k, v in SECURITY_HEADERS.items():
                     if k not in response.headers:
