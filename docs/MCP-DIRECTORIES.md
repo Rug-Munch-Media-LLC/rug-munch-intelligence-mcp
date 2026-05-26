@@ -39,7 +39,7 @@ Use these details for all directory submissions:
 
 ```
 Name: Rug Munch Intelligence
-Short Description: 201 crypto intelligence tools across 13 blockchains. Scam detection, wallet forensics, whale tracking, contract auditing, market analysis. Free trials + x402 micropayments. 8 payment facilitators. AI-native MCP server.
+Short Description: 210 crypto intelligence tools across 13 blockchains. Scam detection, wallet forensics, whale tracking, contract auditing, market analysis. Free trials + x402 micropayments. 8 payment facilitators. AI-native MCP server.
 MCP Endpoint: https://rugmunch.io/mcp
 MCP Transport: HTTP (Streamable)
 Discovery: https://rugmunch.io/.well-known/mcp.json
@@ -96,7 +96,7 @@ Before submitting to each directory, verify:
 - [x] Logo accessible at `https://rugmunch.io/logo.png`
 - [x] Documentation page live at `https://rugmunch.io/docs/mcp`
 - [x] Free trials work without authentication
-- [x] All 201 tools appear in discovery endpoint
+- [x] All 210 tools appear in discovery endpoint
 - [x] Server responds to MCP `tools/list` method
 - [x] Smithery listing is live and verified
 - [ ] Glama listing is live and verified

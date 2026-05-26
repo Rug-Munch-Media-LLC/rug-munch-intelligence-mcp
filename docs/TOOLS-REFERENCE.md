@@ -1,6 +1,12 @@
 # Rug Munch Intelligence — Complete Tool Reference
 
-## Security Tools (20)
+> **210 tools · 13 blockchains · $0.01–$0.40/call · Free trials on every tool**
+
+---
+
+## Security Tools (29 + 9 SENTINEL = 38)
+
+### Core Security Tools (29)
 
 ### `honeypot_check` — Honeypot Detector
 **Price: $0.05 | Free trials: 2**
@@ -94,9 +100,87 @@ Complete investigation of a contract deployer's history. Previous tokens, succes
 **Price: $0.01 | Free trials: 2**
 Verify token creation date, contract age, migration history, proxy upgrades, and deployment patterns.
 
+### `flash_loan_detect` — Flash Loan Attack Detector
+**Price: $0.08 | Free trials: 2**
+Detect flash loan attack patterns on any token or pool. Identifies price manipulation sequences, atomic arbitrage exploits, and governance vote flashes before damage occurs.
+
+### `governance_attack` — Governance Attack Detector
+**Price: $0.08 | Free trials: 2**
+Detect governance manipulation and voting anomalies. Flags flash-loan voting, proposal hijacking, quorum exploitation, and centralized governance risk in DAO protocols.
+
+### `contract_upgrade_monitor` — Contract Upgrade Monitor
+**Price: $0.05 | Free trials: 2**
+Monitor proxy contract upgrades in real-time. Detects malicious implementation swaps, hidden timelock changes, and privilege escalation through upgrade patterns.
+
+### `reentrancy_scanner` — Reentrancy Scanner
+**Price: $0.05 | Free trials: 2**
+Scan smart contracts for reentrancy vulnerability patterns. Detects external calls before state updates, callback loops, and cross-function reentrancy attack surfaces.
+
+### `dust_attack_detect` — Dust Attack Detector
+**Price: $0.05 | Free trials: 2**
+Identify dusting attacks and address poisoning. Traces micro-transactions from attacker wallets, detects lookalike address generation, and flags contaminated UTXO sets.
+
+### `oracle_manipulation` — Oracle Manipulation Detector
+**Price: $0.08 | Free trials: 2**
+Detect oracle price manipulation attack vectors. Analyzes feed latency, stale price windows, single-source dependencies, and historical manipulation events for any DeFi protocol.
+
+### `privilege_escalation` — Privilege Escalation Detector
+**Price: $0.05 | Free trials: 2**
+Detect excessive contract owner privileges. Flags unlimited mint functions, emergency_PAUSE backdoors, transfer blocklists, and hidden admin roles in token contracts.
+
+### `phantom_mint_detect` — Phantom Mint Detector
+**Price: $0.05 | Free trials: 2**
+Detect phantom minting attacks where hidden mint functions create tokens from nowhere. Scans contract bytecode for unauthorized mint paths, inflation exploits, and supply manipulation vectors.
+
+### `wallet_drain_scanner` — Wallet Drain Scanner
+**Price: $0.05 | Free trials: 2**
+Scan wallet for dangerous token approvals and signatures. Identifies unlimited spending approvals, phishing permit signatures, and drain contract vulnerabilities.
+
+### SENTINEL Deep Scan Modules (9)
+
+### `sentinel_scan` — SENTINEL Full Deep Scan
+**Price: $0.15 | Free trials: 1**
+All 9 SENTINEL modules in parallel with graceful degradation. The most comprehensive token security scan available. Graded risk score from 0-100.
+
+### `holder_analysis` — Holder Analysis
+**Price: $0.05 | Free trials: 2**
+HHI concentration, fake diversification detection, whale ratio, holder health score.
+
+### `bundle_detect` — Bundle Detection (SENTINEL)
+**Price: $0.08 | Free trials: 2**
+Enhanced bundle/sniper detection, same-block group analysis, MEV exposure.
+
+### `exchange_fund_check` — CEX Fund Check
+**Price: $0.05 | Free trials: 2**
+CEX-funded wallet detection, withdrawal clustering, deposit-to-dump patterns.
+
+### `liquidity_verify` — Liquidity Verification
+**Price: $0.05 | Free trials: 2**
+Lock verification, fake locker detection, timelock analysis, rug-proof LP assessment.
+
+### `dev_reputation` — Developer Reputation
+**Price: $0.05 | Free trials: 2**
+Serial rugg detection, cross-chain deployer tracking, team history analysis.
+
+### `wash_trading` — Wash Trading (SENTINEL)
+**Price: $0.08 | Free trials: 2**
+Circular transfer detection, cross-DEX loops, volume anomaly scoring.
+
+### `metadata_fingerprint` — Metadata Fingerprint
+**Price: $0.05 | Free trials: 2**
+HTML structure hashing, description similarity, social fingerprinting, clone project detection.
+
+### `pumpfun_analysis` — PumpFun Analysis
+**Price: $0.08 | Free trials: 2**
+Bonding curve progress, bot detection, dev wallet concentration, early buyer patterns. Solana only.
+
+### `sentiment_check` — SENTINEL Sentiment Check
+**Price: $0.05 | Free trials: 2**
+Social sentiment scoring, bot campaign detection, artificial hype flagging, pump probability.
+
 ---
 
-## Intelligence Tools (18)
+## Intelligence Tools (27)
 
 ### `whale` — Whale Wallet Decoder
 **Price: $0.15 | Free trials: 1**
@@ -175,9 +259,41 @@ Discover active and upcoming airdrops across all major chains. Eligibility check
 **Price: $0.05 | Free trials: 2**
 Verify airdrop legitimacy. Contract audit, distribution analysis, scam pattern detection. Know if an airdrop is real or a wallet drainer before connecting.
 
+### `cross_chain_whale` — Cross-Chain Whale Tracker
+**Price: $0.08 | Free trials: 2**
+Track whale wallets across multiple blockchains simultaneously. Maps cross-chain capital flows, bridge migrations, and multi-network positioning.
+
+### `degen_score` — Degen Score
+**Price: $0.05 | Free trials: 2**
+Calculate degen trading behavior score for any wallet. Evaluates leverage usage, meme token exposure, entry timing quality, and risk-on appetite with percentile ranking.
+
+### `dormant_whale_alert` — Dormant Whale Alert
+**Price: $0.05 | Free trials: 2**
+Alert when dormant large wallets become active. Monitors long-inactive top holders for reactivation signals, first transfers, and exchange deposits that precede market moves.
+
+### `smart_contract_interactions` — Smart Contract Interactions
+**Price: $0.05 | Free trials: 2**
+Map all contract interactions for a given address. Reconstructs call graphs, identifies frequently-used protocols, and surfaces unknown delegate calls or suspicious relationships.
+
+### `token_distribution_health` — Token Distribution Health
+**Price: $0.05 | Free trials: 2**
+Assess the health of token holder distribution. Computes Gini coefficient, Herfindahl index, top-10 concentration risk, and compares distribution trajectory over time.
+
+### `token_velocity` — Token Velocity
+**Price: $0.05 | Free trials: 2**
+Analyze token circulation speed and holding patterns. Computes turnover rate, velocity of money, dormant supply ratio, and compares against sector benchmarks.
+
+### `wallet_label_registry` — Wallet Label Registry
+**Price: $0.05 | Free trials: 2**
+Enrich wallet addresses with known entity labels. Resolves exchange hot wallets, institutional addresses, MEV bot identities, known scammers, and fund manager tags.
+
+### `wallet_cluster_score` — Wallet Cluster Score
+**Price: $0.08 | Free trials: 2**
+Score wallet clusters for manipulation risk probability. Combines funding-source analysis, behavioral correlation, and timing patterns to rate coordinated group threat level.
+
 ---
 
-## Market Tools (9)
+## Market Tools (15)
 
 ### `pulse` — Market Pulse
 **Price: $0.01 | Free trials: 3**
@@ -215,9 +331,33 @@ Track where capital is moving across chains, pools, and protocols. Front-run liq
 **Price: $0.03 | Free trials: 2**
 Track vesting schedules, team token unlocks, upcoming dilution events that move prices.
 
+### `funding_rate` — Funding Rate Monitor
+**Price: $0.05 | Free trials: 2**
+Monitor and analyze perpetual futures funding rates. Tracks real-time rates across exchanges, identifies extreme positioning, and correlates funding with spot price action.
+
+### `options_flow` — Options Flow Tracker
+**Price: $0.08 | Free trials: 2**
+Track unusual options activity and large block trades. Detects smart money positioning through IV skew, put/call ratio anomalies, and outsized OI changes on crypto derivatives.
+
+### `dex_volume_rank` — DEX Volume Rank
+**Price: $0.05 | Free trials: 2**
+Rank tokens by decentralized exchange trading volume. Computes volume-weighted momentum scores, compares DEX vs CEX volume distribution, and surfaces volume outliers trending up.
+
+### `liquidation_heatmap` — Liquidation Heatmap
+**Price: $0.05 | Free trials: 2**
+Visualize liquidation clusters and cascade risk zones. Maps leveraged position concentrations by price level, estimates cascade threshold prices, and highlights DeFi protocol vulnerability.
+
+### `orderbook_imbalance` — Orderbook Imbalance
+**Price: $0.05 | Free trials: 2**
+Detect order book asymmetry signaling directional pressure. Computes bid-ask depth ratio, spoofing probability, and hidden wall detection across major trading venues.
+
+### `volatility_surface` — Volatility Surface
+**Price: $0.05 | Free trials: 2**
+Analyze implied and realized volatility across timeframes. Constructs term structure, identifies volatility skew opportunities, and compares current levels to historical percentile ranges.
+
 ---
 
-## Analysis Tools (8)
+## Analysis Tools (14)
 
 ### `wallet` — Wallet Analysis
 **Price: $0.05 | Free trials: 1**
@@ -251,9 +391,33 @@ Combine multiple wallets into a single dashboard with consolidated PnL and asset
 **Price: $0.10 | Free trials: 1**
 Identifies fake volume in NFT collections. Tracks floor price manipulation, finds collections with real organic demand vs artificial hype.
 
+### `correlation_matrix` — Correlation Matrix
+**Price: $0.05 | Free trials: 2**
+Compute cross-token correlation heatmap for portfolio risk. Generates rolling correlation matrices, identifies regime shifts, and flags pairs with diverging correlation signals.
+
+### `drawdown_analyzer` — Drawdown Analyzer
+**Price: $0.05 | Free trials: 2**
+Calculate maximum drawdown and recovery patterns. Computes peak-to-trough metrics, underwater equity curves, recovery time estimates, and stress tests against historical crash scenarios.
+
+### `sharpe_ratio_calc` — Sharpe Ratio Calculator
+**Price: $0.05 | Free trials: 2**
+Compute risk-adjusted return metrics for any wallet or token. Calculates Sharpe, Sortino, and Calmar ratios with configurable benchmark and rolling window parameters.
+
+### `volume_profile` — Volume Profile
+**Price: $0.05 | Free trials: 2**
+Analyze volume distribution across price levels. Identifies volume nodes, point-of-control zones, high-value nodes, and low-volume gaps that act as price magnets or barriers.
+
+### `tax_lot_optimizer` — Tax Lot Optimizer
+**Price: $0.05 | Free trials: 2**
+Optimize tax lot identification for crypto portfolios. Identifies tax-loss harvesting opportunities, computes FIFO/LIFO/Specific ID outcomes, and generates compliant lot assignment recommendations.
+
+### `sector_rotation` — Sector Rotation Tracker
+**Price: $0.05 | Free trials: 2**
+Track capital rotation between crypto sectors and narratives. Monitors DeFi, L1/L2, gaming, AI, and meme sector flows, identifying leading and lagging rotation patterns.
+
 ---
 
-## Social Tools (6)
+## Social Tools (11)
 
 ### `sentiment` — Sentiment Analysis
 **Price: $0.03 | Free trials: 0**
@@ -283,9 +447,33 @@ Search Twitter/X for tweets matching a query. Returns text, engagement, timestam
 **Price: $0.10 | Free trials: 0**
 Measure influencer call accuracy, average ROI after calls, follower quality score.
 
+### `meme_vibe_score` — Meme Vibe Score
+**Price: $0.01 | Free trials: 1**
+Meme token vibe scoring. Sentiment, community strength, and virality analysis.
+
+### `reddit_sentiment` — Reddit Sentiment
+**Price: $0.05 | Free trials: 2**
+Aggregate and score Reddit crypto community sentiment. Analyzes post frequency, comment polarity, subreddit engagement velocity, and identifies narrative shifts across crypto subreddits.
+
+### `discord_alpha` — Discord Alpha Monitor
+**Price: $0.05 | Free trials: 2**
+Monitor Discord servers for early alpha signals. Detects project announcements, team member activity spikes, and insider conversation patterns before information reaches public channels.
+
+### `influencer_impact_score` — Influencer Impact Score
+**Price: $0.08 | Free trials: 2**
+Quantify specific influencer impact on token prices. Measures post-to-pump latency, 24h post-impact ROI, audience authenticity, and distinguishes organic vs paid shill influence.
+
+### `github_developer_activity` — GitHub Developer Activity
+**Price: $0.05 | Free trials: 2**
+Track blockchain project developer commit activity. Monitors code velocity, contributor count trends, issue resolution speed, and flags abandoned or suddenly-resumed repositories.
+
+### `telegram_pump_detect` — Telegram Pump Detector
+**Price: $0.05 | Free trials: 2**
+Detect coordinated pump groups on Telegram channels. Identifies pre-pump coordination messages, group call timing patterns, and cross-references with on-chain volume anomalies.
+
 ---
 
-## Launchpad Tools (3)
+## Launchpad Tools (7)
 
 ### `launch` — Token Launch Analysis
 **Price: $0.03 | Free trials: 2**
@@ -295,13 +483,29 @@ Bonding curve status, liquidity locks, initial holder distribution, and fair lau
 **Price: $0.05 | Free trials: 2**
 PumpFun new tokens, DexScreener trending pairs, bonding curve tracking, market summary, risk alerts for coordinated launches.
 
-### `listing_predictor` — Exchange Listing Predictor
-**Price: $0.08 | Free trials: 0**
-On-chain signals suggesting imminent CEX or DEX listing based on accumulation patterns.
+### `airdrop_finder` — Airdrop Finder
+**Price: $0.05 | Free trials: 2**
+Discover active and upcoming airdrops across all major chains. Eligibility checks, value estimation, claim deadlines, and Sybil detection.
+
+### `presale_scanner` — Presale Scanner
+**Price: $0.05 | Free trials: 2**
+Scan and risk-score upcoming token presales. Evaluates team verification, hard cap vs soft cap ratio, vesting terms, contract audit status, and community authenticity signals.
+
+### `ido_tracker` — IDO Tracker
+**Price: $0.05 | Free trials: 2**
+Track initial DEX offering launches and participation metrics. Monitors IDO schedules, raise progress, oversubscription rates, and historical post-IDO performance patterns.
+
+### `fair_launch_detect` — Fair Launch Detector
+**Price: $0.05 | Free trials: 2**
+Detect and verify fair launch token distribution parameters. Checks for no team allocation, renounced ownership, locked liquidity, and equal-opportunity buy conditions.
+
+### `vesting_schedule_analyzer` — Vesting Schedule Analyzer
+**Price: $0.05 | Free trials: 2**
+Analyze token vesting schedules and cliff impacts. Maps unlock timelines, calculates dilution pressure at each vesting event, and correlates scheduled unlocks with historical price impact.
 
 ---
 
-## Premium Tools (3)
+## Premium Tools (7)
 
 ### `forensic_valuation` — Forensic Valuation
 **Price: $0.25 | Free trials: 1**
@@ -314,6 +518,54 @@ Cross-platform OSINT investigation. Hunt usernames across 400+ networks, domain 
 ### `investigation_report` — Investigation Report
 **Price: $0.20 | Free trials: 1**
 Full investigation report. On-chain forensics, financial valuation, OSINT findings, scam scoring in one deliverable.
+
+### `deep_forensics` — Deep Forensics
+**Price: $0.25 | Free trials: 1**
+Institutional deep-dive forensic analysis. Complete contract bytecode decompilation, variable state reconstruction, hidden function discovery, and multi-vector exploit scenario modeling.
+
+### `whale_network_map` — Whale Network Map
+**Price: $0.20 | Free trials: 1**
+Map complete whale wallet interconnection networks. Reveals shared funding sources, coordinated allocation patterns, and influence cascades between top-100 holders across all chains.
+
+### `cross_chain_trace` — Cross-Chain Trace
+**Price: $0.15 | Free trials: 1**
+Trace funds across blockchain bridges and mixers. Follows tainted money through bridge hops, mixer obfuscation, DEX swaps, and cross-chain routing with confidence scoring.
+
+### `full_wallet_dossier` — Full Wallet Dossier
+**Price: $0.30 | Free trials: 1**
+Complete dossier on any wallet combining all intelligence. Behavioral profiling, P&L history, counterparty network, risk scoring, cross-chain footprint, and OSINT identity correlation.
+
+---
+
+## DeFi Tools (4)
+
+### `defi_yield_scanner` — DeFi Yield Scanner
+**Price: $0.08 | Free trials: 1**
+Finds best APYs across chains. Detects unsustainable yields, checks protocol TVL trends, impermanent loss risk, smart contract age.
+
+### `yield_aggregator` — Yield Aggregator
+**Price: $0.05 | Free trials: 2**
+Aggregate and compare yields across DeFi protocols. Ranks staking, lending, and LP opportunities by risk-adjusted APY, accounting for impermanent loss, smart contract risk, and fee structure.
+
+### `impermanent_loss` — Impermanent Loss Calculator
+**Price: $0.05 | Free trials: 2**
+Calculate impermanent loss for liquidity provision positions. Computes current IL, projects worst-case scenarios, compares IL versus hold returns, and recommends optimal rebalancing intervals.
+
+### `protocol_risk` — Protocol Risk Assessment
+**Price: $0.08 | Free trials: 0**
+TVL stability analysis, admin key review, upgrade patterns, oracle dependency, governance risk scoring.
+
+---
+
+## NFT Tools (2)
+
+### `nft_wash_detector` — NFT Wash Trading Detector
+**Price: $0.10 | Free trials: 1**
+Identifies fake volume in NFT collections. Tracks floor price manipulation, finds collections with real organic demand vs artificial hype.
+
+### `nft_floor_analytics` — NFT Floor Analytics
+**Price: $0.05 | Free trials: 2**
+Analyze NFT collection floor price trends and health. Tracks floor price support levels, wash trading indicators, unique holder growth, and listing-to-sale ratio dynamics.
 
 ---
 
@@ -334,6 +586,68 @@ Complete security scan combining all security tools in a single comprehensive re
 ### `forensic_pack` — Forensic Pack
 **Price: $0.40 (33% savings) | Free trials: 1**
 forensic_valuation + osint_identity_hunt + investigation_report
+
+---
+
+## API / Meta Tools (3)
+
+### `catalog` — Tool Catalog
+**Price: $0.00 | Free trials: 999**
+Browse available tools, pricing, and chain support.
+
+### `mcp-proxy` — MCP Protocol Proxy
+**Price: $0.01 | Free trials: 5**
+Route MCP tool calls through the x402 payment layer.
+
+### `human-execute` — Human-in-the-Loop Execution
+**Price: $0.02 | Free trials: 2**
+Wallet-based payment for manual crypto investigation tasks.
+
+---
+
+## Per-Chain Variants (80)
+
+Each of the 20 most popular tools is available in per-chain variants for Solana, Base, Ethereum, and BSC. These are accessed by appending the chain name (e.g., `honeypot_check_solana`, `wallet_base`, `whale_scan_ethereum`).
+
+| Base Tool | Solana | Base | Ethereum | BSC |
+|:---|:---:|:---:|:---:|:---:|
+| `honeypot_check` | ✅ $0.03 | ✅ $0.03 | ✅ $0.04 | ✅ $0.04 |
+| `rug_pull_predictor` | ✅ $0.03 | ✅ $0.03 | ✅ $0.04 | ✅ $0.04 |
+| `rugshield` | ✅ $0.03 | ✅ $0.03 | ✅ $0.04 | ✅ $0.04 |
+| `scam_database` | ✅ $0.03 | ✅ $0.03 | ✅ $0.04 | ✅ $0.04 |
+| `wallet` | ✅ $0.03 | ✅ $0.03 | ✅ $0.04 | ✅ $0.04 |
+| `wallet_pnl` | ✅ $0.03 | ✅ $0.03 | ✅ $0.04 | ✅ $0.04 |
+| `whale_scan` | ✅ $0.03 | ✅ $0.03 | ✅ $0.04 | ✅ $0.04 |
+| `smart_money_alpha` | ✅ $0.03 | ✅ $0.03 | ✅ $0.04 | ✅ $0.04 |
+| `forensics` | ✅ $0.03 | ✅ $0.03 | ✅ $0.04 | ✅ $0.04 |
+| `audit` | ✅ $0.03 | ✅ $0.03 | ✅ $0.04 | ✅ $0.04 |
+| `fresh_pair` | ✅ $0.03 | ✅ $0.03 | ✅ $0.04 | ✅ $0.04 |
+| `sniper_alert` | ✅ $0.03 | ✅ $0.03 | ✅ $0.04 | ✅ $0.04 |
+| `liquidity_depth` | ✅ $0.03 | ✅ $0.03 | ✅ $0.04 | ✅ $0.04 |
+| `arbitrage_scan` | ✅ $0.03 | ✅ $0.03 | ✅ $0.04 | ✅ $0.04 |
+| `sentiment_spike` | ✅ $0.03 | ✅ $0.03 | ✅ $0.04 | ✅ $0.04 |
+| `cluster` | ✅ $0.03 | ✅ $0.03 | ✅ $0.04 | ✅ $0.04 |
+| `insider` | ✅ $0.03 | ✅ $0.03 | ✅ $0.04 | ✅ $0.04 |
+| `deployer_history` | ✅ $0.03 | ✅ $0.03 | ✅ $0.04 | ✅ $0.04 |
+| `alpha_digest` | ✅ $0.03 | ✅ $0.03 | ✅ $0.04 | ✅ $0.04 |
+| `urlcheck` | ✅ $0.03 | ✅ $0.03 | ✅ $0.04 | ✅ $0.04 |
+
+---
+
+## Discovery Endpoints
+
+Six discovery and tool-format endpoints are available:
+
+| Endpoint | Format | URL |
+|:---|:---|:---|
+| Discovery | x402 v2 | `GET /api/v1/x402-tools/discovery` |
+| Catalog | JSON | `GET /api/v1/x402-tools/catalog` |
+| OpenAI | Function calling | `GET /api/v1/x402-tools/openai-tools` |
+| Anthropic | Tool use | `GET /api/v1/x402-tools/anthropic-tools` |
+| Gemini | Function declarations | `GET /api/v1/x402-tools/gemini-tools` |
+| LangChain | Tool schema | `GET /api/v1/x402-tools/langchain-tools` |
+
+All endpoints return the complete list of **210 tools** in their respective formats.
 
 ---
 

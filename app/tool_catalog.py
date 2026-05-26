@@ -1,19 +1,21 @@
 """
 RMI Tool Catalog — Organized for Humans & Bots
 ===============================================
-Structured catalog of all 225+ crypto security and intelligence tools.
+Structured catalog of all 210+ crypto security and intelligence tools.
 Organized by category with SEO-optimized descriptions, keywords, and use cases.
 Serves both human-readable discovery and bot-parseable structured data.
 
 Categories:
-    SECURITY (22)     — Scam detection, contract audit, threat prevention
-    INTELLIGENCE (18)  — Wallet profiling, whale tracking, pattern detection
-    MARKET (9)        — Price data, liquidity analysis, market health
-    ANALYSIS (8)      — Portfolio, forensics, deep token investigation
-    SOCIAL (6)        — Sentiment, Twitter/X intelligence, signal detection
-    LAUNCH (3)        — New token discovery, launch intelligence
-    PREMIUM (4)       — Advanced investigation packs
-    MCP EXTERNAL (154+) — Third-party data provider tools
+    SECURITY (38)     — Scam detection, contract audit, threat prevention, SENTINEL deep scan
+    INTELLIGENCE (27)  — Wallet profiling, whale tracking, pattern detection
+    MARKET (15)        — Price data, liquidity analysis, market health
+    ANALYSIS (14)      — Portfolio, forensics, deep token investigation
+    SOCIAL (11)        — Sentiment, Twitter/X intelligence, signal detection
+    LAUNCHPAD (7)      — New token discovery, launch intelligence
+    PREMIUM (7)        — Advanced investigation packs
+    DEFI (4)           — Yield scanning, aggregator, impermanent loss
+    NFT (2)            — Wash trading, floor analytics
+    MCP EXTERNAL (150+) — Third-party data provider tools
 """
 from typing import Dict, List, Any, Optional
 

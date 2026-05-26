@@ -1,6 +1,6 @@
 # RMI x402 API — Crypto Intelligence Micropayments
 
-> **201 tools across 13 chains. Pay per call with USDC on any chain.**
+> **210 tools across 13 chains. Pay per call with USDC on any chain.**
 
 ## Quick Start
 

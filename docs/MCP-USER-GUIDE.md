@@ -1,6 +1,6 @@
 # Rug Munch Intelligence — User Guide
 
-> **From zero to crypto intelligence in 5 minutes.** This guide walks you through connecting your wallet, running your first scan, and mastering all 201 tools.
+> **From zero to crypto intelligence in 5 minutes.** This guide walks you through connecting your wallet, running your first scan, and mastering all 210 tools.
 
 ---
 
@@ -39,7 +39,7 @@
 }
 ```
 
-✅ **That's it!** Your AI now has 201 crypto intelligence tools.
+✅ **That's it!** Your AI now has 210 crypto intelligence tools.
 
 ### For Human Users (Web Platform)
 
@@ -164,17 +164,17 @@ POST /api/v1/x402-tools/whale_scan
 
 | Category | Tools | Best For |
 |----------|-------|----------|
-| 🔒 Security | 20 | Pre-investment safety checks |
-| 🧠 Intelligence | 18 | Smart money, whale, insider tracking |
-| 📊 Market | 15 | Price, trends, arbitrage, yields |
-| 🔬 Analysis | 8 | Wallet forensics, portfolio analysis |
-| 💬 Social | 6 | Sentiment, Twitter, KOL tracking |
-| 🚀 Launch | 3 | New token discovery, launch radar |
-| 🔎 Premium | 3 | Institutional-grade analysis |
-| 💎 DeFi | 2 | Yield scanning, liquidity depth |
-| 🖼 NFT | 2 | Wash trading detection, rarity |
+| 🔒 Security | 38 (29 + 9 SENTINEL) | Pre-investment safety checks, deep token scanning |
+| 🧠 Intelligence | 27 | Smart money, whale, insider tracking |
+| 📊 Market | 15 | Price, trends, arbitrage, yields, options |
+| 🔬 Analysis | 14 | Wallet forensics, portfolio, correlation, drawdown |
+| 💬 Social | 11 | Sentiment, Twitter, Discord, Telegram, Reddit |
+| 🚀 Launch | 7 | New token discovery, presale, IDO tracking |
+| 🔎 Premium | 7 | Institutional-grade forensics, OSINT |
+| 💎 DeFi | 4 | Yield scanning, aggregator, impermanent loss |
+| 🖼 NFT | 2 | Wash trading detection, floor analytics |
 
-Browse all 201 tools at [rugmunch.io/tools](https://rugmunch.io/tools)
+Browse all 210 tools at [rugmunch.io/tools](https://rugmunch.io/tools)
 
 ---
 
@@ -318,7 +318,7 @@ For production agents, set environment variables:
 │  Free Trials:    1-5/tool (no wallet)            │
 │  Paid Calls:    $0.01-$0.40 via x402            │
 │  Chains:         13 (incl. BTC, TRON, SEPA)       │
-│  Tools:          201 across 13 categories        │
+│  Tools:          210 across 13 categories        │
 ├─────────────────────────────────────────────────┤
 │  Refund: Full refund if no data, 48h window     │
 │  Support: mcp@rugmunch.io                       │
