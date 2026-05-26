@@ -334,11 +334,19 @@ def _build_accepts_list(tool_id: str, pricing: dict) -> list:
     return accepts
 
 
-def _build_bazaar_extension(tool_id: str, pricing: dict) -> dict:
+def _build_bazaar_extension(tool_id: str, pricing: dict, accepts: list) -> dict:
     """Build x402 v2 bazaar extension for facilitator discovery indexing.
     
-    The bazaar extension tells CDP Bazaar and other x402 discovery services
-    what this tool does, its input/output schema, and how to call it.
+    Per x402 v2 bazaar extension spec, the extension follows the standard v2
+    pattern: {info: {...}, schema: {...}}.
+    
+    - info: Contains the actual discovery data (HTTP method, parameters, output format)
+    - schema: JSON Schema (Draft 2020-12) that validates the structure of info
+    
+    Per the bazaar spec:
+    - input.type: always "http"
+    - input.method: HTTP method (GET for tool_id ending in _info/_list, POST for others)
+    - output.type: always "json"
     """
     # Map our categories to bazaar-standard categories
     CATEGORY_MAP = {
@@ -357,36 +365,105 @@ def _build_bazaar_extension(tool_id: str, pricing: dict) -> dict:
     category = pricing.get("category", "analysis")
     bazaar_category = CATEGORY_MAP.get(category, category)
     
-    return {
-        "discoverable": True,
+    # Determine HTTP method: GET for read-only queries, POST for tools that execute
+    read_only_suffixes = ("_info", "_list", "_check", "_scan", "_status", "_health")
+    is_read_only = tool_id.endswith(read_only_suffixes)
+    http_method = "GET" if is_read_only else "POST"
+    
+    # Build input/output from the first accepted payment method
+    first_accept = accepts[0] if accepts else {}
+    extra = first_accept.get("extra", {})
+    
+    # Build inputSchema matching the bazaar spec's info structure
+    info_input = {
+        "type": "http",
+        "method": http_method,
+    }
+    
+    if http_method == "GET":
+        # Query params for GET: address and optional chain
+        info_input["queryParams"] = {
+            "address": {"type": "string", "description": f"Blockchain address or identifier for {tool_id}"},
+            "chain": {"type": "string", "description": "Blockchain to query (default: base)"},
+        }
+    else:
+        # Body params for POST: address and chain
+        info_input["bodyType"] = "json"
+        info_input["body"] = {
+            "address": {"type": "string", "description": f"Blockchain address or identifier for {tool_id}"},
+            "chain": {"type": "string", "description": "Blockchain to query (default: base)"},
+        }
+    
+    info = {
+        "input": info_input,
+        "output": {
+            "type": "json",
+            "example": {
+                "data": {"result": "tool output"},
+                "sources_used": ["source1", "source2"],
+            }
+        },
         "category": bazaar_category,
         "tags": ["crypto", "security", "blockchain", tool_id],
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "address": {"type": "string", "description": f"Blockchain address or identifier for {tool_id}"},
-                "chain": {"type": "string", "enum": list(CHAIN_USDC.keys()), "description": "Blockchain to query"},
+        "description": pricing.get("description", f"{tool_id} — Rug Munch Intelligence"),
+    }
+    
+    # Schema that validates the info structure per bazaar spec
+    schema = {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+            "input": {
+                "type": "object",
+                "properties": {
+                    "type": {"type": "string", "const": "http"},
+                    "method": {
+                        "type": "string",
+                        "enum": ["GET", "HEAD", "DELETE"] if http_method == "GET" else ["POST", "PUT", "PATCH"]
+                    },
+                    "queryParams": {"type": "object"} if http_method == "GET" else {"type": "object"},
+                    "bodyType": {"type": "string", "enum": ["json", "form-data", "text"]},
+                    "body": {"type": "object"},
+                },
+                "required": ["type", "method"],
+                "additionalProperties": False,
             },
-            "required": ["address"],
-        },
-        "outputSchema": {
-            "type": "object",
-            "properties": {
-                "data": {"type": "object"},
-                "sources_used": {"type": "array", "items": {"type": "string"}},
+            "output": {
+                "type": "object",
+                "properties": {
+                    "type": {"type": "string"},
+                    "example": {"type": "object"},
+                },
+                "required": ["type"],
             },
+            "category": {"type": "string"},
+            "tags": {"type": "array", "items": {"type": "string"}},
+            "description": {"type": "string"},
         },
+        "required": ["input"],
+    }
+    
+    return {
+        "info": info,
+        "schema": schema,
     }
 
 
 def _build_resource_info(tool_id: str, pricing: dict) -> dict:
-    """Build x402 v2 resource object for PaymentRequired response.
+    """Build x402 v2 ResourceInfo object for PaymentRequired response.
     
-    The resource object describes WHAT is being paid for — required by
-    the v2 spec for PaymenRequired responses.
+    Per x402 v2 spec section 5.1.2, ResourceInfo has only three fields:
+    - url (required): URL of the protected resource
+    - description (optional): Human-readable description
+    - mimeType (optional): MIME type of the expected response
+    
+    NOTE: serviceName, tags, and iconUrl are NOT part of the spec's ResourceInfo.
+    The v2 spec does NOT include serviceName/tags/iconUrl at the resource level.
+    We preserve them as legacy compat fields in x402.resource_metadata for our
+    own internal use, but they must not appear in the spec-compliant ResourceInfo.
     """
     description = pricing.get("description", f"Rug Munch Intelligence — {tool_id}")
-    # Truncate description to 200 chars for spec compliance
+    # Per spec: max 200 chars for description
     if len(description) > 200:
         description = description[:197] + "..."
     
@@ -394,9 +471,6 @@ def _build_resource_info(tool_id: str, pricing: dict) -> dict:
         "url": f"https://rugmunch.io/api/v1/x402-tools/{tool_id}",
         "description": description,
         "mimeType": "application/json",
-        "serviceName": "Rug Munch Intelligence",
-        "tags": ["crypto", pricing.get("category", "analysis"), "x402"],
-        "iconUrl": "https://rugmunch.io/logo.png",
     }
 
 
@@ -431,7 +505,7 @@ def build_402_response(tool_id: str, client_id: str = "") -> JSONResponse:
     resource = _build_resource_info(tool_id, pricing)
     
     # Build bazaar extension for discovery indexing
-    bazaar = _build_bazaar_extension(tool_id, pricing)
+    bazaar = _build_bazaar_extension(tool_id, pricing, accepts)
     
     # ── V2 spec body format (what official SDKs parse) ──
     v2_body = {
