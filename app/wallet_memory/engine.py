@@ -27,6 +27,7 @@ from .clustering import (
 from .labels import LabelService, get_label_service
 from .risk_scoring import RiskScorer
 from .entity_resolver import EntityResolver
+from .ingestion import WalletIngestionPipeline, get_ingestion_pipeline
 
 logger = logging.getLogger("wallet_memory.engine")
 
@@ -43,6 +44,7 @@ class WalletMemoryEngine:
         self.labels = get_label_service()
         self.risk_scorer = RiskScorer(self.storage, self.labels, self.clustering)
         self.entity_resolver = EntityResolver(self.storage)
+        self.ingestion = get_ingestion_pipeline(engine=self, storage=self.storage)
 
     # ── Primary API: Deployer Intelligence (SENTINEL calls this) ───
 
@@ -200,11 +202,23 @@ class WalletMemoryEngine:
         """
         Full wallet profile for the WalletSafe product.
         Includes entity info, risk, labels, cluster, and connected wallets.
+        Auto-triggers ingestion pipeline when profile is empty or stale.
         """
         addr = address.lower().strip()
 
         # Check storage first (may have been enriched before)
         stored = await self.storage.get_wallet_profile(addr, chain)
+
+        # ── Auto-ingestion: fetch fresh data if profile is empty or stale ──
+        if self.ingestion and self.ingestion.should_ingest(addr, chain, stored):
+            try:
+                ingest_ok = await self.ingestion.ingest_if_needed(addr, chain)
+                if ingest_ok:
+                    logger.info(f"Ingestion triggered for {addr} on {chain}")
+                    # Re-fetch stored profile after ingestion may have updated it
+                    stored = await self.storage.get_wallet_profile(addr, chain)
+            except Exception as e:
+                logger.debug(f"Ingestion trigger failed for {addr}: {e}")
 
         # Build fresh profile
         intel = await self.get_deployer_intelligence(addr, chain)

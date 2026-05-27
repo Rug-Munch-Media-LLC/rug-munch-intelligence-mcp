@@ -11,5 +11,6 @@ Two products, one backbone:
 """
 
 from .engine import WalletMemoryEngine, get_wallet_engine
+from .ingestion import WalletIngestionPipeline, get_ingestion_pipeline
 
-__all__ = ["WalletMemoryEngine", "get_wallet_engine"]
+__all__ = ["WalletMemoryEngine", "get_wallet_engine", "WalletIngestionPipeline", "get_ingestion_pipeline"]

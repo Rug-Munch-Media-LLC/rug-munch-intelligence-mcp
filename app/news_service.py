@@ -22,6 +22,7 @@ import os
 import asyncio
 import hashlib
 import logging
+import random
 import feedparser
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
@@ -29,6 +30,41 @@ from typing import List, Dict, Any, Optional
 import httpx
 
 logger = logging.getLogger(__name__)
+
+# ─── PROXY ROTATION ───────────────────────────────────────────────
+# Free public proxy list for Cloudflare-blocked feeds (Substack, etc.)
+# Rotates per-request to distribute load. Dead proxies auto-skip via timeout.
+PROXY_LIST = [
+    "http://43.153.99.140:13001",
+    "http://43.153.99.140:13002",
+    "http://43.153.99.140:13003",
+    "http://43.153.99.140:13004",
+    "http://43.153.99.140:13005",
+    "http://43.153.99.140:13006",
+    "http://43.153.99.140:13007",
+    "http://43.153.99.140:13008",
+    "http://43.153.99.140:13009",
+    "http://43.153.99.140:13010",
+]
+
+# Substack feeds that need proxy rotation (Cloudflare blocked from this IP)
+PROXY_REQUIRED_FEEDS = {
+    "https://cryptosecurity.substack.com/feed",
+    "https://weekinethereum.substack.com/feed",
+    "https://banklessdao.substack.com/feed",
+    "https://defieducation.substack.com/feed",
+    "https://rekt.substack.com/feed",
+    "https://cryptohayes.substack.com/feed",
+    "https://doseofdefi.substack.com/feed",
+    "https://thedefiant.substack.com/feed",
+    "https://tokeninsight.substack.com/feed",
+    "https://blockanalytica.substack.com/feed",
+}
+
+
+def _get_proxy() -> Optional[str]:
+    """Pick a random proxy from the pool."""
+    return random.choice(PROXY_LIST) if PROXY_LIST else None
 
 # ─── CONFIG ───────────────────────────────────────────────────────
 
@@ -75,22 +111,78 @@ RSS_FEEDS = [
     
     # Tier 5: Onchain Intel & Exploit Trackers
     ("https://www.web3isgoinggreat.com/feed", "W3IGG"),
+    
+    # Tier 6: Additional Major News (verified live)
+    ("https://coindesk.com/arc/outboundfeeds/rss/", "CoinDesk"),
+    ("https://cryptodaily.co.uk/feed", "CryptoDaily"),
+    ("https://u.today/rss", "U.Today"),
+    ("https://cryptonews.com/news/feed/", "CryptoNews"),
+    ("https://insidebitcoins.com/feed/", "InsideBitcoins"),
+    ("https://nulltx.com/feed/", "NullTX"),
+    ("https://coinpedia.org/feed/", "Coinpedia"),
+    ("https://www.coinspeaker.com/feed/", "CoinSpeaker"),
+    ("https://crypto.news/feed/", "Crypto.News"),
+    ("https://www.tronweekly.com/feed/", "TronWeekly"),
+    ("https://nftevening.com/feed/", "NFTEvening"),
+    ("https://nftplazas.com/feed/", "NFTPlazas"),
+    ("https://cryptopolitan.com/feed/", "Cryptopolitan"),
+    ("https://www.crypto-insiders.nl/feed/", "Crypto Insiders"),
+    ("https://finbold.com/feed/", "Finbold"),
+    ("https://coinjournal.net/feed/", "CoinJournal"),
+    ("https://blockonomi.com/feed/", "Blockonomi"),
+    ("https://dune.com/blog/feed", "Dune Analytics"),
+    
+    # Tier 7: Exchange & Security Blogs (verified live)
+    ("https://blog.trezor.io/feed", "Trezor"),
+    ("https://blog.kraken.com/feed/", "Kraken"),
+    ("https://blog.bitfinex.com/feed/", "Bitfinex"),
+    ("https://blog.mexc.com/feed", "MEXC"),
+    ("https://blog.ethereum.org/feed.xml", "Ethereum Foundation"),
+    ("https://blog.arbitrum.io/feed", "Arbitrum"),
+    ("https://blog.lido.fi/feed", "Lido"),
+    ("https://blog.synthetix.io/feed", "Synthetix"),
+    ("https://blog.chain.link/feed", "Chainlink"),
+    ("https://blog.1inch.io/feed", "1inch"),
+    ("https://blog.injective.com/feed", "Injective"),
+    
+    # Tier 8: Substack Newsletters (proxy-rotated — Cloudflare blocked from this IP)
+    ("https://cryptosecurity.substack.com/feed", "CryptoSecurity Substack"),
+    ("https://weekinethereum.substack.com/feed", "Week in Ethereum"),
+    ("https://banklessdao.substack.com/feed", "Bankless DAO"),
+    ("https://defieducation.substack.com/feed", "DeFi Education"),
+    ("https://rekt.substack.com/feed", "REKT Newsletter"),
+    ("https://cryptohayes.substack.com/feed", "Arthur Hayes Substack"),
+    ("https://doseofdefi.substack.com/feed", "Dose of DeFi Substack"),
+    ("https://thedefiant.substack.com/feed", "The Defiant Substack"),
+    ("https://tokeninsight.substack.com/feed", "TokenInsight Substack"),
+    ("https://blockanalytica.substack.com/feed", "BlockAnalytica Substack"),
 ]
 
 # ─── NEWSLETTER / SUBSTACK SOURCES ────────────────────────────────
 # These often don't have RSS but we can scrape their /feed endpoint
 
 NEWSLETTER_FEEDS = [
-    ("https://cryptosecurity.substack.com/feed", "CryptoSecurity Substack"),
-    ("https://weekinethereum.substack.com/feed", "Week in Ethereum"),
-    ("https://banklessdao.substack.com/feed", "Bankless DAO"),
-    ("https://defieducation.substack.com/feed", "DeFi Education"),
-    ("https://rekt.substack.com/feed", "REKT Newsletter"),
-    ("https://cryptohayes.substack.com/feed", "Arthur Hayes"),
-    ("https://doseofdefi.substack.com/feed", "Dose of DeFi"),
-    ("https://thedefiant.substack.com/feed", "The Defiant Substack"),
-    ("https://tokeninsight.substack.com/feed", "TokenInsight"),
-    ("https://blockanalytica.substack.com/feed", "BlockAnalytica"),
+    # Verified working (replaced dead Substack feeds blocked by Cloudflare)
+    ("https://cryptohayes.medium.com/feed", "Arthur Hayes"),
+    ("https://www.doseofdefi.com/feed", "Dose of DeFi"),
+    ("https://blog.trezor.io/feed", "Trezor Security"),
+    ("https://blog.kraken.com/feed/", "Kraken"),
+    ("https://blog.bitfinex.com/feed/", "Bitfinex"),
+    ("https://blog.mexc.com/feed", "MEXC"),
+    ("https://coindesk.com/arc/outboundfeeds/rss/", "CoinDesk"),
+    ("https://cryptodaily.co.uk/feed", "CryptoDaily"),
+    ("https://u.today/rss", "U.Today"),
+    ("https://dune.com/blog/feed", "Dune Analytics"),
+    # Substack feeds — all return Cloudflare 403 from this IP.
+    # Re-enable if we deploy residential proxy rotation or use RSS aggregator APIs.
+    # ("https://cryptosecurity.substack.com/feed", "CryptoSecurity Substack"),
+    # ("https://weekinethereum.substack.com/feed", "Week in Ethereum"),
+    # ("https://banklessdao.substack.com/feed", "Bankless DAO"),
+    # ("https://defieducation.substack.com/feed", "DeFi Education"),
+    # ("https://rekt.substack.com/feed", "REKT Newsletter"),
+    # ("https://thedefiant.substack.com/feed", "The Defiant Substack"),
+    # ("https://tokeninsight.substack.com/feed", "TokenInsight"),
+    # ("https://blockanalytica.substack.com/feed", "BlockAnalytica"),
 ]
 
 # ─── REDDIT CONFIG ────────────────────────────────────────────────
@@ -121,62 +213,101 @@ class NewsService:
 
     # ─── RSS FETCHERS ─────────────────────────────────────────────
 
-    async def _fetch_rss(self, url: str, source_name: str, limit: int = 8) -> List[Dict[str, Any]]:
-        """Fetch and parse an RSS feed."""
-        try:
-            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
-                resp = await client.get(url, headers={"User-Agent": REDDIT_USER_AGENT})
-                if resp.status_code != 200:
-                    return []
-
-            feed = feedparser.parse(resp.text)
-            articles = []
-
-            for entry in feed.entries[:limit]:
-                try:
-                    title = entry.get("title", "")
-                    link = entry.get("link", "")
-                    desc = entry.get("summary", "") or entry.get("description", "") or title
-
-                    # Parse date
-                    pub_parsed = entry.get("published_parsed") or entry.get("updated_parsed")
-                    if pub_parsed and isinstance(pub_parsed, (tuple, list)) and len(pub_parsed) >= 6:
-                        published = datetime(*pub_parsed[:6]).isoformat()
-                    else:
-                        published = datetime.utcnow().isoformat()
-
-                    # Skip old articles (>48h)
-                    if pub_parsed and isinstance(pub_parsed, (tuple, list)) and len(pub_parsed) >= 6:
-                        pub_dt = datetime(*pub_parsed[:6])
-                        if datetime.utcnow() - pub_dt > timedelta(hours=48):
-                            continue
-
-                    content_hash = hashlib.md5(f"rss:{title}:{link}".encode()).hexdigest()
-                    if content_hash in self.seen_hashes:
+    async def _fetch_rss(self, url: str, source_name: str, limit: int = 8, use_proxy: bool = False) -> List[Dict[str, Any]]:
+        """Fetch and parse an RSS feed. Auto-uses proxy rotation for Cloudflare-blocked sources."""
+        # Auto-detect if proxy needed
+        needs_proxy = use_proxy or url in PROXY_REQUIRED_FEEDS
+        
+        for attempt in range(3 if needs_proxy else 1):
+            try:
+                client_kwargs = {"timeout": 15.0, "follow_redirects": True}
+                if needs_proxy and attempt > 0:
+                    proxy = _get_proxy()
+                    if proxy:
+                        client_kwargs["proxy"] = proxy
+                        logger.debug(f"Using proxy {proxy} for {source_name}")
+                
+                async with httpx.AsyncClient(**client_kwargs) as client:
+                    headers = {"User-Agent": REDDIT_USER_AGENT}
+                    if needs_proxy:
+                        # Full browser headers to blend in
+                        headers = {
+                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                            "Accept-Language": "en-US,en;q=0.5",
+                            "Accept-Encoding": "gzip, deflate, br",
+                            "DNT": "1",
+                            "Connection": "keep-alive",
+                            "Upgrade-Insecure-Requests": "1",
+                        }
+                    resp = await client.get(url, headers=headers)
+                    if resp.status_code == 200:
+                        break  # Success, exit retry loop
+                    elif resp.status_code == 403 and needs_proxy and attempt < 2:
+                        logger.warning(f"Proxy attempt {attempt+1} got 403 for {source_name}, rotating...")
+                        await asyncio.sleep(0.5)
                         continue
-                    self.seen_hashes.add(content_hash)
-
-                    articles.append({
-                        "id": f"rss-{content_hash[:12]}",
-                        "title": title,
-                        "url": link,
-                        "description": desc[:300],
-                        "source": source_name,
-                        "published_at": published,
-                        "category": self._categorize(title + " " + desc),
-                        "sentiment": self._analyze_sentiment(title + " " + desc),
-                        "kind": "external",
-                    })
-
-                except Exception:
+                    else:
+                        return []
+            except Exception as e:
+                if needs_proxy and attempt < 2:
+                    logger.warning(f"Proxy attempt {attempt+1} failed for {source_name}: {e}, rotating...")
+                    await asyncio.sleep(0.5)
                     continue
-
-            logger.info(f"RSS {source_name}: {len(articles)} articles")
-            return articles
-
-        except Exception as e:
-            logger.warning(f"RSS {source_name} failed: {e}")
+                logger.warning(f"RSS {source_name} failed: {e}")
+                return []
+        else:
+            # All proxy attempts exhausted
             return []
+
+        try:
+            feed = feedparser.parse(resp.text)
+        except Exception:
+            return []
+        
+        articles = []
+
+        for entry in feed.entries[:limit]:
+            try:
+                title = entry.get("title", "")
+                link = entry.get("link", "")
+                desc = entry.get("summary", "") or entry.get("description", "") or title
+
+                # Parse date
+                pub_parsed = entry.get("published_parsed") or entry.get("updated_parsed")
+                if pub_parsed and isinstance(pub_parsed, (tuple, list)) and len(pub_parsed) >= 6:
+                    published = datetime(*pub_parsed[:6]).isoformat()
+                else:
+                    published = datetime.utcnow().isoformat()
+
+                # Skip old articles (>48h)
+                if pub_parsed and isinstance(pub_parsed, (tuple, list)) and len(pub_parsed) >= 6:
+                    pub_dt = datetime(*pub_parsed[:6])
+                    if datetime.utcnow() - pub_dt > timedelta(hours=48):
+                        continue
+
+                content_hash = hashlib.md5(f"rss:{title}:{link}".encode()).hexdigest()
+                if content_hash in self.seen_hashes:
+                    continue
+                self.seen_hashes.add(content_hash)
+
+                articles.append({
+                    "id": f"rss-{content_hash[:12]}",
+                    "title": title,
+                    "url": link,
+                    "description": desc[:300],
+                    "source": source_name,
+                    "published_at": published,
+                    "category": self._categorize(title + " " + desc),
+                    "sentiment": self._analyze_sentiment(title + " " + desc),
+                    "kind": "external",
+                })
+
+            except Exception:
+                continue
+
+        logger.info(f"RSS {source_name}: {len(articles)} articles")
+        return articles
 
     async def _fetch_all_rss(self, limit_per_source: int = 8) -> List[Dict[str, Any]]:
         """Fetch from all RSS feeds in parallel."""

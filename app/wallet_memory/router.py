@@ -211,3 +211,32 @@ async def wallet_memory_health():
             "heuristics": 6,
         },
     }
+
+
+@router.post("/labels/reload")
+async def reload_static_labels():
+    """
+    Trigger a full reload of all static wallet labels.
+    Re-downloads Solana CSVs if missing, reloads all etherscan CSVs and OFAC data.
+    Stores to both Redis and ClickHouse via WalletStorage.
+    """
+    from .label_importer import load_all_static_labels, is_loading
+    if is_loading():
+        return {"status": "already_loading", "message": "Label import is already in progress"}
+    counts = await load_all_static_labels()
+    return {
+        "status": "complete",
+        "counts": counts,
+    }
+
+
+@router.get("/labels/stats")
+async def label_stats():
+    """
+    Get current label load counts and status.
+    """
+    from .label_importer import get_last_load_counts, is_loading
+    return {
+        "loading": is_loading(),
+        "last_counts": get_last_load_counts(),
+    }

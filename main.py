@@ -141,6 +141,23 @@ async def _startup():
     except Exception as e:
         print(f"[WARN] x402 dashboard startup failed: {e}")
 
+    # Ensure ClickHouse schema for Wallet Memory Bank
+    try:
+        from app.wallet_memory.storage import ensure_schema
+        ch_ok = await ensure_schema()
+        print(f"[INFO] ClickHouse schema ensure: {'ok' if ch_ok else 'unavailable'}")
+    except Exception as e:
+        print(f"[WARN] ClickHouse schema init failed: {e}")
+
+    # Load static wallet labels into Redis + ClickHouse
+    try:
+        from app.wallet_memory.label_importer import load_all_static_labels
+        counts = await load_all_static_labels()
+        total = counts.get("total", 0)
+        print(f"[INFO] Static wallet labels loaded: {total} labels across {len(counts)} sources")
+    except Exception as e:
+        print(f"[WARN] Static wallet label import failed: {e}")
+
     # Pre-warm RAG embedding model (avoids 5s cold-start on first citation query)
     try:
         from app.rag_service import search_similar
@@ -153,6 +170,10 @@ from app.email_router import router as email_router
 app.include_router(email_router)
 from app.mail_dashboard import router as mail_router
 app.include_router(mail_router)
+
+# WalletSafe — Wallet Intelligence Explorer frontend
+from app.wallet_memory.frontend import router as walletsafe_router
+app.include_router(walletsafe_router)
 
 # Wallet Factory API — multi-chain wallet generation (25+ chains)
 from app.routers.wallet_factory_router import router as wallet_factory_router
