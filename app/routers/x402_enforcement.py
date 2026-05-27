@@ -142,6 +142,8 @@ def _load_tool_prices():
         "osint_identity_hunt": {"price_usd": 0.15, "price_atoms": "150000", "category": "premium", "trial_free": 2, "description": "Cross-platform OSINT investigation — hunt usernames across 400+ networks, domain intelligence, stealth page capture"},
         "investigation_report": {"price_usd": 0.20, "price_atoms": "200000", "category": "premium", "trial_free": 1, "description": "Full investigation report — on-chain forensics, financial valuation, OSINT findings, scam scoring in one deliverable"},
         "forensic_pack": {"price_usd": 0.40, "price_atoms": "400000", "category": "bundle", "trial_free": 1, "description": "Forensic Investigation Pack — valuation + OSINT + report at 33% discount"},
+        "token_watch_create": {"price_usd": 0.05, "price_atoms": "50000", "category": "monitoring", "trial_free": 3, "description": "Set token monitoring watch — alerts when LP drops, price changes, or rug indicators detected"},
+        "token_watch_check": {"price_usd": 0.03, "price_atoms": "30000", "category": "monitoring", "trial_free": 5, "description": "One-shot token status check — current LP, price, volume, and rug risk warnings"},
     }
     TOOL_PRICES.update(_NEW_TOOL_PRICES)
     

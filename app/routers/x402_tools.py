@@ -4506,7 +4506,7 @@ async def address_labels_endpoint(req: SentinelModuleRequest):
 
 
 # ═══════════════════════════════════════════════════════════════
-# SENTINEL TIER 4 — Visualization
+# SENTINEL TIER 4 — Visualization & Contract Diff
 @router.post("/fund_flow")
 async def fund_flow_endpoint(req: SentinelModuleRequest):
     """SENTINEL Fund Flow Visualization — SVG fund flow graph for token analysis.
@@ -4522,6 +4522,36 @@ async def fund_flow_endpoint(req: SentinelModuleRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/contract_diff")
+async def contract_diff_endpoint(req: SentinelModuleRequest):
+    """SENTINEL Contract Diff — bytecode hash comparison against known rug contracts.
+
+    Pricing: $0.10
+    Compares a token's contract bytecode against a database of known rug contracts.
+    Detects clones, forks, and near-identical contracts by hashing function selectors,
+    bytecode sections, and metadata patterns. Identifies dangerous function signatures
+    (withdrawAll, drain, setOwner, emergencyWithdraw) and rug-specific bytecode patterns.
+    """
+    try:
+        from app.scanners.sentinel_pipeline import run_contract_diff
+
+        result = await run_contract_diff(req.address, req.chain)
+        await record_x402_payment("contract_diff", "0.10", req.address)
+
+        return {
+            "tool": "SENTINEL Contract Diff",
+            "version": "1.0",
+            "timestamp": datetime.utcnow().isoformat(),
+            "address": req.address,
+            "chain": req.chain,
+            **result,
+            "guarantee": "Data delivered or auto-refund via x402 receipt",
+        }
+    except Exception as e:
+        logger.error(f"Contract diff analysis failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ALIAS ROUTES — Map dead tool IDs to real handler endpoints
 # These tools appear in TOOL_PRICES and x402 manifest but had no routes.
 # Each alias proxies the request to the real implementation.
@@ -4531,7 +4561,7 @@ TOOL_ALIASES: Dict[str, str] = {
     # Security
     "airdrop_check": "airdrop_finder",
     "bundler_detect": "mev_protection",
-    "clone_detect": "audit",
+    "clone_detect": "contract_diff",
     "deployer_history": "insider",
     "fresh_pair": "launch",
     "liquidity_migration": "rugshield",

@@ -1,14 +1,16 @@
 """
-RMI News Aggregation Service — Multi-Source Crypto Intelligence
-=================================================================
-Aggregates crypto news from 15+ sources for the website news page.
+RMI News Aggregation Service — Expanded Multi-Source Crypto Intelligence
+========================================================================
+Aggregates crypto news from 40+ sources for the website news page.
 
 Sources:
-  RSS — CoinTelegraph, CoinDesk, Decrypt, The Block, The Defiant, Bankless, DL News
-  API  — CoinGecko, CryptoPanic, CoinMarketCal
+  RSS — Major crypto news, security firms, research, onchain intel
+  API  — CoinGecko, CryptoPanic
   Social — Reddit (r/CryptoCurrency, r/CryptoMarkets, r/ethdev)
   Internal — Ghost blog, RMI Intel
-  X/Twitter — Via n8n pipeline (ingests to RAG)
+  Newsletters — Substack/Mirror scraping (security-focused)
+  Security Reports — PDF ingestion pipeline
+  Onchain Intel — MEV, bundle, exploit feeds
 
 Environment:
   COINGECKO_API_KEY — For CoinGecko news API
@@ -38,24 +40,58 @@ GHOST_CONTENT_KEY = os.getenv("GHOST_CONTENT_API_KEY", "")
 # ─── RSS FEED CONFIG ──────────────────────────────────────────────
 
 RSS_FEEDS = [
+    # Tier 1: Security & Audit Firms
+    ("https://peckshield.medium.com/feed", "PeckShield"),
+    ("https://slowmist.medium.com/feed", "SlowMist"),
+    ("https://certik.medium.com/feed", "CertiK"),
+    ("https://immunefi.medium.com/feed", "Immunefi"),
+    ("https://blog.trailofbits.com/feed/", "Trail of Bits"),
+    ("https://www.chainalysis.com/blog/feed/", "Chainalysis"),
+    
+    # Tier 2: Major Crypto News
     ("https://cointelegraph.com/rss", "CoinTelegraph"),
     ("https://decrypt.co/feed", "Decrypt"),
     ("https://blockworks.co/feed", "Blockworks"),
     ("https://www.theblock.co/rss.xml", "The Block"),
     ("https://thedefiant.io/feed", "The Defiant"),
     ("https://www.bankless.com/feed", "Bankless"),
-    ("https://www.chainalysis.com/blog/feed/", "Chainalysis"),
-    ("https://blog.trailofbits.com/feed/", "Trail of Bits"),
     ("https://bitcoinmagazine.com/feed", "Bitcoin Magazine"),
+    ("https://protos.com/feed/", "Protos"),
+    ("https://beincrypto.com/feed/", "BeInCrypto"),
+    ("https://unchainedcrypto.com/feed/", "Unchained"),
+    
+    # Tier 3: Research & Analytics
+    ("https://collective.flashbots.net/latest.rss", "Flashbots"),
+    ("https://insights.glassnode.com/feed/", "Glassnode"),
+    ("https://blog.eigenlayer.xyz/feed", "EigenLayer"),
+    ("https://blog.celestia.org/feed", "Celestia"),
+    ("https://solana.com/news/feed", "Solana"),
+    
+    # Tier 4: Crossover Security (general tech security affecting crypto)
+    ("https://feeds.feedburner.com/TheHackersNews", "The Hacker News"),
+    ("https://www.bleepingcomputer.com/feed/", "BleepingComputer"),
+    ("https://krebsonsecurity.com/feed/", "Krebs on Security"),
+    ("https://www.darkreading.com/rss.xml", "Dark Reading"),
+    
+    # Tier 5: Onchain Intel & Exploit Trackers
     ("https://www.web3isgoinggreat.com/feed", "W3IGG"),
-    ("https://peckshield.medium.com/feed", "PeckShield"),
-    ("https://slowmist.medium.com/feed", "SlowMist"),
-    ("https://certik.medium.com/feed", "CertiK"),
-    ("https://immunefi.medium.com/feed", "Immunefi"),
-    ("https://cryptosecurity.substack.com/feed", "CryptoSecurity"),
 ]
 
-# Coingeek and BitMEX removed (dead feeds). Coindesk Arc removed (returns HTML not RSS).
+# ─── NEWSLETTER / SUBSTACK SOURCES ────────────────────────────────
+# These often don't have RSS but we can scrape their /feed endpoint
+
+NEWSLETTER_FEEDS = [
+    ("https://cryptosecurity.substack.com/feed", "CryptoSecurity Substack"),
+    ("https://weekinethereum.substack.com/feed", "Week in Ethereum"),
+    ("https://banklessdao.substack.com/feed", "Bankless DAO"),
+    ("https://defieducation.substack.com/feed", "DeFi Education"),
+    ("https://rekt.substack.com/feed", "REKT Newsletter"),
+    ("https://cryptohayes.substack.com/feed", "Arthur Hayes"),
+    ("https://doseofdefi.substack.com/feed", "Dose of DeFi"),
+    ("https://thedefiant.substack.com/feed", "The Defiant Substack"),
+    ("https://tokeninsight.substack.com/feed", "TokenInsight"),
+    ("https://blockanalytica.substack.com/feed", "BlockAnalytica"),
+]
 
 # ─── REDDIT CONFIG ────────────────────────────────────────────────
 
@@ -65,6 +101,10 @@ REDDIT_SUBREDDITS = [
     "ethdev",
     "CryptoTechnology",
     "defi",
+    "ethfinance",
+    "solana",
+    "CryptoScams",
+    "Buttcoin",
 ]
 
 REDDIT_USER_AGENT = "RMI-News-Aggregator/2.0"
@@ -84,7 +124,7 @@ class NewsService:
     async def _fetch_rss(self, url: str, source_name: str, limit: int = 8) -> List[Dict[str, Any]]:
         """Fetch and parse an RSS feed."""
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
+            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
                 resp = await client.get(url, headers={"User-Agent": REDDIT_USER_AGENT})
                 if resp.status_code != 200:
                     return []
@@ -100,13 +140,13 @@ class NewsService:
 
                     # Parse date
                     pub_parsed = entry.get("published_parsed") or entry.get("updated_parsed")
-                    if pub_parsed:
+                    if pub_parsed and isinstance(pub_parsed, (tuple, list)) and len(pub_parsed) >= 6:
                         published = datetime(*pub_parsed[:6]).isoformat()
                     else:
                         published = datetime.utcnow().isoformat()
 
                     # Skip old articles (>48h)
-                    if pub_parsed:
+                    if pub_parsed and isinstance(pub_parsed, (tuple, list)) and len(pub_parsed) >= 6:
                         pub_dt = datetime(*pub_parsed[:6])
                         if datetime.utcnow() - pub_dt > timedelta(hours=48):
                             continue
@@ -141,6 +181,75 @@ class NewsService:
     async def _fetch_all_rss(self, limit_per_source: int = 8) -> List[Dict[str, Any]]:
         """Fetch from all RSS feeds in parallel."""
         tasks = [self._fetch_rss(url, name, limit_per_source) for url, name in RSS_FEEDS]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        all_articles = []
+        for result in results:
+            if isinstance(result, list):
+                all_articles.extend(result)
+        return all_articles
+
+    # ─── NEWSLETTER FETCHER ───────────────────────────────────────
+
+    async def _fetch_newsletter(self, url: str, source_name: str, limit: int = 5) -> List[Dict[str, Any]]:
+        """Fetch newsletter feeds (Substack, Mirror, etc)."""
+        try:
+            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+                resp = await client.get(url, headers={"User-Agent": REDDIT_USER_AGENT})
+                if resp.status_code != 200:
+                    return []
+
+            feed = feedparser.parse(resp.text)
+            articles = []
+
+            for entry in feed.entries[:limit]:
+                try:
+                    title = entry.get("title", "")
+                    link = entry.get("link", "")
+                    desc = entry.get("summary", "") or entry.get("description", "") or title
+
+                    pub_parsed = entry.get("published_parsed") or entry.get("updated_parsed")
+                    if pub_parsed and isinstance(pub_parsed, (tuple, list)) and len(pub_parsed) >= 6:
+                        published = datetime(*pub_parsed[:6]).isoformat()
+                    else:
+                        published = datetime.utcnow().isoformat()
+
+                    # Skip old articles (>72h for newsletters)
+                    if pub_parsed and isinstance(pub_parsed, (tuple, list)) and len(pub_parsed) >= 6:
+                        pub_dt = datetime(*pub_parsed[:6])
+                        if datetime.utcnow() - pub_dt > timedelta(hours=72):
+                            continue
+
+                    content_hash = hashlib.md5(f"newsletter:{title}:{link}".encode()).hexdigest()
+                    if content_hash in self.seen_hashes:
+                        continue
+                    self.seen_hashes.add(content_hash)
+
+                    articles.append({
+                        "id": f"nl-{content_hash[:12]}",
+                        "title": title,
+                        "url": link,
+                        "description": desc[:300],
+                        "source": source_name,
+                        "published_at": published,
+                        "category": self._categorize(title + " " + desc),
+                        "sentiment": self._analyze_sentiment(title + " " + desc),
+                        "kind": "newsletter",
+                    })
+
+                except Exception:
+                    continue
+
+            logger.info(f"Newsletter {source_name}: {len(articles)} articles")
+            return articles
+
+        except Exception as e:
+            logger.warning(f"Newsletter {source_name} failed: {e}")
+            return []
+
+    async def _fetch_all_newsletters(self) -> List[Dict[str, Any]]:
+        """Fetch from all newsletter sources in parallel."""
+        tasks = [self._fetch_newsletter(url, name, 5) for url, name in NEWSLETTER_FEEDS]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         all_articles = []
@@ -365,41 +474,85 @@ class NewsService:
             logger.warning(f"Ghost fetch failed: {e}")
             return []
 
+    # ─── SECURITY REPORT INGESTION ──────────────────────────────────
+    # Placeholder for PDF report pipeline — would integrate with:
+    # - Chainalysis reports (quarterly crypto crime reports)
+    # - CertiK security reports
+    # - Immunefi bug bounty summaries
+    # - SlowMist incident reports
+    # - PeckShield alerts
+    # These are typically published as PDFs or blog posts with structured data
+
+    async def _fetch_security_reports(self) -> List[Dict[str, Any]]:
+        """Fetch structured security reports from known sources."""
+        # TODO: Implement PDF scraping + parsing for:
+        # - Chainalysis Crypto Crime Reports
+        # - CertiK Hack3D Reports
+        # - Immunefi quarterly stats
+        # - SlowMist Blockchain Security Incident Reports
+        # - PeckShield monthly summaries
+        return []
+
+    # ─── ONCHAIN INTEL FEEDS ──────────────────────────────────────
+    # Real-time onchain data that acts as "news"
+
+    async def _fetch_onchain_intel(self) -> List[Dict[str, Any]]:
+        """Fetch onchain intelligence: large transfers, exchange flows, MEV."""
+        # TODO: Integrate with:
+        # - Arkham Intel API (whale alerts, exchange flows)
+        # - Nansen Smart Money signals
+        # - EigenPhi MEV summaries
+        # - Flashbots MEV-Share data
+        # - Token Terminal onchain metrics
+        return []
+
     # ─── INTELLIGENCE LAYER ────────────────────────────────────────
 
     def _categorize(self, text: str) -> str:
         """Categorize content based on keyword matching."""
         text_lower = text.lower()
-        if any(w in text_lower for w in ["hack", "exploit", "rug", "scam", "phish", "drain", "stolen", "vulnerability", "breach"]):
+        if any(w in text_lower for w in ["hack", "exploit", "rug", "scam", "phish", "drain", "stolen", "vulnerability", "breach", "flash loan", "reentrancy", "oracle manipulation"]):
             return "security"
-        if any(w in text_lower for w in ["sec", "regulation", "etf", "lawsuit", "court", "compliance", "sanction"]):
+        if any(w in text_lower for w in ["sec", "regulation", "etf", "lawsuit", "court", "compliance", "sanction", "sec ", "cftc", "finCEN"]):
             return "regulation"
-        if any(w in text_lower for w in ["defi", "yield", "staking", "lending", "protocol", "amm", "dex"]):
+        if any(w in text_lower for w in ["defi", "yield", "staking", "lending", "protocol", "amm", "dex", "liquidity", "vault", "strategy"]):
             return "defi"
-        if any(w in text_lower for w in ["nft", "collection", "mint", "opensea", "blur"]):
+        if any(w in text_lower for w in ["nft", "collection", "mint", "opensea", "blur", "marketplace"]):
             return "nft"
-        if any(w in text_lower for w in ["meme", "doge", "shib", "pepe", "bonk", "wif"]):
+        if any(w in text_lower for w in ["meme", "doge", "shib", "pepe", "bonk", "wif", "mog", "popcat"]):
             return "memes"
-        if any(w in text_lower for w in ["whale", "accumulat", "dump", "sell", "buy", "inflow"]):
+        if any(w in text_lower for w in ["whale", "accumulat", "dump", "sell", "buy", "inflow", "outflow", "exchange flow", "smart money"]):
             return "whales"
-        if any(w in text_lower for w in ["fed", "inflation", "interest rate", "cpi", "recession", "gdp", "economy"]):
+        if any(w in text_lower for w in ["fed", "inflation", "interest rate", "cpi", "recession", "gdp", "economy", "macro", "dxy"]):
             return "macro"
+        if any(w in text_lower for w in ["mev", "bundle", "sandwich", "frontrun", "validator", "proposer", "builder"]):
+            return "mev"
+        if any(w in text_lower for w in ["layer 2", "l2", "rollup", "zk", "optimistic", "sequencer", "bridge", "cross-chain"]):
+            return "layer2"
+        if any(w in text_lower for w in ["ai", "artificial intelligence", "llm", "model", "training", "inference", "agent"]):
+            return "ai"
         return "market"
 
     def _categorize_reddit(self, subreddit: str, text: str) -> str:
         """Reddit-specific categorization."""
-        if subreddit == "ethdev":
+        if subreddit in ["ethdev", "CryptoTechnology"]:
             return "technology"
-        if subreddit == "CryptoTechnology":
-            return "technology"
+        if subreddit == "CryptoScams":
+            return "security"
+        if subreddit == "solana":
+            return "solana"
+        if subreddit == "ethfinance":
+            return "defi"
         return self._categorize(text)
 
     def _analyze_sentiment(self, text: str) -> str:
         """Simple keyword-based sentiment analysis."""
         bullish_words = ["surge", "rally", "pump", "bull", "ath", "breakout", "gain", "rise", "soar",
-                         "moon", "growth", "adopt", "partnership", "launch", "green", "up"]
+                         "moon", "growth", "adopt", "partnership", "launch", "green", "up", "moonshot",
+                         "breakthrough", "milestone", "record", "all-time high", "bullish"]
         bearish_words = ["crash", "dump", "bear", "plunge", "drop", "fall", "decline", "hack",
-                         "exploit", "scam", "rug", "ban", "lawsuit", "red", "down", "sell", "fear"]
+                         "exploit", "scam", "rug", "ban", "lawsuit", "red", "down", "sell", "fear",
+                         "panic", "collapse", "liquidation", "bankruptcy", "insolvent", "drained"]
 
         text_lower = text.lower()
         bull_count = sum(1 for w in bullish_words if w in text_lower)
@@ -427,8 +580,9 @@ class NewsService:
             self.seen_hashes.clear()
 
         # Fetch all sources in parallel
-        rss, reddit, coingecko, cryptopanic, ghost = await asyncio.gather(
+        rss, newsletters, reddit, coingecko, cryptopanic, ghost = await asyncio.gather(
             self._fetch_all_rss(limit_per_source=6),
+            self._fetch_all_newsletters(),
             self._fetch_all_reddit(),
             self._fetch_coingecko(limit=20),
             self._fetch_cryptopanic(limit=20),
@@ -458,7 +612,7 @@ class NewsService:
             },
         ]
 
-        all_news = rss + reddit + coingecko + cryptopanic + ghost + rmi_intel
+        all_news = rss + newsletters + reddit + coingecko + cryptopanic + ghost + rmi_intel
 
         # Sort by date (newest first)
         def sort_key(item):
@@ -483,6 +637,31 @@ class NewsService:
         security = [n for n in news if n.get("category") == "security" or n.get("highlight")]
         others = [n for n in news if n not in security]
         return (security + others)[:count]
+
+    async def get_by_category(self, category: str, limit: int = 20) -> List[Dict[str, Any]]:
+        """Get news filtered by category."""
+        news = await self.get_all_news(limit=200)
+        filtered = [n for n in news if n.get("category", "").lower() == category.lower()]
+        return filtered[:limit]
+
+    async def get_sources_summary(self) -> Dict[str, Any]:
+        """Get summary of active sources and article counts."""
+        news = await self.get_all_news(limit=500)
+        sources = {}
+        categories = {}
+        for item in news:
+            src = item.get("source", "Unknown")
+            cat = item.get("category", "general")
+            sources[src] = sources.get(src, 0) + 1
+            categories[cat] = categories.get(cat, 0) + 1
+        return {
+            "total_articles": len(news),
+            "sources": dict(sorted(sources.items(), key=lambda x: -x[1])),
+            "categories": dict(sorted(categories.items(), key=lambda x: -x[1])),
+            "rss_feeds": len(RSS_FEEDS),
+            "newsletter_feeds": len(NEWSLETTER_FEEDS),
+            "reddit_subreddits": len(REDDIT_SUBREDDITS),
+        }
 
 
 # Singleton

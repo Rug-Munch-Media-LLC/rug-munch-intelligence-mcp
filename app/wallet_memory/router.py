@@ -1,0 +1,213 @@
+"""
+Wallet Memory Bank API Router — /api/v1/wallet/*
+===================================================
+Unified wallet intelligence endpoints for both:
+  - WalletSafe frontend (wallet profiles, entity explorer)
+  - SENTINEL integration (deployer intelligence)
+"""
+
+import logging
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field
+
+logger = logging.getLogger("wallet_memory.router")
+
+router = APIRouter(prefix="/api/v1/wallet", tags=["wallet-memory"])
+
+
+# ── Request/Response models ────────────────────────────────────
+
+class WalletProfileRequest(BaseModel):
+    address: str
+    chain: str = "solana"
+    depth: int = Field(default=1, ge=1, le=5, description="Cluster exploration depth")
+
+class DeployerIntelRequest(BaseModel):
+    address: str
+    chain: str = "solana"
+
+class FlagDeployerRequest(BaseModel):
+    address: str
+    chain: str = "solana"
+    reason: str = "high_risk_token"
+    token: str = ""
+    score: float = Field(default=0, ge=0, le=100)
+
+class SearchRequest(BaseModel):
+    query: str
+    chain: str = ""
+    limit: int = Field(default=20, ge=1, le=100)
+
+class FeedTransactionsRequest(BaseModel):
+    transactions: List[Dict[str, Any]]
+    chain_id: str = "solana"
+
+class BridgeLinkRequest(BaseModel):
+    source_address: str
+    source_chain: str
+    dest_address: str
+    dest_chain: str
+    bridge_name: str
+    tx_hash: str
+    confidence: float = Field(default=1.0, ge=0, le=1.0)
+
+
+# ── Engine helper ────────────────────────────────────────────────
+
+def _get_engine():
+    from .engine import get_wallet_engine
+    return get_wallet_engine()
+
+
+# ── Endpoints ───────────────────────────────────────────────────
+
+@router.get("/{address}/profile")
+async def get_wallet_profile(
+    address: str,
+    chain: str = Query(default="solana"),
+    depth: int = Query(default=1, ge=1, le=5),
+):
+    """
+    Get full wallet profile with entity info, risk, labels, and cluster.
+    This is the primary WalletSafe product endpoint.
+    """
+    engine = _get_engine()
+    profile = await engine.get_wallet_profile(address, chain, depth)
+    return profile
+
+
+@router.post("/deployer-intel")
+async def get_deployer_intelligence(req: DeployerIntelRequest):
+    """
+    Get deployer intelligence for SENTINEL token scans.
+    Returns entity, labels, risk, and deployer history in one shot.
+    """
+    engine = _get_engine()
+    intel = await engine.get_deployer_intelligence(req.address, req.chain)
+    return intel
+
+
+@router.post("/flag-deployer")
+async def flag_deployer(req: FlagDeployerRequest):
+    """
+    Feed scan results back into the Wallet Memory Bank.
+    This is the data flywheel: scans produce intelligence for future scans.
+    """
+    engine = _get_engine()
+    success = await engine.flag_deployer(
+        req.address, req.chain, req.reason, req.token, req.score
+    )
+    return {"flagged": success, "address": req.address, "chain": req.chain}
+
+
+@router.post("/search")
+async def search_wallets(req: SearchRequest):
+    """Search wallets by address prefix, label, or entity name."""
+    engine = _get_engine()
+    results = await engine.search_wallets(req.query, req.chain, req.limit)
+    return {"query": req.query, "results": results, "count": len(results)}
+
+
+@router.get("/{address}/entity")
+async def get_entity(address: str, chain: str = Query(default="solana")):
+    """
+    Get cross-chain entity resolution for a wallet.
+    Returns linked addresses across all chains.
+    """
+    from .entity_resolver import get_entity_resolver
+    resolver = get_entity_resolver()
+    entity = await resolver.resolve(address, chain)
+    return entity
+
+
+@router.post("/bridge-link")
+async def create_bridge_link(req: BridgeLinkRequest):
+    """
+    Explicitly link two wallets across chains via a bridge transaction.
+    """
+    from .entity_resolver import get_entity_resolver
+    resolver = get_entity_resolver()
+    entity_id = await resolver.link_via_bridge(
+        req.source_address, req.source_chain,
+        req.dest_address, req.dest_chain,
+        req.bridge_name, req.tx_hash, req.confidence
+    )
+    return {"entity_id": entity_id, "linked": True}
+
+
+@router.post("/feed-transactions")
+async def feed_transactions(req: FeedTransactionsRequest):
+    """
+    Feed transactions into the clustering engine.
+    Used by data ingestion pipelines to build entity clusters.
+    """
+    engine = _get_engine()
+    engine.feed_transactions(req.transactions, req.chain_id)
+    stats = engine.clustering.get_stats()
+    return {"fed": len(req.transactions), "engine_stats": stats}
+
+
+@router.post("/persist-clusters")
+async def persist_clusters():
+    """Run all clustering heuristics and persist results to storage."""
+    engine = _get_engine()
+    persisted = await engine.persist_clusters()
+    return {"persisted": persisted}
+
+
+@router.get("/{address}/risk")
+async def get_wallet_risk(
+    address: str,
+    chain: str = Query(default="solana"),
+):
+    """
+    Get just the risk score for a wallet (fast path).
+    """
+    engine = _get_engine()
+    intel = await engine.get_deployer_intelligence(address, chain)
+    return {
+        "address": address.lower(),
+        "chain": chain,
+        "risk_score": intel.get("risk_score", 0),
+        "risk_level": intel.get("risk_level", "unknown"),
+        "scam_associations": intel.get("scam_associations", []),
+        "warnings": [],
+    }
+
+
+@router.get("/stats")
+async def wallet_memory_stats():
+    """Get Wallet Memory Bank statistics."""
+    engine = _get_engine()
+    cluster_stats = engine.clustering.get_stats()
+    return {
+        "storage": "clickhouse+redis" if engine.storage._ch else "redis-only",
+        "clustering": cluster_stats,
+        "label_sources": 9,
+    }
+
+
+@router.get("/health")
+async def wallet_memory_health():
+    """Health check for Wallet Memory Bank."""
+    engine = _get_engine()
+    # Force lazy connection to actually test
+    try:
+        await engine.storage._ensure_connections()
+    except Exception:
+        pass
+    storage_ok = engine.storage._redis is not None or engine.storage._ch is not None
+    return {
+        "status": "ok" if storage_ok else "degraded",
+        "storage": {
+            "redis": engine.storage._redis is not None,
+            "clickhouse": engine.storage._ch is not None,
+        },
+        "clustering": {
+            "wallets": engine.clustering.uf.total_nodes,
+            "heuristics": 6,
+        },
+    }

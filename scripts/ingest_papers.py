@@ -1,205 +1,105 @@
 #!/usr/bin/env python3
-"""
-Ingest extracted arxiv paper texts into RAG 'forensic_reports' collection.
-Reads .txt files and metadata from /root/backend/data/papers/,
-chunks each paper into ~2000 word sections, and ingests via the
-RAG HTTP API at localhost:8000/api/v1/rag/ingest.
+"""Ingest research papers from /root/backend/data/papers/ into RAG forensic_reports."""
+import json, os, hashlib, httpx, time
 
-Usage:
-    python3 ingest_papers.py [--api http://localhost:8000] [--chunk-words 2000] [--dry-run]
-"""
-
-import argparse
-import json
-import os
-import re
-import sys
-import time
-import requests
-
-PAPERS_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "papers")
-METADATA_FILE = os.path.join(PAPERS_DIR, "papers_metadata.json")
-DEFAULT_API = "http://localhost:8000"
-DEFAULT_CHUNK_WORDS = 2000
-
-
-def load_metadata():
-    with open(METADATA_FILE, "r") as f:
-        return json.load(f)
-
-
-def discover_txt_files():
-    """Find all .txt files in papers_dir, map arxiv_id -> filepath."""
-    txt_files = {}
-    for fname in os.listdir(PAPERS_DIR):
-        if fname.endswith(".txt"):
-            arxiv_id = fname.replace(".txt", "")
-            txt_files[arxiv_id] = os.path.join(PAPERS_DIR, fname)
-    return txt_files
-
-
-def chunk_text(text, chunk_words=DEFAULT_CHUNK_WORDS):
-    """
-    Split text into chunks of approximately chunk_words words.
-    We try to split at paragraph/section boundaries when possible.
-    Falls back to hard word-count splits if sections are too long.
-    """
-    # Split into paragraphs
-    paragraphs = re.split(r'\n\s*\n', text)
-    paragraphs = [p.strip() for p in paragraphs if p.strip()]
-    
-    chunks = []
-    current_chunk = []
-    current_word_count = 0
-    
-    for para in paragraphs:
-        para_words = len(para.split())
-        
-        # If single paragraph exceeds chunk size, split it further by sentences
-        if para_words > chunk_words * 1.5:
-            # Flush current chunk first
-            if current_chunk:
-                chunks.append("\n\n".join(current_chunk))
-                current_chunk = []
-                current_word_count = 0
-            
-            # Split long paragraph by sentences
-            sentences = re.split(r'(?<=[.!?])\s+', para)
-            for sent in sentences:
-                sent_words = len(sent.split())
-                if current_word_count + sent_words > chunk_words * 1.2 and current_chunk:
-                    chunks.append(" ".join(current_chunk))
-                    current_chunk = []
-                    current_word_count = 0
-                current_chunk.append(sent)
-                current_word_count += sent_words
-        elif current_word_count + para_words > chunk_words * 1.2 and current_chunk:
-            # Current chunk is full, start a new one
-            chunks.append("\n\n".join(current_chunk))
-            current_chunk = [para]
-            current_word_count = para_words
-        else:
-            current_chunk.append(para)
-            current_word_count += para_words
-    
-    # Don't forget the last chunk
-    if current_chunk:
-        chunks.append("\n\n".join(current_chunk))
-    
-    return chunks
-
-
-def ingest_chunk(api_base, collection, content, metadata, doc_id=None):
-    """Ingest a single chunk via the RAG HTTP API."""
-    url = f"{api_base}/api/v1/rag/ingest"
-    payload = {
-        "collection": collection,
-        "content": content,
-        "metadata": metadata,
-    }
-    if doc_id:
-        payload["doc_id"] = doc_id
-    
-    try:
-        resp = requests.post(url, json=payload, timeout=30)
-        resp.raise_for_status()
-        return resp.json()
-    except requests.exceptions.RequestException as e:
-        print(f"  [ERROR] Ingest failed: {e}")
-        if hasattr(e, 'response') and e.response is not None:
-            print(f"  [ERROR] Response: {e.response.text[:200]}")
-        return None
-
+PAPERS_DIR = "/root/backend/data/papers"
+METADATA_FILE = f"{PAPERS_DIR}/papers_metadata.json"
+RAG_API = "http://localhost:8000/api/v1/rag/ingest"
+CHUNK_SIZE = 2500
+CHUNK_OVERLAP = 300
 
 def main():
-    parser = argparse.ArgumentParser(description="Ingest arxiv papers into RAG")
-    parser.add_argument("--api", default=DEFAULT_API, help="API base URL")
-    parser.add_argument("--chunk-words", type=int, default=DEFAULT_CHUNK_WORDS)
-    parser.add_argument("--dry-run", action="store_true", help="Preview chunks without ingesting")
-    parser.add_argument("--paper", type=str, help="Ingest only this specific arxiv ID")
-    args = parser.parse_args()
-    
-    metadata = load_metadata()
-    txt_files = discover_txt_files()
-    
-    total_chunks = 0
-    total_ingested = 0
-    total_failed = 0
-    
-    arxiv_ids = sorted(metadata.keys())
-    if args.paper:
-        arxiv_ids = [args.paper]
-    
-    for arxiv_id in arxiv_ids:
+    with open(METADATA_FILE) as f:
+        metadata = json.load(f)
+
+    pdfs = sorted([f for f in os.listdir(PAPERS_DIR) if f.endswith('.pdf')])
+    print(f"Found {len(pdfs)} PDFs, {len(metadata)} metadata entries")
+
+    ingested = 0
+    chunks_total = 0
+    errors = 0
+
+    for pdf_file in pdfs:
+        arxiv_id = pdf_file.replace('.pdf', '')
         meta = metadata.get(arxiv_id, {})
-        txt_path = txt_files.get(arxiv_id)
-        
-        if not txt_path or not os.path.exists(txt_path):
-            print(f"[SKIP] No .txt file for {arxiv_id}")
+
+        # Extract text with pymupdf
+        try:
+            import fitz
+            doc = fitz.open(os.path.join(PAPERS_DIR, pdf_file))
+            text = ""
+            for page in doc:
+                text += page.get_text() + "\n"
+            doc.close()
+        except Exception as e:
+            print(f"  SKIP {arxiv_id}: extract failed: {e}")
+            errors += 1
             continue
-        
-        title = meta.get("title", arxiv_id)
-        print(f"\n{'='*60}")
-        print(f"Processing: {title} ({arxiv_id})")
-        print(f"{'='*60}")
-        
-        with open(txt_path, "r", encoding="utf-8") as f:
-            text = f.read()
-        
-        word_count = len(text.split())
-        print(f"  Total words: {word_count}")
-        
-        chunks = chunk_text(text, args.chunk_words)
-        print(f"  Chunks created: {len(chunks)} (~{args.chunk_words} words each)")
-        total_chunks += len(chunks)
-        
-        collection = meta.get("collection", "forensic_reports")
-        
+
+        if len(text.strip()) < 200:
+            print(f"  SKIP {arxiv_id}: too short ({len(text)} chars)")
+            errors += 1
+            continue
+
+        # Chunk it
+        chunks = []
+        start = 0
+        while start < len(text):
+            end = min(start + CHUNK_SIZE, len(text))
+            chunk_text = text[start:end].strip()
+            if len(chunk_text) > 100:
+                chunks.append(chunk_text)
+            start += CHUNK_SIZE - CHUNK_OVERLAP
+
+        # Ingest each chunk
+        title = meta.get('title', arxiv_id)
+        attack_types = meta.get('attack_types', [])
+        authors_list = meta.get('authors', [])
+        collection = meta.get('collection', 'forensic_reports')
+
+        success = 0
         for i, chunk in enumerate(chunks):
-            chunk_meta = {
-                "source": "arxiv",
-                "arxiv_id": arxiv_id,
-                "title": title,
-                "authors": meta.get("authors", []),
-                "year": meta.get("year"),
-                "attack_types": meta.get("attack_types", []),
-                "description": meta.get("description", ""),
-                "chunk_index": i,
-                "total_chunks": len(chunks),
-                "doc_type": "academic_paper",
+            doc_id = hashlib.sha256(f"{arxiv_id}:chunk:{i}".encode()).hexdigest()[:16]
+            payload = {
+                "collection": collection,
+                "content": chunk,
+                "metadata": {
+                    "arxiv_id": arxiv_id,
+                    "title": title,
+                    "authors": ", ".join(authors_list[:3]) if isinstance(authors_list, list) else str(authors_list),
+                    "attack_types": ", ".join(attack_types) if isinstance(attack_types, list) else str(attack_types),
+                    "chunk_index": i,
+                    "total_chunks": len(chunks),
+                    "source": "research_paper",
+                    "doc_id": doc_id,
+                }
             }
-            
-            # Prepend header to content for better retrieval context
-            header = f"[PAPER: {title} | {arxiv_id}.pdf | Part {i+1}/{len(chunks)}]\n\n"
-            full_content = header + chunk
-            
-            # Generate stable doc_id
-            doc_id = f"paper_{arxiv_id}_chunk{i:03d}"
-            
-            if args.dry_run:
-                print(f"  [DRY-RUN] Chunk {i+1}/{len(chunks)}: {len(chunk.split())} words, doc_id={doc_id}")
-                continue
-            
-            result = ingest_chunk(args.api, collection, full_content, chunk_meta, doc_id)
-            if result:
-                total_ingested += 1
-                print(f"  [OK] Chunk {i+1}/{len(chunks)}: doc_id={result.get('id', doc_id)}")
-            else:
-                total_failed += 1
-                print(f"  [FAIL] Chunk {i+1}/{len(chunks)}")
-            
-            # Small delay to avoid overwhelming the API
-            time.sleep(0.15)
-    
-    print(f"\n{'='*60}")
-    print(f"INGESTION SUMMARY")
-    print(f"{'='*60}")
-    print(f"  Total chunks: {total_chunks}")
-    print(f"  Ingested: {total_ingested}")
-    print(f"  Failed: {total_failed}")
-    if args.dry_run:
-        print(f"  Mode: DRY-RUN (no data sent)")
-    
+            try:
+                resp = httpx.post(RAG_API, json=payload, timeout=30)
+                if resp.status_code == 200:
+                    success += 1
+                else:
+                    if errors < 5:
+                        print(f"  ERR {arxiv_id} chunk {i}: {resp.status_code} {resp.text[:100]}")
+                    errors += 1
+            except Exception as e:
+                if errors < 5:
+                    print(f"  ERR {arxiv_id} chunk {i}: {e}")
+                errors += 1
+
+        chunks_total += success
+        ingested += 1
+        if arxiv_id not in metadata:
+            metadata[arxiv_id] = {}
+        metadata[arxiv_id]['ingested'] = True
+        metadata[arxiv_id]['chunk_count'] = success
+        print(f"  {arxiv_id}: {len(chunks)} chunks, {success} ingested — {title[:50]}")
+
+    # Save updated metadata
+    with open(METADATA_FILE, 'w') as f:
+        json.dump(metadata, f, indent=2)
+
+    print(f"\nDONE: {ingested} papers, {chunks_total} total chunks, {errors} errors")
 
 if __name__ == "__main__":
     main()

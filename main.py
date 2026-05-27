@@ -95,6 +95,7 @@ from app.routers.x402_forensic_tools import router as x402_forensic_router
 from app.routers.x402_tools import router as x402_tools_router
 from app.routers.x402_dashboard import router as x402_dashboard_router
 from app.routers.x402_dashboard import on_startup as x402_dashboard_startup
+from app.routers.x402_token_watch import router as x402_token_watch_router
 app.include_router(x402_middleware_router)
 app.include_router(x402_enforcement_router)
 app.include_router(x402_discovery_router)  # /.well-known/x402 at root (x402 spec)
@@ -102,6 +103,7 @@ app.include_router(x402_catalog_router)
 app.include_router(x402_forensic_router)
 app.include_router(x402_tools_router)
 app.include_router(x402_dashboard_router)
+app.include_router(x402_token_watch_router)
 
 # ── security.txt (RFC 9116) ──
 SECURITY_TXT = """Contact: admin@rugmunch.io
@@ -139,6 +141,14 @@ async def _startup():
     except Exception as e:
         print(f"[WARN] x402 dashboard startup failed: {e}")
 
+    # Pre-warm RAG embedding model (avoids 5s cold-start on first citation query)
+    try:
+        from app.rag_service import search_similar
+        await search_similar("warmup", "known_scams", limit=1, min_similarity=0.1)
+        print("[INFO] RAG embedding model warmed up")
+    except Exception as e:
+        print(f"[WARN] RAG model warmup failed: {e}")
+
 from app.email_router import router as email_router
 app.include_router(email_router)
 from app.mail_dashboard import router as mail_router
@@ -155,6 +165,10 @@ from app.routers import cross_token_router
 app.include_router(bubble_maps_router.router)
 app.include_router(wallet_clustering_router.router)
 app.include_router(cross_token_router.router)
+
+# ── Wallet Memory Bank (WalletSafe product) ──────────────────
+from app.wallet_memory.router import router as wallet_memory_router
+app.include_router(wallet_memory_router)
 
 # ── Discovery & Forensics Routers ────────────────────────────
 from app.routers import discovery_router

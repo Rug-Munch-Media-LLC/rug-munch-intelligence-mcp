@@ -21,6 +21,12 @@ EXPANDED_ALIASES = {
     "smart_contract_interactions": "decompiler_analysis",
     "wallet_label_registry": "address_labels",
 
+    # SENTINEL Tier 3/4 direct routes
+    "static_analysis": "static_analysis",
+    "decompiler_analysis": "decompiler_analysis",
+    "fund_flow": "fund_flow",
+    "contract_diff": "contract_diff",
+
     # Intelligence
     "cross_chain_whale": "whale",
     "degen_score": "smart_money_alpha",

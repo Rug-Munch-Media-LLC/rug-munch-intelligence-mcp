@@ -44,6 +44,7 @@ from .static_analyzer import StaticAnalyzer, StaticAnalysisReport
 from .decompiler_analyzer import DecompilerAnalyzer, DecompilerReport
 from .address_labeler import AddressLabeler, AddressLabelReport
 from .fund_flow_visualizer import FundFlowVisualizer, FundFlowReport
+from .contract_diff import ContractDiffAnalyzer, ContractDiffReport
 from .rag_citations import query_rag_citations, build_citation_string, query_address_rag
 
 # Pipeline orchestrator

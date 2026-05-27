@@ -1,7 +1,7 @@
 """
 SENTINEL — Unified Pipeline Orchestrator
 ==========================================
-Runs all 20 scanner modules in parallel with graceful degradation.
+Runs all 21 scanner modules in parallel with graceful degradation.
 If any module fails, the others still return results.
 
 Modules:
@@ -56,6 +56,14 @@ from .static_analyzer import StaticAnalyzer, StaticAnalysisReport
 from .decompiler_analyzer import DecompilerAnalyzer, DecompilerReport
 from .address_labeler import AddressLabeler, AddressLabelReport
 from .fund_flow_visualizer import FundFlowVisualizer, FundFlowReport
+from .contract_diff import ContractDiffAnalyzer, ContractDiffReport
+
+# Wallet Memory Bank integration
+try:
+    from app.wallet_memory.engine import get_wallet_engine
+    _WALLET_MEMORY_AVAILABLE = True
+except ImportError:
+    _WALLET_MEMORY_AVAILABLE = False
 
 logger = logging.getLogger("sentinel_pipeline")
 
@@ -144,8 +152,12 @@ class SentinelReport:
     decompiler_analysis: Optional[Dict[str, Any]] = None
     address_labels: Optional[Dict[str, Any]] = None
 
+    # Tier 3.5 — Wallet Memory Bank intelligence
+    wallet_intel: Optional[Dict[str, Any]] = None
+
     # Tier 4 — Visualization
     fund_flow: Optional[Dict[str, Any]] = None
+    contract_diff: Optional[Dict[str, Any]] = None
 
     # Module errors (module_name → error message)
     errors: Dict[str, str] = field(default_factory=dict)
@@ -195,6 +207,7 @@ _address_labeler: Optional[AddressLabeler] = None
 
 # Tier 4 singletons
 _fund_flow_visualizer: Optional[FundFlowVisualizer] = None
+_contract_diff: Optional[ContractDiffAnalyzer] = None
 
 
 def _ensure_modules(config: Optional[SentinelConfig] = None) -> None:
@@ -211,7 +224,7 @@ def _ensure_modules(config: Optional[SentinelConfig] = None) -> None:
     global _flash_loan_detector, _pump_dump_detector, _oracle_manipulation
     global _governance_attack, _proxy_detector
     global _static_analyzer, _decompiler_analyzer, _address_labeler
-    global _fund_flow_visualizer
+    global _fund_flow_visualizer, _contract_diff
 
     cfg = config or _default_config
     dex_client = cfg.get_dexscreener_client()
@@ -271,6 +284,8 @@ def _ensure_modules(config: Optional[SentinelConfig] = None) -> None:
     # Tier 4 modules
     if _fund_flow_visualizer is None:
         _fund_flow_visualizer = FundFlowVisualizer()
+    if _contract_diff is None:
+        _contract_diff = ContractDiffAnalyzer()
 
 
 # ─── Risk score extraction helpers ────────────────────────────────────
@@ -429,7 +444,7 @@ async def run_sentinel_scan(
     dev_address: Optional[str] = None,
     config: Optional[SentinelConfig] = None,
 ) -> SentinelReport:
-    """Run all 17 SENTINEL modules concurrently with graceful degradation.
+    """Run all 21 SENTINEL modules concurrently with graceful degradation.
 
     Args:
         token_address: Token contract address to scan.
@@ -485,8 +500,18 @@ async def run_sentinel_scan(
     coros["decompiler_analysis"] = _decompiler_analyzer.analyze(token_address, chain)
     coros["address_labels"] = _address_labeler.analyze(token_address, chain)
 
+    # ── Wallet Memory Bank (replaces scattered wallet lookups) ───
+    if _WALLET_MEMORY_AVAILABLE and dev_address:
+        async def _wallet_intel():
+            engine = get_wallet_engine()
+            return await engine.get_deployer_intelligence(dev_address, chain)
+        coros["wallet_intel"] = _wallet_intel()
+    else:
+        coros["wallet_intel"] = None
+
     # Tier 4 — Visualization
     coros["fund_flow"] = _fund_flow_visualizer.analyze(token_address, chain)
+    coros["contract_diff"] = _contract_diff.analyze(token_address, chain)
 
     # PumpFun is Solana-only
     if chain.lower() == "solana":
@@ -532,7 +557,9 @@ async def run_sentinel_scan(
         "static_analysis": lambda r: float(getattr(r, 'risk_score', 0)),
         "decompiler_analysis": lambda r: float(getattr(r, 'risk_score', 0)),
         "address_labels": lambda r: float(getattr(r, 'risk_score', 0)),
+        "wallet_intel": lambda r: float(r.get('risk_score', 0)) if isinstance(r, dict) else 0.0,
         "fund_flow": lambda r: float(getattr(r, 'risk_score', 0)),
+        "contract_diff": lambda r: float(getattr(r, 'risk_score', 0)),
     }
 
     # Module name → field name on SentinelReport
@@ -557,7 +584,9 @@ async def run_sentinel_scan(
         "static_analysis": "static_analysis",
         "decompiler_analysis": "decompiler_analysis",
         "address_labels": "address_labels",
+        "wallet_intel": "wallet_intel",
         "fund_flow": "fund_flow",
+        "contract_diff": "contract_diff",
     }
 
     for module_name, raw_result in results.items():
@@ -581,6 +610,20 @@ async def run_sentinel_scan(
     composite, level = _compute_composite(risk_scores)
     report.composite_risk_score = composite
     report.risk_level = level
+
+    # ── Data flywheel: feed results back to Wallet Memory Bank ───
+    if _WALLET_MEMORY_AVAILABLE and dev_address and composite > 0:
+        try:
+            engine = get_wallet_engine()
+            await engine.flag_deployer(
+                address=dev_address,
+                chain=chain,
+                reason="sentinel_scan",
+                token=token_address,
+                score=composite,
+            )
+        except Exception as e:
+            logger.debug(f"Wallet Memory Bank feedback failed: {e}")
 
     return report
 
@@ -752,4 +795,12 @@ async def run_fund_flow(token_address: str, chain: str,
     """Run FundFlowVisualizer only, return dict."""
     _ensure_modules(config)
     result = await _fund_flow_visualizer.analyze(token_address, chain)
+    return dataclass_to_dict(result)
+
+
+async def run_contract_diff(token_address: str, chain: str,
+                             config: Optional[SentinelConfig] = None) -> Dict[str, Any]:
+    """Run ContractDiffAnalyzer only, return dict."""
+    _ensure_modules(config)
+    result = await _contract_diff.analyze(token_address, chain)
     return dataclass_to_dict(result)
