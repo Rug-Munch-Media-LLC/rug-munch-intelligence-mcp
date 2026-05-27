@@ -59,7 +59,7 @@ class Alert:
 # Configuration
 REDIS_HOST = os.getenv("REDIS_HOST", "172.20.0.3")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
-REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "ROTATED_REDIS_PASSWORD")
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "")
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_ALERTS_CHANNEL = os.getenv("TELEGRAM_ALERTS_CHANNEL", "")  # -100xxx format
