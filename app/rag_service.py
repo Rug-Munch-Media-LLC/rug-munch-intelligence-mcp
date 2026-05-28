@@ -357,6 +357,27 @@ async def seed_known_scams() -> Dict[str, Any]:
 # STATS
 # ═══════════════════════════════════════════════════════════════════
 
+async def ingest_forensic_report(
+    report_text: str,
+    report_name: str = "forensic_report",
+    metadata: Dict = None,
+) -> Dict:
+    """
+    Ingest a forensic report into the RAG knowledge base.
+    Forensic reports are stored permanently (TTL=0) in the forensic_reports collection.
+    """
+    meta = {
+        **(metadata or {}),
+        "name": report_name,
+        "type": "forensic_report",
+    }
+    return await ingest_document(
+        collection="forensic_reports",
+        content=report_text,
+        metadata=meta,
+    )
+
+
 async def get_stats() -> Dict[str, Any]:
     embedder = await get_embedder()
     r = await _get_redis()

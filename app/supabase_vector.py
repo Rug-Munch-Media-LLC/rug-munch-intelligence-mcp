@@ -35,7 +35,11 @@ HEADERS = {
 
 # Table configuration
 VECTOR_TABLE = "rag_vectors"
-EMBEDDING_DIM = 1024  # BGE-M3 default, adjust if using OpenAI
+
+# Dynamic embedding dimension — determined by the active model.
+# Local BGE-small = 384, BGE-M3/OpenRouter = 3072, etc.
+# Set via env var or detect at runtime from the embedder.
+EMBEDDING_DIM = int(os.environ.get("RAG_EMBEDDING_DIM", "0"))  # 0 = auto-detect
 
 # SQL for table creation
 CREATE_TABLE_SQL = f"""
@@ -83,6 +87,21 @@ class SupabaseVectorStore:
 
     def __init__(self):
         self._table_ready = False
+        self._resolved_dim = EMBEDDING_DIM  # may be 0 = auto-detect
+
+    def _get_dim(self, embedding: List[float] = None) -> int:
+        """Resolve the embedding dimension: env var > actual vector length > fallback 384."""
+        if self._resolved_dim > 0:
+            return self._resolved_dim
+        # Auto-detect from the first embedding we see
+        if embedding and len(embedding) > 0:
+            self._resolved_dim = len(embedding)
+            logger.info(f"Auto-detected embedding dimension: {self._resolved_dim}")
+            return self._resolved_dim
+        # Default: local BGE-small-en-v1.5 = 384
+        self._resolved_dim = 384
+        logger.info(f"Using default embedding dimension: {self._resolved_dim}")
+        return self._resolved_dim
 
     async def _rpc(self, fn: str, params: dict = None) -> dict:
         """Execute a Supabase RPC function."""
@@ -131,9 +150,27 @@ class SupabaseVectorStore:
         # Try to create table via SQL RPC if available
         if not self._table_ready:
             try:
-                await self._rpc("exec_sql", {
-                    "sql": CREATE_TABLE_SQL[:200] + " -- truncated"
-                })
+                # Build the CREATE TABLE SQL with the resolved dimension
+                dim = self._get_dim()
+                create_sql = f"""
+                CREATE TABLE IF NOT EXISTS {VECTOR_TABLE} (
+                    id TEXT PRIMARY KEY,
+                    collection TEXT NOT NULL,
+                    content TEXT,
+                    embedding vector({dim}),
+                    metadata JSONB DEFAULT '{{}}',
+                    source TEXT,
+                    severity TEXT,
+                    chain TEXT,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_rag_collection ON {VECTOR_TABLE} (collection);
+                CREATE INDEX IF NOT EXISTS idx_rag_metadata ON {VECTOR_TABLE} USING GIN (metadata);
+                CREATE INDEX IF NOT EXISTS idx_rag_content_fts ON {VECTOR_TABLE}
+                    USING GIN (to_tsvector('english', COALESCE(content, '')));
+                """
+                await self._rpc("exec_sql", {"sql": create_sql})
                 self._table_ready = True
             except Exception:
                 pass
@@ -141,10 +178,11 @@ class SupabaseVectorStore:
         # Try direct insert to check if table exists
         if not self._table_ready:
             try:
+                health_dim = self._get_dim()
                 test_row = {
                     "id": "_pgvector_health_check",
                     "collection": "_system",
-                    "embedding": [0.0] * 128,
+                    "embedding": [0.0] * health_dim,
                     "metadata": json.dumps({"health_check": True}),
                     "source": "system",
                     "severity": "info",
@@ -262,7 +300,7 @@ class SupabaseVectorStore:
         # Fallback to Redis
         if not self._table_ready:
             try:
-                from app.crypto_embeddings import CryptoEmbedder
+                from app.crypto_embeddings import get_embedder
                 from app.rag_service import _get_redis
                 r = await _get_redis()
                 doc_ids = await r.smembers(f"rag:idx:{collection or 'known_scams'}")
@@ -273,9 +311,9 @@ class SupabaseVectorStore:
                 for k in keys:
                     pipe.get(k)
                 results = await pipe.execute()
-                embedder = CryptoEmbedder()
-                scored = []
+                embedder = await get_embedder()  # Use singleton, not CryptoEmbedder()
                 q_len = len(query_embedding)
+                scored = []
                 for data in results:
                     if not data: continue
                     try: doc = json.loads(data)
@@ -329,18 +367,31 @@ class SupabaseVectorStore:
 
         # Construct the query with vector similarity
         # Using cosine distance: 1 - (embedding <=> query)
-        embedding_str = f"[{','.join(str(x) for x in query_embedding[:100])}]"
+        # NOTE: Use full embedding vector (not truncated) for correct similarity
+        dim = self._get_dim(query_embedding)
+        embedding_padded = query_embedding[:dim]
+        # Pad if query is shorter than table dimension (e.g. semantic-only query vs multi-head doc)
+        if len(embedding_padded) < dim:
+            embedding_padded = embedding_padded + [0.0] * (dim - len(embedding_padded))
+
+        # Format embedding as pgvector literal — safe since it's all floats
+        embedding_literal = "[" + ",".join(f"{x:.8f}" for x in embedding_padded) + "]"
+
+        # Escape single quotes in collection name to prevent SQL injection
+        safe_collection = collection.replace("'", "''") if collection else ""
+        safe_min_sim = max(0.0, min(1.0, float(min_similarity)))  # clamp to valid range
 
         try:
             # Try to use a raw SQL query via RPC
+            collection_filter = f"AND collection = '{safe_collection}'" if safe_collection else ""
             sql = f"""
             SELECT id, collection, content, metadata, source, severity, chain,
-                   1 - (embedding <=> '{embedding_str}'::vector) AS similarity
+                   1 - (embedding <=> '{embedding_literal}'::vector) AS similarity
             FROM {VECTOR_TABLE}
-            WHERE 1 - (embedding <=> '{embedding_str}'::vector) > {min_similarity}
-            {f"AND collection = '{collection}'" if collection else ""}
-            ORDER BY embedding <=> '{embedding_str}'::vector
-            LIMIT {limit}
+            WHERE 1 - (embedding <=> '{embedding_literal}'::vector) > {safe_min_sim}
+            {collection_filter}
+            ORDER BY embedding <=> '{embedding_literal}'::vector
+            LIMIT {int(limit)}
             """
             results = await self._rpc("exec_sql_returning", {"sql": sql})
             if results:
@@ -378,15 +429,21 @@ class SupabaseVectorStore:
         # Get text search results
         text_results = []
         try:
+            # Escape user input for PostgreSQL text search — prevent SQL injection
+            safe_query_text = query_text.replace("'", "''").replace("\\", "\\\\")
+            safe_collection = collection.replace("'", "''") if collection else ""
+            collection_filter = f"AND collection = '{safe_collection}'" if safe_collection else ""
+            safe_limit = int(limit * 2)
+
             sql = f"""
             SELECT id, collection, content, metadata, source, severity,
                    ts_rank(to_tsvector('english', COALESCE(content, '')),
-                           plainto_tsquery('english', '{query_text.replace("'", "''")}')) AS text_score
+                           plainto_tsquery('english', '{safe_query_text}')) AS text_score
             FROM {VECTOR_TABLE}
-            WHERE to_tsvector('english', COALESCE(content, '')) @@ plainto_tsquery('english', '{query_text.replace("'", "''")}')
-            {f"AND collection = '{collection}'" if collection else ""}
+            WHERE to_tsvector('english', COALESCE(content, '')) @@ plainto_tsquery('english', '{safe_query_text}')
+            {collection_filter}
             ORDER BY text_score DESC
-            LIMIT {limit * 2}
+            LIMIT {safe_limit}
             """
             text_results_raw = await self._rpc("exec_sql_returning", {"sql": sql})
             if text_results_raw:
@@ -447,17 +504,21 @@ class SupabaseVectorStore:
 
     async def delete_collection(self, collection: str) -> int:
         """Delete all documents in a collection."""
+        safe_collection = collection.replace("'", "''")
         try:
-            sql = f"DELETE FROM {VECTOR_TABLE} WHERE collection = '{collection}'"
+            sql = f"DELETE FROM {VECTOR_TABLE} WHERE collection = '{safe_collection}'"
             result = await self._rpc("exec_sql", {"sql": sql})
+            if isinstance(result, list) and result:
+                return result[0].get("count", 1) if isinstance(result[0], dict) else 1
             return 1
         except Exception:
             return 0
 
     async def delete_by_id(self, doc_id: str) -> bool:
         """Delete a single document."""
+        safe_id = doc_id.replace("'", "''")
         try:
-            sql = f"DELETE FROM {VECTOR_TABLE} WHERE id = '{doc_id}'"
+            sql = f"DELETE FROM {VECTOR_TABLE} WHERE id = '{safe_id}'"
             await self._rpc("exec_sql", {"sql": sql})
             return True
         except Exception:
@@ -489,11 +550,17 @@ class SupabaseVectorStore:
 
     async def list_distinct(self, column: str, collection: str = None) -> List[str]:
         """Get distinct values for a column."""
+        # Whitelist allowed columns to prevent SQL injection
+        allowed_columns = {"source", "severity", "chain", "collection"}
+        safe_column = column if column in allowed_columns else "source"
         try:
-            where = f"WHERE collection = '{collection}'" if collection else ""
-            sql = f"SELECT DISTINCT {column} FROM {VECTOR_TABLE} {where} ORDER BY {column}"
+            where = ""
+            if collection:
+                safe_collection = collection.replace("'", "''")
+                where = f"WHERE collection = '{safe_collection}'"
+            sql = f"SELECT DISTINCT {safe_column} FROM {VECTOR_TABLE} {where} ORDER BY {safe_column}"
             rows = await self._rpc("exec_sql_returning", {"sql": sql})
-            return [r[column] for r in (rows or [])]
+            return [r[safe_column] for r in (rows or [])]
         except Exception:
             return []
 

@@ -110,7 +110,7 @@ def embed_bundle_profile(bundle: Dict[str, Any]) -> List[float]:
             vec[64 + i] = 1.0
 
     # ── Numerical fingerprint (dims 80-127) ──
-    # Encode key metrics as normalized values
+    # Encode key metrics as normalized values (dims 80-85)
     metrics = [
         ("avg_buy_amount", 10000), ("max_buy_amount", 100000),
         ("avg_hold_time_blocks", 1000), ("sell_ratio", 1.0),
@@ -120,10 +120,10 @@ def embed_bundle_profile(bundle: Dict[str, Any]) -> List[float]:
         val = float(bundle.get(key, 0) or 0)
         vec[80 + i] = min(val / max(1, scale), 1.0)
 
-    # Fill remaining with hash
+    # Structural hash of the full bundle data (dims 86-127)
     full_hash = hashlib.sha256(json.dumps(bundle, sort_keys=True, default=str).encode()).digest()
-    for i in range(48):
-        vec[80 + i] = full_hash[i % 32] / 255.0
+    for i in range(42):
+        vec[86 + i] = full_hash[i % 32] / 255.0
 
     return vec.tolist()
 
