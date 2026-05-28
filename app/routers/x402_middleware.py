@@ -633,6 +633,135 @@ async def verify_payment_endpoint(
         logger.error(f"Payment verification error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# ── Receipt Storage Endpoint (called by x402 Workers after payment) ────
+
+@router.post("/receipt")
+async def store_receipt(request: Request):
+    """
+    Store a payment receipt from an x402 Worker after successful payment verification.
+    
+    Called by x402-base and x402-sol Workers after verifyPayment succeeds.
+    Stores receipt in Redis for revenue tracking, audit trail, and transparency dashboard.
+    
+    POST body: {
+        "receipt_id": "rmi-<timestamp>-<rand>",
+        "payment_tx": "0x...|<sol-sig>",
+        "amount": "$0.01"|0.01|10000,
+        "asset": "USDC",
+        "network": "base"|"solana"|<chain>,
+        "customer_address": "0x...|<sol-addr>",
+        "scan_request": {},
+        "status": "fulfilled",
+        "tool": "urlcheck"|"audit"|...,
+        "delivery_status": "fulfilled",
+        "fallback_chain": []
+    }
+    """
+    try:
+        body = await request.json()
+        receipt_id = body.get("receipt_id", f"rmi-{int(time.time())}-unknown")
+        payment_tx = body.get("payment_tx", "")
+        amount = body.get("amount", "")
+        asset = body.get("asset", "USDC")
+        network = body.get("network", "unknown")
+        customer_address = body.get("customer_address", "")
+        tool = body.get("tool", "unknown")
+        status = body.get("status", "fulfilled")
+        delivery_status = body.get("delivery_status", "fulfilled")
+        fallback_chain = body.get("fallback_chain", [])
+        scan_request = body.get("scan_request", {})
+        
+        # Normalize amount
+        if isinstance(amount, str):
+            amount_val = amount.replace("$", "")
+            try:
+                amount_float = float(amount_val)
+            except (ValueError, TypeError):
+                amount_float = 0.0
+        elif isinstance(amount, (int, float)):
+            amount_float = float(amount)
+        else:
+            amount_float = 0.0
+
+        # Store in Redis (sync — app.auth.get_redis returns a sync client)
+        from app.auth import get_redis as _get_redis
+        r = _get_redis()
+        
+        if r:
+            receipt_data = {
+                "receipt_id": receipt_id,
+                "payment_tx": payment_tx,
+                "amount": str(amount_float) if amount_float else str(amount),
+                "asset": asset,
+                "network": network,
+                "customer_address": customer_address,
+                "tool": tool,
+                "status": status,
+                "delivery_status": delivery_status,
+                "timestamp": str(time.time()),
+                "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "fallback_chain": fallback_chain,
+                "scan_request": scan_request,
+                "amount_usd": amount_float,
+            }
+            
+            # Store receipt with 30-day TTL
+            r.set(f"x402:receipt:{receipt_id}", json.dumps(receipt_data), ex=30 * 86400)
+            
+            # Also store by transaction hash for lookup
+            if payment_tx and payment_tx != "local-verified":
+                r.set(f"x402:spent_tx:{payment_tx}", json.dumps({
+                    "chain": network,
+                    "payer": customer_address,
+                    "amount": str(amount_float),
+                    "tool": tool,
+                    "timestamp": str(time.time()),
+                    "receipt_id": receipt_id,
+                }), ex=30 * 86400)
+            
+            # Add to time-ordered index for ledger queries
+            r.zadd("x402:receipts_by_time", {receipt_id: time.time()})
+            
+            # Increment revenue counter
+            today = time.strftime("%Y-%m-%d")
+            r.incrbyfloat(f"x402:revenue:daily:{today}", amount_float or 0)
+            r.incrbyfloat(f"x402:revenue:total", amount_float or 0)
+            r.incrby(f"x402:calls:daily:{today}", 1)
+            r.incrby(f"x402:calls:total", 1)
+            
+            # Tool-level stats
+            r.incrby(f"x402:tool_calls:{tool}", 1)
+            r.incrbyfloat(f"x402:tool_revenue:{tool}", amount_float or 0)
+            
+            logger.info(f"Receipt stored: {receipt_id} tx={payment_tx[:16]}... tool={tool} amount=${amount_float}")
+            
+            return {
+                "ok": True,
+                "receipt_id": receipt_id,
+                "stored": True,
+                "message": "Receipt stored successfully",
+            }
+        else:
+            # Redis unavailable — still return success so Worker doesn't retry endlessly
+            logger.warning(f"Redis unavailable, receipt not stored: {receipt_id}")
+            return {
+                "ok": True,
+                "receipt_id": receipt_id,
+                "stored": False,
+                "message": "Receipt received but Redis unavailable",
+            }
+    
+    except Exception as e:
+        logger.error(f"Receipt store error: {e}")
+        # Return 200 so Worker doesn't retry — receipt storage is best-effort
+        return {
+            "ok": True,
+            "stored": False,
+            "error": str(e)[:200],
+            "message": "Receipt received but storage failed",
+        }
+
+
 # ── Fallback System Status ────────────────────────────────────
 
 @router.get("/fallback/status")

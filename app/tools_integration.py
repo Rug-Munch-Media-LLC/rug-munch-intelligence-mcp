@@ -9,11 +9,11 @@ from typing import Optional, Dict, List, Any
 logger = logging.getLogger(__name__)
 
 # ═══════════════════════════════════════════════════════════
-# OLLAMA — Local LLM (port 11434, 7 models)
+# OLLAMA — Local LLM (port 11434, 2 models)
 # ═══════════════════════════════════════════════════════════
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://172.17.0.1:11434")
 
-async def ollama_chat(prompt: str, model: str = "qwen2.5:3b", system: str = "") -> Dict:
+async def ollama_chat(prompt: str, model: str = "phi3:mini", system: str = "") -> Dict:
     """Use local Ollama for free AI inference."""
     try:
         messages = []

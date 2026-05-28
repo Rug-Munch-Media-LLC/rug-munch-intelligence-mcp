@@ -165,6 +165,17 @@ async def _startup():
     except Exception as e:
         print(f"[WARN] Static wallet label import failed: {e}")
 
+    # Pre-warm BM25 index (Pillar 2) so first search is fast
+    try:
+        from app.splade_bm25 import get_bm25_index
+        import time as _time
+        _t0 = _time.time()
+        bm25 = await get_bm25_index(force_rebuild=True)
+        _elapsed = _time.time() - _t0
+        print(f"[INFO] BM25 index warmed: {bm25.doc_count} docs, {len(bm25.df)} terms ({_elapsed:.1f}s)")
+    except Exception as e:
+        print(f"[WARN] BM25 warmup failed (Pillar 2 will build on first search): {e}")
+
     # Pre-warm RAG embedding model (avoids 5s cold-start on first citation query)
     try:
         from app.rag_service import search_similar
@@ -172,6 +183,20 @@ async def _startup():
         print("[INFO] RAG embedding model warmed up")
     except Exception as e:
         print(f"[WARN] RAG model warmup failed: {e}")
+
+    # Pre-warm Knowledge Graph for high-value collections (Pillar 3)
+    try:
+        from app.knowledge_graph import build_graph_from_rag
+        import time as _time2
+        _t0 = _time2.time()
+        kg_result = await build_graph_from_rag(
+            collections=["known_scams", "scam_patterns", "forensic_reports", "contract_audits"],
+            max_per_collection=2000,
+        )
+        _elapsed = _time2.time() - _t0
+        print(f"[INFO] KG warmed: {kg_result['edges_created']} edges across {len(kg_result['collections'])} collections ({_elapsed:.1f}s)")
+    except Exception as e:
+        print(f"[WARN] KG warmup failed (Pillar 3 expansion will be unavailable): {e}")
 
 from app.email_router import router as email_router
 app.include_router(email_router)
@@ -2075,6 +2100,8 @@ async def rag_three_pillar_search(
     collections: str = "all",
     limit: int = 10,
     min_similarity: float = 0.5,
+    use_mmr: bool = True,
+    use_reranker: bool = False,
 ):
     """
     Three-pillar hybrid search:
@@ -2083,6 +2110,8 @@ async def rag_three_pillar_search(
       Pillar 3: Entity exact-match lookup (addresses, symbols, hashes)
 
     Results are fused with Reciprocal Rank Fusion (k=60).
+    Set use_mmr=false to skip MMR deduplication.
+    Set use_reranker=true to enable cross-encoder reranking (bge-reranker-v2-m3).
     """
     if not q:
         raise HTTPException(status_code=400, detail="q (query) required")
@@ -2097,6 +2126,8 @@ async def rag_three_pillar_search(
         collections=coll_list,
         limit=limit,
         min_similarity=min_similarity,
+        use_mmr=use_mmr,
+        use_reranker=use_reranker,
     )
     return result
 
@@ -3679,7 +3710,7 @@ async def get_status(request: Request):
 
     sol_code = await _check_url("https://sol.rugmunch.io/health")
     base_code = await _check_url("https://base.rugmunch.io/health")
-    mcp_code = await _check_url("https://mcp-router.rugmunch.io/tools")
+    mcp_code = await _check_url("https://mcp.rugmunch.io/tools")
     web_code = await _check_url("https://rugmunch.io")
 
     gateways = {

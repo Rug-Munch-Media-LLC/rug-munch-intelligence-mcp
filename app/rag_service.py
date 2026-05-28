@@ -191,6 +191,54 @@ async def ingest_document(
     except Exception as e:
         logger.debug(f"ANN version bump skipped: {e}")
 
+    # ── Update secondary indexes ──
+    # BM25 index: invalidate cache so it gets rebuilt
+    try:
+        from app.splade_bm25 import get_bm25_index, _bm25_index, _bm25_built_at
+        if _bm25_index is not None:
+            # Invalidate cache so next search rebuilds
+            import time
+            _bm25_built_at = 0  # force rebuild on next call
+            logger.debug("BM25 index cache invalidated for incremental rebuild")
+    except Exception as e:
+        logger.debug(f"BM25 cache invalidation skipped: {e}")
+
+    # Entity extraction + indexing
+    try:
+        from app.entity_extraction import extract_entities, EntityLookup
+        entities = extract_entities(content)
+        if entities.has_entities:
+            lookup = EntityLookup.get_instance()
+            for entity in entities.all_entities():
+                await lookup.index_entity(
+                    entity["type"], entity["value"], doc_id,
+                    metadata={**metadata, "collection": collection},
+                )
+            logger.debug(f"Entity indexing: {len(entities.all_entities())} entities")
+    except Exception as e:
+        logger.debug(f"Entity indexing skipped: {e}")
+
+    # Knowledge Graph edge creation
+    try:
+        from app.knowledge_graph import get_knowledge_graph
+        kg = await get_knowledge_graph()
+        await kg.ingest_rag_document(collection, doc_id, content, metadata)
+        logger.debug("KG edge creation complete")
+    except Exception as e:
+        logger.debug(f"KG edge creation skipped: {e}")
+
+    # pgvector upsert
+    try:
+        from app.supabase_vector import get_vector_store
+        store = await get_vector_store()
+        await store.insert(
+            doc_id=doc_id, collection=collection, embedding=result.vector,
+            content=content, metadata=metadata,
+        )
+        logger.debug("pgvector upsert complete")
+    except Exception as e:
+        logger.debug(f"pgvector upsert skipped: {e}")
+
     logger.info(f"Ingested {collection}/{doc_id}: {content[:60]}...")
     return {"id": doc_id, "dims": result.dims, "collection": collection}
 
@@ -414,6 +462,7 @@ async def three_pillar_search(
     mmr_lambda: float = 0.6,
     use_kg: bool = True,
     use_parent_child: bool = True,
+    use_reranker: bool = False,
 ) -> Dict[str, Any]:
     """
     Three-pillar hybrid search with Knowledge Graph expansion, MMR dedup,
@@ -631,6 +680,24 @@ async def three_pillar_search(
         except Exception as e:
             logger.debug(f"MMR dedup failed (non-critical): {e}")
 
+    # ── Cross-encoder reranking (optional stage after MMR) ──
+    reranker_applied = False
+    if use_reranker and fused:
+        try:
+            from app.cross_encoder_reranker import get_reranker
+            # Map rrf_score to similarity for the reranker
+            for r in fused:
+                r["similarity"] = r.get("rrf_score", 0.0)
+            reranker = await get_reranker()
+            pre_rerank = len(fused)
+            fused = await reranker.rerank(query, fused, top_k=limit * 3)
+            reranker_applied = True
+            logger.info(f"Cross-encoder reranked: {pre_rerank} → {len(fused)} results")
+        except ImportError:
+            logger.debug("Cross-encoder module not available, skipping rerank")
+        except Exception as e:
+            logger.debug(f"Cross-encoder rerank failed (non-critical): {e}")
+
     # ── Parent-child context expansion ──
     parent_child_applied = False
     if use_parent_child and fused:
@@ -688,6 +755,7 @@ async def three_pillar_search(
             "post_mmr_count": len(fused) if mmr_applied else pre_mmr_count,
             "kg_expansion": len([r for r in pillar3_results if r.get("pillar") == "entity+kg"]),
             "parent_child_applied": parent_child_applied,
+            "reranker_applied": reranker_applied,
         },
         "entity_extraction": entity_extraction.to_dict() if entity_extraction else None,
         "query": query,

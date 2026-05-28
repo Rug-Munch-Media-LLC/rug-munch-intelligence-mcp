@@ -181,7 +181,7 @@ def load_external_mcp_tools() -> List[Dict]:
     # Fallback: fetch from mcp-router dynamically
     try:
         import urllib.request, json as _json
-        url = "https://mcp-router.rugmunch.io/tools"
+        url = "https://mcp.rugmunch.io/tools"
         req = urllib.request.Request(url, headers={"Accept": "application/json"})
         with urllib.request.urlopen(req, timeout=5) as resp:
             data = _json.loads(resp.read())

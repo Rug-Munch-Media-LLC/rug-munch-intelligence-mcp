@@ -388,6 +388,37 @@ async def mcp_tools_list(request: Request):
     }
 
 
+@router.get("/tools")
+async def mcp_tools_mcp_router_format(request: Request):
+    """Serve tools in mcp-router compatible format: {tools: {service: [tools]}}.
+
+    This endpoint is consumed by the x402 Cloudflare Workers (BACKEND_MCP + '/tools').
+    It replaces the external mcp-router.rugmunch.io dependency that was returning
+    HTTP 522 due to Cloudflare proxy loop (Worker -> CF-proxied domain).
+    """
+    tools_data, cats, chains_data, fac_count = _build_tools_list()
+
+    # Group tools by category (matching mcp-router's {serviceName: [tools]} format)
+    # Each tool has: name, description, parameters(inputSchema), tier, category
+    services: Dict[str, list] = {}
+    for tool_id, tool_def in tools_data.items():
+        svc = tool_def.get("category", "general")
+        if svc not in services:
+            services[svc] = []
+        services[svc].append({
+            "name": tool_id,
+            "description": tool_def.get("description", tool_def.get("name", tool_id)),
+            "parameters": tool_def.get("inputSchema", {}),
+            "tier": "free" if tool_def.get("trial_free", 0) > 0 else "paid",
+            "category": svc,
+            "chains": tool_def.get("chains", []),
+            "price_usd": tool_def.get("price_usd", 0.01),
+            "endpoint": tool_def.get("endpoint", f"/api/v1/x402-tools/{tool_id}"),
+        })
+
+    return {"tools": services}
+
+
 @router.get("/mcp/capabilities")
 async def mcp_capabilities():
     data = _get_tools()

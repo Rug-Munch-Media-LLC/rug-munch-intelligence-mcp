@@ -4734,4 +4734,15 @@ async def tool_alias_dispatcher(tool_id: str, request: Request):
         if injected_chain:
             result["chain"] = injected_chain
 
+    # ── Wallet Intelligence Enrichment ──
+    # Annotate responses with label data, scam patterns, and sanctions from
+    # the Wallet Memory Bank (389K labels / 155K addresses in ClickHouse).
+    # Controlled by ?enrich=false opt-out. Cached per-address in Redis (1hr TTL).
+    try:
+        opt_out = request.query_params.get("enrich", "").lower() == "false"
+        from app.routers.x402_enrichment import enrich_tool_response
+        result = enrich_tool_response(tool_id, result, request_params=body, opt_out=opt_out)
+    except Exception:
+        pass  # Enrichment is best-effort — never block a response on it
+
     return JSONResponse(content=result, status_code=resp.status_code, headers=rh)
