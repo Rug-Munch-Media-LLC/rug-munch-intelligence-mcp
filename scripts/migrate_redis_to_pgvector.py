@@ -2,7 +2,7 @@
 """
 Migrate RAG data from Redis to Supabase rag_vectors table.
 Reads all documents from 10 Redis collections and upserts into pgvector.
-Handles mixed embedding dimensions by padding to 3072.
+Handles mixed embedding dimensions by padding to 640.
 Processes in batches of 100. Idempotent (skips already-migrated docs).
 """
 
@@ -26,16 +26,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Target dimension (max across all collections: contract_audits=3072)
+# Target dimension — max across all collections is 640 (token_analysis)
 TARGET_DIM = 640
-
-# ── Config ────────────────────────────────────────────────────────────
-SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "") or os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
-
-REDIS_HOST = os.getenv("REDIS_HOST", "rmi-redis")
-REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
-REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "")
 
 COLLECTIONS = [
     "wallet_profiles",
@@ -52,13 +44,27 @@ COLLECTIONS = [
 
 BATCH_SIZE = 100
 
-# Build headers
-HEADERS = {
-    "apikey": SUPABASE_SERVICE_KEY,
-    "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-    "Content-Type": "application/json",
-    "Prefer": "resolution=merge-duplicates",
-}
+
+def _get_url():
+    return os.environ.get("SUPABASE_URL", "")
+
+
+def _get_key():
+    return os.environ.get("SUPABASE_SERVICE_KEY", "") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+
+
+def _get_headers():
+    key = _get_key()
+    return {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+        "Prefer": "resolution=merge-duplicates",
+    }
+
+
+def _get_redis_password():
+    return os.environ.get("REDIS_PASSWORD", "")
 
 
 def pad_vector(vec: List[float], target_dim: int) -> List[float]:
@@ -76,10 +82,10 @@ async def get_existing_ids(client: httpx.AsyncClient) -> set:
     offset = 0
     limit = 1000
     while True:
-        url = f"{SUPABASE_URL}/rest/v1/rag_vectors"
+        url = f"{_get_url()}/rest/v1/rag_vectors"
         params = {"select": "id", "limit": str(limit), "offset": str(offset), "order": "id"}
         try:
-            resp = await client.get(url, params=params, headers=HEADERS, timeout=30)
+            resp = await client.get(url, params=params, headers=_get_headers(), timeout=30)
             if resp.status_code != 200:
                 logger.warning(f"Could not fetch existing IDs: {resp.status_code} {resp.text[:300]}")
                 break
@@ -100,10 +106,10 @@ async def get_existing_ids(client: httpx.AsyncClient) -> set:
 
 async def insert_batch(client: httpx.AsyncClient, rows: List[dict]) -> int:
     """Insert a batch of rows into rag_vectors via Supabase REST API."""
-    url = f"{SUPABASE_URL}/rest/v1/rag_vectors"
+    url = f"{_get_url()}/rest/v1/rag_vectors"
     params = {"on_conflict": "id"}
     try:
-        resp = await client.post(url, json=rows, params=params, headers=HEADERS, timeout=120)
+        resp = await client.post(url, json=rows, params=params, headers=_get_headers(), timeout=120)
         if resp.status_code in (200, 201):
             return len(rows)
         else:
@@ -112,11 +118,10 @@ async def insert_batch(client: httpx.AsyncClient, rows: List[dict]) -> int:
             success = 0
             for row in rows:
                 try:
-                    r2 = await client.post(url, json=[row], params=params, headers=HEADERS, timeout=60)
+                    r2 = await client.post(url, json=[row], params=params, headers=_get_headers(), timeout=60)
                     if r2.status_code in (200, 201):
                         success += 1
                     else:
-                        # Last resort: try without embedding
                         if r2.status_code == 400 and "embedding" in (r2.text or ""):
                             logger.warning(f"Skipping {row['id']} due to embedding error")
                         else:
@@ -166,7 +171,6 @@ async def migrate_collection(r: aioredis.Redis, client: httpx.AsyncClient, colle
             content = doc.get("content", "") or ""
             metadata = doc.get("metadata", {}) or {}
 
-            # Source, severity, chain from metadata or top-level
             source = metadata.get("source", "") or doc.get("source", "") or ""
             severity = metadata.get("severity", "") or doc.get("severity", "") or "medium"
             chain = metadata.get("chain", "") or doc.get("chain", "") or ""
@@ -175,7 +179,6 @@ async def migrate_collection(r: aioredis.Redis, client: httpx.AsyncClient, colle
             if vector:
                 padded = pad_vector(vector, TARGET_DIM)
             else:
-                # No embedding - create zero vector
                 padded = [0.0] * TARGET_DIM
                 logger.debug(f"  Doc {doc_id}: no embedding, using zero vector")
 
@@ -209,8 +212,8 @@ async def migrate_collection(r: aioredis.Redis, client: httpx.AsyncClient, colle
             if errors <= 5:
                 logger.warning(f"  Doc {doc_id}: error: {e}")
 
-        # Progress every 1000 docs
-        if (i + 1) % 1000 == 0:
+        # Progress every 500 docs
+        if (i + 1) % 500 == 0:
             logger.info(f"  Progress: processed {i+1}/{len(to_migrate)}, migrated {migrated}, errors {errors}")
 
     # Flush remaining batch
@@ -226,19 +229,24 @@ async def migrate_collection(r: aioredis.Redis, client: httpx.AsyncClient, colle
 
 async def main():
     logger.info("Starting Redis -> Supabase rag_vectors migration")
-    logger.info(f"Supabase URL: {SUPABASE_URL}")
-    logger.info(f"Redis: {REDIS_HOST}:{REDIS_PORT}")
+    logger.info(f"Supabase URL: {_get_url()}")
+    logger.info(f"Redis: {os.environ.get('REDIS_HOST', 'rmi-redis')}:{os.environ.get('REDIS_PORT', '6379')}")
     logger.info(f"Target vector dimension: {TARGET_DIM}")
     logger.info(f"Collections: {COLLECTIONS}")
 
-    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+    if not _get_url() or not _get_key():
         logger.error("SUPABASE_URL and SUPABASE_SERVICE_KEY must be set")
         sys.exit(1)
 
+    redis_password = _get_redis_password()
+    redis_host = os.environ.get("REDIS_HOST", "rmi-redis")
+    redis_port = int(os.environ.get("REDIS_PORT", "6379"))
+
     # Connect to Redis
     r = aioredis.Redis(
-        host=REDIS_HOST, port=REDIS_PORT,
-        password=REDIS_PASSWORD or None,
+        host=redis_host,
+        port=redis_port,
+        password=redis_password,
         decode_responses=True,
     )
     await r.ping()
@@ -260,7 +268,7 @@ async def main():
                 logger.error(f"Collection {collection} failed: {e}")
 
         elapsed = time.time() - start_time
-        logger.info(f"=" * 60)
+        logger.info("=" * 60)
         logger.info(f"Migration complete: {total_migrated} docs migrated in {elapsed:.1f}s")
 
     await r.aclose()

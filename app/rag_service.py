@@ -1,9 +1,12 @@
 """
-RAG Ingestion & Retrieval Service v3
+RAG Ingestion & Retrieval Service v4
 ====================================
-Uses CryptoEmbedder for real semantic embeddings.
-Redis-backed vector store with FAISS ANN index for fast search.
-Semantic cache for repeated/near-duplicate queries.
+Three-pillar hybrid search (dense + sparse + entity) with:
+  - Knowledge Graph expansion (Pillar 3+)
+  - MMR deduplication after RRF fusion
+  - Parent-child retrieval for contextual chunks
+  - SPLADE+BM25 sparse search (Pillar 2)
+  - Query-adaptive fusion weights
 
 Collections: wallet_profiles, token_analysis, scam_patterns,
              forensic_reports, market_intel, contract_audits, known_scams
@@ -14,12 +17,13 @@ import hashlib
 import json
 import logging
 import os
+import re
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
 
 from app.crypto_embeddings import (
     CryptoEmbedder, get_embedder, COLLECTIONS, KNOWN_SCAM_PATTERNS,
-    EmbeddingResult,
+    EmbeddingResult, extract_contract_features,
 )
 
 logger = logging.getLogger(__name__)
@@ -35,14 +39,21 @@ _seeded = False
 _pattern_cache: Dict[str, EmbeddingResult] = {}
 _pattern_cache_loaded = False
 
+# Redis singleton — reuses connection across all calls
+_redis_pool = None
+
 
 async def _get_redis():
+    """Get or create a shared Redis connection (singleton pattern to prevent leaks)."""
+    global _redis_pool
     import redis.asyncio as redis
-    return redis.Redis(
-        host=REDIS_HOST, port=REDIS_PORT,
-        password=REDIS_PASSWORD or None, db=0,
-        decode_responses=True,
-    )
+    if _redis_pool is None or _redis_pool._closed:
+        _redis_pool = redis.Redis(
+            host=REDIS_HOST, port=REDIS_PORT,
+            password=REDIS_PASSWORD or None, db=0,
+            decode_responses=True,
+        )
+    return _redis_pool
 
 
 async def _preembed_scam_patterns():
@@ -216,10 +227,11 @@ async def _embed_by_collection(
             balance_usd=float(metadata.get("balance_usd", 0) or 0),
         )
     elif collection == "contract_audits":
+        vec = await embedder._semantic_embed_one(content, "semantic")
         return EmbeddingResult(
-            vector=await embedder._semantic_embed_one(content, "semantic"),
-            dims=3072,
-            model="openai/text-embedding-3-large",
+            vector=vec,
+            dims=len(vec),
+            model="local/bge-small-en-v1.5",
             head="contract_audit",
         )
     else:
@@ -289,7 +301,14 @@ async def search_similar(
                     min_similarity=min_similarity,
                 )
                 if pg_results:
-                    results = pg_results
+                    # Enrich pgvector results that lack content
+                    needs_enrich = [r for r in pg_results if "content" not in r or not r.get("content")]
+                    if needs_enrich:
+                        enriched = await _enrich_ann_results(collection, needs_enrich)
+                        enriched_ids = {r.get("id") for r in enriched}
+                        results = [r for r in pg_results if r.get("id") not in enriched_ids] + enriched
+                    else:
+                        results = pg_results
                     logger.info(f"pgvector search: {len(results)} results from {collection}")
     except Exception as e:
         logger.warning(f"ANN/pgvector search failed, falling back to brute-force: {e}")
@@ -391,20 +410,31 @@ async def three_pillar_search(
     limit: int = 10,
     min_similarity: float = 0.5,
     entity_boost: float = 1.5,
+    use_mmr: bool = True,
+    mmr_lambda: float = 0.6,
+    use_kg: bool = True,
+    use_parent_child: bool = True,
 ) -> Dict[str, Any]:
     """
-    Three-pillar hybrid search:
+    Three-pillar hybrid search with Knowledge Graph expansion, MMR dedup,
+    and parent-child retrieval.
 
       Pillar 1 — Dense vector search via FAISS ANN index (semantic similarity)
-      Pillar 2 — Sparse text search via Redis key scanning / BM25-style matching
-      Pillar 3 — Entity exact-match lookup via EntityLookup
+      Pillar 2 — Sparse text search via SPLADE+BM25
+      Pillar 3 — Entity exact-match + Knowledge Graph expansion
+      Post-fusion — MMR deduplication + parent-child context expansion
 
-    All three result sets are fused with Reciprocal Rank Fusion (k=60).
+    All pillar result sets are fused with Reciprocal Rank Fusion (k=60),
+    then deduplicated with Maximal Marginal Relevance for diversity,
+    and expanded with parent-child context for generation quality.
 
-    Returns dict with merged results + pillar attribution.
+    Returns dict with merged results + pillar attribution + MMR metadata.
     """
     if collections is None:
         collections = COLLECTIONS
+
+    # Cap limit to prevent unbounded MMR/parent-child expansion
+    limit = min(limit, 100)
 
     embedder = await get_embedder()
     query_vec = await embedder.embed_query(query)
@@ -462,16 +492,32 @@ async def three_pillar_search(
         except Exception:
             pass
 
-    # ── Pillar 2: Sparse text search (Redis keyword scan) ──
+    # ── Pillar 2: Sparse text search (BM25 + SPLADE) ──
     pillar2_results: List[Dict[str, Any]] = []
     try:
-        pillar2_results = await _sparse_text_search(query, collections, limit=limit * 2)
+        from app.splade_bm25 import splade_search
+        pillar2_results = await splade_search(query, collections, limit=limit * 2)
         for r in pillar2_results:
             r["pillar"] = "sparse"
+    except ImportError:
+        # Fallback to old sparse search if new module unavailable
+        try:
+            pillar2_results = await _sparse_text_search(query, collections, limit=limit * 2)
+            for r in pillar2_results:
+                r["pillar"] = "sparse"
+        except Exception as e:
+            logger.warning(f"Pillar 2 (sparse) failed: {e}")
     except Exception as e:
-        logger.warning(f"Pillar 2 (sparse) failed: {e}")
+        logger.warning(f"Pillar 2 (SPLADE) failed: {e}")
+        # Fallback to old sparse search
+        try:
+            pillar2_results = await _sparse_text_search(query, collections, limit=limit * 2)
+            for r in pillar2_results:
+                r["pillar"] = "sparse"
+        except Exception as e2:
+            logger.warning(f"Pillar 2 fallback also failed: {e2}")
 
-    # ── Pillar 3: Entity exact-match lookup ──
+    # ── Pillar 3: Entity exact-match + Knowledge Graph expansion ──
     pillar3_results: List[Dict[str, Any]] = []
     entity_extraction = None
     try:
@@ -487,13 +533,42 @@ async def three_pillar_search(
                     pillar3_results.extend(matches)
                 except Exception as e:
                     logger.debug(f"Entity lookup for {entity['value']} failed: {e}")
+
+            # Knowledge Graph expansion: find related entities via graph traversal
+            if use_kg:
+                try:
+                    from app.knowledge_graph import get_knowledge_graph
+                    kg = await get_knowledge_graph()
+                    kg_results = await kg.expand_query_entities(
+                        entity_extraction.all_entities(), max_depth=2
+                    )
+                    if kg_results:
+                        for r in kg_results:
+                            r["pillar"] = "entity+kg"
+                        pillar3_results.extend(kg_results)
+                        logger.info(f"KG expansion: {len(kg_results)} related entities")
+                except ImportError:
+                    logger.debug("Knowledge Graph module not available, skipping KG expansion")
+                except Exception as e:
+                    logger.debug(f"KG expansion failed (non-critical): {e}")
+
     except Exception as e:
         logger.warning(f"Pillar 3 (entity) failed: {e}")
 
-    # ── RRF fusion ──
-    # Prepare ranked lists for RRF
+    # ── RRF fusion with query-adaptive weights ──
+    # Classify query type to weight pillars appropriately
+    query_type = _classify_query(query)
+    # Dense (semantic) weight, Sparse (keyword) weight, Entity weight
+    WEIGHTS = {
+        "entity_heavy":  (0.3, 0.2, 0.5),  # Address/symbol queries → entity-heavy
+        "keyword_heavy": (0.3, 0.6, 0.1),  # Keyword/term queries → sparse-heavy
+        "semantic_heavy":(0.7, 0.2, 0.1),  # Natural language → dense-heavy
+        "balanced":      (0.4, 0.4, 0.2),  # Mixed queries → balanced
+    }
+    w_dense, w_sparse, w_entity = WEIGHTS.get(query_type, WEIGHTS["balanced"])
+
     p1_ranked = sorted(pillar1_results, key=lambda x: x.get("similarity", 0), reverse=True)
-    p2_ranked = sorted(pillar2_results, key=lambda x: x.get("text_score", 0), reverse=True)
+    p2_ranked = sorted(pillar2_results, key=lambda x: x.get("text_score", 0) or x.get("sparse_score", 0) or x.get("bm25_score", 0), reverse=True)
     p3_ranked = sorted(pillar3_results, key=lambda x: x.get("score", 0), reverse=True)
 
     entity_doc_ids = set()
@@ -507,6 +582,7 @@ async def three_pillar_search(
         k=60,
         entity_boost=entity_boost,
         entity_doc_ids=entity_doc_ids,
+        pillar_weights=[w_dense, w_sparse, w_entity],
     )
 
     # Add pillar attribution
@@ -535,19 +611,113 @@ async def three_pillar_search(
         r["pillars"] = pillar_map.get(did, ["dense"])
         r["match_type"] = "+".join(r["pillars"])
 
+    # ── MMR deduplication ──
+    pre_mmr_count = len(fused)
+    mmr_applied = False
+    if use_mmr and len(fused) > limit:
+        try:
+            from app.mmr_dedup import mmr_dedup_results
+            fused = await mmr_dedup_results(
+                fused,
+                query_score_field="rrf_score",
+                content_field="content",
+                lambda_param=mmr_lambda,
+                top_k=limit * 3,  # Keep more for parent-child expansion
+            )
+            mmr_applied = True
+            logger.info(f"MMR dedup: {pre_mmr_count} → {len(fused)} results (lambda={mmr_lambda})")
+        except ImportError:
+            logger.debug("MMR dedup module not available, skipping")
+        except Exception as e:
+            logger.debug(f"MMR dedup failed (non-critical): {e}")
+
+    # ── Parent-child context expansion ──
+    parent_child_applied = False
+    if use_parent_child and fused:
+        try:
+            from app.contextual_chunking import parent_child_chunk
+            expanded_results = []
+            for r in fused[:limit * 2]:
+                content = r.get("content", "") or ""
+                metadata = r.get("metadata", {}) or {}
+
+                # If the result has a parent document reference, try to expand
+                parent_id = metadata.get("parent_id") or r.get("parent_id")
+                if parent_id:
+                    # Fetch parent content from Redis
+                    try:
+                        pr = await _get_redis()
+                        coll = r.get("collection", "wallet_profiles")
+                        parent_data = await pr.get(f"rag:{coll}:{parent_id}")
+                        if parent_data:
+                            pdoc = json.loads(parent_data)
+                            r["parent_content"] = pdoc.get("content", "")[:2000]
+                            r["parent_id"] = parent_id
+                            parent_child_applied = True
+                    except Exception:
+                        pass
+
+                # If content is short, it might be a child chunk — include for generation
+                if content and len(content) < 800:
+                    r["chunk_type"] = "child"
+                    r["retrieval_note"] = "Short chunk — consider parent context for generation"
+
+                expanded_results.append(r)
+
+            if expanded_results:
+                fused = expanded_results
+        except ImportError:
+            logger.debug("Contextual chunking module not available")
+        except Exception as e:
+            logger.debug(f"Parent-child expansion failed (non-critical): {e}")
+
+    # Final trim
+    final_results = fused[:limit]
+
     return {
-        "results": fused[:limit],
+        "results": final_results,
         "pillar_summary": {
             "dense_hits": len(pillar1_results),
             "sparse_hits": len(pillar2_results),
             "entity_hits": len(pillar3_results),
             "entity_doc_ids": list(entity_doc_ids),
             "pillars_used": [p for p, n in [("dense", len(pillar1_results)), ("sparse", len(pillar2_results)), ("entity", len(pillar3_results))] if n > 0],
+            "mmr_applied": mmr_applied,
+            "mmr_lambda": mmr_lambda if mmr_applied else None,
+            "pre_mmr_count": pre_mmr_count,
+            "post_mmr_count": len(fused) if mmr_applied else pre_mmr_count,
+            "kg_expansion": len([r for r in pillar3_results if r.get("pillar") == "entity+kg"]),
+            "parent_child_applied": parent_child_applied,
         },
         "entity_extraction": entity_extraction.to_dict() if entity_extraction else None,
         "query": query,
+        "query_type": query_type,
+        "fusion_weights": {"dense": w_dense, "sparse": w_sparse, "entity": w_entity},
         "collections": collections,
     }
+
+
+def _classify_query(query: str) -> str:
+    """Classify a query into entity_heavy, keyword_heavy, semantic_heavy, or balanced."""
+    import re
+    q = query.lower().strip()
+    
+    # Entity-heavy: contains hex addresses, $tickers, or known crypto symbols
+    if re.search(r'0x[a-f0-9]{6,}', q):
+        return "entity_heavy"
+    if re.search(r'\$[a-z]{2,10}', q):
+        return "entity_heavy"
+    
+    # Keyword-heavy: short, term-based, no natural language flow
+    words = q.split()
+    if len(words) <= 3 and not any(w in q for w in ["what", "how", "why", "when", "explain", "describe", "compare", "analyze"]):
+        return "keyword_heavy"
+    
+    # Semantic-heavy: natural language questions
+    if any(w in q for w in ["what is", "how does", "why did", "explain", "describe", "compare", "analyze", "tell me", "show me", "find"]):
+        return "semantic_heavy"
+    
+    return "balanced"
 
 
 def _rrf_fuse(
@@ -555,20 +725,26 @@ def _rrf_fuse(
     k: int = 60,
     entity_boost: float = 1.5,
     entity_doc_ids: set = None,
+    pillar_weights: List[float] = None,
 ) -> List[Dict[str, Any]]:
     """
     Reciprocal Rank Fusion of multiple result lists.
+    Supports pillar-specific weights for query-adaptive fusion.
     """
     entity_doc_ids = entity_doc_ids or set()
+    if pillar_weights is None:
+        pillar_weights = [1.0] * len(ranked_lists)
+    
     scores: Dict[str, float] = {}
     doc_data: Dict[str, Dict[str, Any]] = {}
 
-    for rlist in ranked_lists:
+    for list_idx, rlist in enumerate(ranked_lists):
+        weight = pillar_weights[list_idx] if list_idx < len(pillar_weights) else 1.0
         for rank, item in enumerate(rlist, start=1):
             doc_id = item.get("doc_id") or item.get("id")
             if not doc_id:
                 continue
-            rrf = 1.0 / (k + rank)
+            rrf = weight / (k + rank)
             if doc_id in entity_doc_ids:
                 rrf *= entity_boost
             scores[doc_id] = scores.get(doc_id, 0.0) + rrf
@@ -856,7 +1032,6 @@ async def detect_scam_patterns(
         sem_sim = embedder.cosine_similarity(token_sem[:min_sem], pattern_sem[:min_sem])
 
         # Code similarity
-        from app.crypto_embeddings import extract_contract_features
         pat_code_features = (extract_contract_features(
             "\n".join(pattern.get("code_snippets", []))
         ).tolist() if pattern.get("code_snippets") else [0.0] * 128)

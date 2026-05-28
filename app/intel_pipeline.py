@@ -12,13 +12,30 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
 
 import httpx
+from dotenv import load_dotenv
+load_dotenv("/app/.env", override=True)
 
 logger = logging.getLogger(__name__)
 
-HF_TOKEN = os.getenv("HUGGINGFACE_TOKEN", "")
+HF_TOKEN = os.getenv("HF_TOKEN", "")
 HF_API = "https://api-inference.huggingface.co/models"
-SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
+
+
+def _get_url():
+    return os.getenv("SUPABASE_URL", "")
+
+
+def _get_key():
+    return os.getenv("SUPABASE_SERVICE_KEY", "")
+
+
+def _get_headers():
+    key = _get_key()
+    return {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
 
 # ── HF Models (Paywalled — using local fallback) ──────
 # HF Inference API now requires PRO subscription ($9/mo).
@@ -210,7 +227,7 @@ async def label_wallet(wallet_data: Dict) -> Dict:
 
 async def sync_to_supabase(collection: str, document: Dict) -> Dict:
     """Sync RAG document to Supabase for persistent hybrid storage."""
-    if not SUPABASE_URL or not SUPABASE_KEY:
+    if not _get_url() or not _get_key():
         return {"status": "skipped", "reason": "No Supabase config"}
     
     doc_id = hashlib.sha256(
@@ -225,16 +242,12 @@ async def sync_to_supabase(collection: str, document: Dict) -> Dict:
         "synced_at": datetime.now(timezone.utc).isoformat(),
     }
     
-    headers = {
-        "apikey": SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}",
-        "Content-Type": "application/json",
-        "Prefer": "resolution=merge-duplicates"
-    }
+    headers = _get_headers()
+    headers["Prefer"] = "resolution=merge-duplicates"
     
     async with httpx.AsyncClient(timeout=15) as client:
         r = await client.post(
-            f"{SUPABASE_URL}/rest/v1/rag_documents",
+            f"{_get_url()}/rest/v1/rag_documents",
             json=payload,
             headers=headers
         )

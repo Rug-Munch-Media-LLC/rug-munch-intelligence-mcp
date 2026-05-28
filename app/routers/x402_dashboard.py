@@ -449,7 +449,9 @@ async def ensure_x402_payments_table():
     except ImportError:
         # Fallback: direct call via REST
         try:
-            from app.services.supabase_service import SUPABASE_URL, SUPABASE_SERVICE_KEY
+            from app.services.supabase_service import _get_url, _get_key
+            SK = _get_key()
+            SU = _get_url()
             sql = """
             DO $$ BEGIN
                 CREATE TABLE IF NOT EXISTS x402_payments (
@@ -471,13 +473,13 @@ async def ensure_x402_payments_table():
             """
             import httpx
             headers = {
-                "apikey": SUPABASE_SERVICE_KEY,
-                "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+                "apikey": SK,
+                "Authorization": f"Bearer {SK}",
                 "Content-Type": "application/json",
             }
             async with httpx.AsyncClient(timeout=15) as c:
                 r = await c.post(
-                    f"{SUPABASE_URL}/rest/v1/rpc/exec_sql",
+                    f"{SU}/rest/v1/rpc/exec_sql",
                     json={"query": sql},
                     headers=headers,
                 )

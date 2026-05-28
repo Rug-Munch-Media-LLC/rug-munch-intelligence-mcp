@@ -13,6 +13,9 @@ Integrations:
 """
 
 import logging
+import os
+from dotenv import load_dotenv
+load_dotenv("/app/.env", override=True)
 from typing import Dict, List, Optional
 from datetime import datetime, timezone, timedelta
 

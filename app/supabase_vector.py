@@ -28,7 +28,10 @@ load_dotenv("/app/.env", override=True)
 
 logger = logging.getLogger(__name__)
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+
+def _get_url():
+    """Get Supabase URL from env dynamically."""
+    return os.environ.get("SUPABASE_URL", "")
 
 
 def _get_headers():
@@ -48,13 +51,28 @@ VECTOR_TABLE = "rag_vectors"
 # Set via env var or detect at runtime from the embedder.
 EMBEDDING_DIM = int(os.environ.get("RAG_EMBEDDING_DIM", "0"))  # 0 = auto-detect
 
+# The target dimension for the pgvector table column and RPC calls.
+# This MUST match the vector(N) in the CREATE TABLE and search_embeddings RPC.
+# Migration scripts use 640, .env sets RAG_EMBEDDING_DIM=640.
+# Defaults to EMBEDDING_DIM if set, otherwise 640.
+TABLE_DIM = int(os.environ.get("RAG_TABLE_DIM", str(max(EMBEDDING_DIM, 1)))) if EMBEDDING_DIM > 0 else 640
+
+
+def pad_vector(vec: list, target_dim: int) -> list:
+    """Pad or truncate a vector to exactly target_dim dimensions."""
+    if len(vec) == target_dim:
+        return vec
+    if len(vec) > target_dim:
+        return vec[:target_dim]
+    return vec + [0.0] * (target_dim - len(vec))
+
 # SQL for table creation
 CREATE_TABLE_SQL = f"""
 CREATE TABLE IF NOT EXISTS {VECTOR_TABLE} (
     id TEXT PRIMARY KEY,
     collection TEXT NOT NULL,
     content TEXT,
-    embedding vector({EMBEDDING_DIM}),
+    embedding vector({TABLE_DIM}),
     metadata JSONB DEFAULT '{{}}',
     source TEXT,
     severity TEXT,
@@ -112,7 +130,7 @@ class SupabaseVectorStore:
 
     async def _rpc(self, fn: str, params: dict = None) -> dict:
         """Execute a Supabase RPC function."""
-        url = f"{SUPABASE_URL}/rest/v1/rpc/{fn}"
+        url = f"{_get_url()}/rest/v1/rpc/{fn}"
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(url, json=params or {}, headers=_get_headers())
             resp.raise_for_status()
@@ -121,7 +139,7 @@ class SupabaseVectorStore:
     async def _query(self, table: str, select: str = "*", filters: dict = None,
                      limit: int = 100, offset: int = 0) -> List[dict]:
         """Query Supabase REST API."""
-        url = f"{SUPABASE_URL}/rest/v1/{table}"
+        url = f"{_get_url()}/rest/v1/{table}"
         params = {"select": select, "limit": str(limit), "offset": str(offset)}
         if filters:
             for k, v in filters.items():
@@ -134,7 +152,7 @@ class SupabaseVectorStore:
 
     async def _upsert(self, table: str, rows: List[dict]) -> dict:
         """Upsert rows into a Supabase table."""
-        url = f"{SUPABASE_URL}/rest/v1/{table}"
+        url = f"{_get_url()}/rest/v1/{table}"
         params = {"on_conflict": "id"}
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(url, json=rows, params=params, headers=_get_headers())
@@ -143,17 +161,27 @@ class SupabaseVectorStore:
 
     async def initialize(self) -> bool:
         """Create table and indexes if not exist. Falls back gracefully."""
-        # Try existing search_embeddings RPC first (with correct dimension)
-        try:
-            # The table is vector(640) — use that dimension for the test
-            test = await self._rpc("search_embeddings", {
-                "query_embedding": [0.1] * 640,
-                "match_count": 1,
-                "similarity_threshold": 0.0,
-            })
-            self._table_ready = True
-            logger.info("pgvector: search_embeddings RPC available")
-        except Exception:
+        global TABLE_DIM
+        # Determine the query dimension for the RPC health check.
+        # If the RPC function already exists on Supabase, it has a fixed signature
+        # (e.g. vector(640) or vector(1024)). We probe with TABLE_DIM first,
+        # then fall back to common alternatives.
+        rpc_probed = False
+        for probe_dim in [TABLE_DIM, 640, 1024, 384]:
+            try:
+                test = await self._rpc("search_embeddings", {
+                    "query_embedding": [0.1] * probe_dim,
+                    "match_count": 1,
+                    "similarity_threshold": 0.0,
+                })
+                self._table_ready = True
+                TABLE_DIM = probe_dim
+                logger.info(f"pgvector: search_embeddings RPC available (dim={probe_dim})")
+                rpc_probed = True
+                break
+            except Exception:
+                continue
+        if not rpc_probed:
             logger.warning("pgvector: search_embeddings RPC not available")
 
         # Try to create table via SQL RPC if available
@@ -187,7 +215,7 @@ class SupabaseVectorStore:
         # Try direct insert to check if table exists
         if not self._table_ready:
             try:
-                health_dim = self._get_dim()
+                health_dim = TABLE_DIM
                 test_row = {
                     "id": "_pgvector_health_check",
                     "collection": "_system",
@@ -196,7 +224,7 @@ class SupabaseVectorStore:
                     "source": "system",
                     "severity": "info",
                 }
-                url = f"{SUPABASE_URL}/rest/v1/rag_vectors"
+                url = f"{_get_url()}/rest/v1/rag_vectors"
                 params = {"on_conflict": "id"}
                 async with httpx.AsyncClient(timeout=10) as client:
                     resp = await client.post(url, json=test_row, params=params, headers=_get_headers())
@@ -205,7 +233,7 @@ class SupabaseVectorStore:
                         logger.info("pgvector: rag_vectors table ready")
                         # Cleanup test row
                         await client.delete(
-                            f"{SUPABASE_URL}/rest/v1/rag_vectors?id=eq._pgvector_health_check",
+                            f"{_get_url()}/rest/v1/rag_vectors?id=eq._pgvector_health_check",
                             headers=_get_headers()
                         )
             except Exception as e:
@@ -257,7 +285,7 @@ class SupabaseVectorStore:
                 "id": doc_id,
                 "collection": collection,
                 "content": content[:10000],
-                "embedding": embedding,
+                "embedding": pad_vector(embedding, TABLE_DIM),
                 "metadata": json.dumps(metadata or {}),
                 "source": source,
                 "severity": severity,
@@ -281,7 +309,7 @@ class SupabaseVectorStore:
                     "id": doc["id"],
                     "collection": doc["collection"],
                     "content": doc.get("content", "")[:10000],
-                    "embedding": doc["embedding"],
+                    "embedding": pad_vector(doc["embedding"], TABLE_DIM),
                     "metadata": json.dumps(doc.get("metadata", {})),
                     "source": doc.get("source", ""),
                     "severity": doc.get("severity", "medium"),
@@ -346,8 +374,8 @@ class SupabaseVectorStore:
                 return []
 
         # pgvector search (primary)
-        # Pad query vector to 640 dims (table dimension) before calling RPC
-        padded_query = query_embedding[:640] + [0.0] * (640 - len(query_embedding))
+        # Pad query vector to the table dimension before calling RPC
+        padded_query = pad_vector(query_embedding, TABLE_DIM)
         try:
             results = await self._rpc("search_embeddings", {
                 "query_embedding": padded_query,
@@ -379,12 +407,8 @@ class SupabaseVectorStore:
 
         # Construct the query with vector similarity
         # Using cosine distance: 1 - (embedding <=> query)
-        # NOTE: Use full embedding vector (not truncated) for correct similarity
-        dim = self._get_dim(query_embedding)
-        embedding_padded = query_embedding[:dim]
-        # Pad if query is shorter than table dimension (e.g. semantic-only query vs multi-head doc)
-        if len(embedding_padded) < dim:
-            embedding_padded = embedding_padded + [0.0] * (dim - len(embedding_padded))
+        # Pad or truncate to match the table column dimension
+        embedding_padded = pad_vector(query_embedding, TABLE_DIM)
 
         # Format embedding as pgvector literal — safe since it's all floats
         embedding_literal = "[" + ",".join(f"{x:.8f}" for x in embedding_padded) + "]"
@@ -630,7 +654,8 @@ _vector_store: Optional[SupabaseVectorStore] = None
 
 async def get_vector_store() -> SupabaseVectorStore:
     global _vector_store
-    # Always re-initialize to pick up env changes
-    _vector_store = SupabaseVectorStore()
-    await _vector_store.initialize()
+    # Re-init only if not ready (preserves working singleton across calls)
+    if _vector_store is None or not _vector_store._table_ready:
+        _vector_store = SupabaseVectorStore()
+        await _vector_store.initialize()
     return _vector_store

@@ -7,16 +7,29 @@ No pinecone/weaviate needed — SQL + pgvector.
 import os
 import json
 import httpx
+from dotenv import load_dotenv
 from typing import Optional, List, Dict, Any
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_SERVICE_KEY", "")
+# Load env vars dynamically — override stale Docker env
+load_dotenv("/app/.env", override=True)
 
-HEADERS = {
-    "apikey": SUPABASE_KEY,
-    "Authorization": f"Bearer {SUPABASE_KEY}",
-    "Content-Type": "application/json",
-}
+
+def _get_url():
+    return os.environ.get("SUPABASE_URL", "")
+
+
+def _get_key():
+    return os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_SERVICE_KEY", "")
+
+
+def _get_headers():
+    key = _get_key()
+    return {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
+
 
 async def search_similar(
     query_embedding: List[float],
@@ -27,22 +40,26 @@ async def search_similar(
     """
     Search for semantically similar documents using pgvector.
     Returns matching document IDs with similarity scores.
-    
+
     Args:
-        query_embedding: The embedding vector from your model (e.g., OpenAI Ada-002, 1536 dims)
+        query_embedding: The embedding vector from your model
         namespace: Search namespace to restrict results
         match_count: Number of results to return
         similarity_threshold: Minimum cosine similarity (0-1)
     """
-    url = f"{SUPABASE_URL}/rest/v1/rpc/search_embeddings"
+    # Pad/truncate to match the pgvector table dimension
+    from app.supabase_vector import TABLE_DIM, pad_vector
+    padded_embedding = pad_vector(query_embedding, TABLE_DIM)
+
+    url = f"{_get_url()}/rest/v1/rpc/search_embeddings"
     payload = {
-        "query_embedding": query_embedding,
+        "query_embedding": padded_embedding,
         "match_count": match_count,
         "namespace": namespace,
         "similarity_threshold": similarity_threshold,
     }
     async with httpx.AsyncClient(timeout=30) as client:
-        r = await client.post(url, json=payload, headers=HEADERS)
+        r = await client.post(url, json=payload, headers=_get_headers())
         if r.status_code == 200:
             return r.json()
         return []
@@ -60,7 +77,7 @@ async def store_embedding(
     Store an embedding for later retrieval.
     Idempotent — uses ON CONFLICT (document_id) for upsert via REST.
     """
-    url = f"{SUPABASE_URL}/rest/v1/embeddings"
+    url = f"{_get_url()}/rest/v1/embeddings"
     payload = {
         "document_id": document_id,
         "embedding": embedding,
@@ -69,7 +86,7 @@ async def store_embedding(
         "metadata": metadata or {},
         "model_name": model_name,
     }
-    headers = dict(HEADERS)
+    headers = dict(_get_headers())
     headers["Prefer"] = "resolution=merge-duplicates"
     async with httpx.AsyncClient(timeout=30) as client:
         r = await client.post(url, json=payload, headers=headers)
@@ -78,9 +95,9 @@ async def store_embedding(
 
 async def get_namespace_stats(namespace: str = "default") -> dict:
     """Get document count and stats for a namespace."""
-    url = f"{SUPABASE_URL}/rest/v1/embeddings?namespace=eq.{namespace}&select=id"
+    url = f"{_get_url()}/rest/v1/embeddings?namespace=eq.{namespace}&select=id"
     async with httpx.AsyncClient(timeout=10) as client:
-        r = await client.get(url, headers={**HEADERS, "Prefer": "count=exact"})
+        r = await client.get(url, headers={**_get_headers(), "Prefer": "count=exact"})
         return {
             "namespace": namespace,
             "count": int(r.headers.get("content-range", "0").split("/")[-1] or 0),

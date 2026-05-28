@@ -15,6 +15,10 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Callable
 from functools import wraps
+from dotenv import load_dotenv
+
+# Load .env with override to ensure JWT keys win over stale Docker env vars
+load_dotenv("/app/.env", override=True)
 
 from pydantic import BaseModel, Field
 

@@ -269,8 +269,9 @@ class ANNIndex:
         """
         # Auto-build if needed
         if not self.is_built(collection):
-            # Try disk first, then build from Redis
-            if not self._load_from_disk(collection):
+            # Try disk first, then build from Redis (disk I/O offloaded to thread)
+            loaded = await asyncio.to_thread(self._load_from_disk, collection)
+            if not loaded:
                 await self.build_index(collection)
 
         if not self.is_built(collection):

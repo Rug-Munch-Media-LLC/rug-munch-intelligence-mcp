@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 REDIS_HOST = os.getenv("REDIS_HOST", "rmi-redis")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
-REDIS_PASSWORD=os.getenv("REDIS_PASSWORD", "")
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "")
 
 CACHE_TTL = 3600          # 1 hour
 MAX_CACHE_SIZE = 10000

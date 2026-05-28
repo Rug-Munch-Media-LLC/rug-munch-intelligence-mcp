@@ -16,7 +16,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from dotenv import load_dotenv
-load_dotenv()  # Load LLM_API_KEY, LLM_MODEL, etc from .env
+load_dotenv(override=True)  # Load from .env, overriding any stale Docker env vars
 import os, base64
 # Decode base64 LLM key if present
 _llm_b64 = os.getenv('LLM_API_KEY_B64', '')

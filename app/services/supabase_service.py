@@ -6,32 +6,29 @@ Replaces scattered REST calls with a clean, typed service interface.
 import os
 import json
 import httpx
+from dotenv import load_dotenv
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+# Ensure .env is loaded before reading env vars — override stale Docker env
+load_dotenv('/app/.env', override=True)
 
-if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-    raise RuntimeError(
-        "SUPABASE_URL and SUPABASE_SERVICE_KEY (or SUPABASE_SERVICE_ROLE_KEY) "
-        "must be set as environment variables"
-    )
+def _get_url() -> str:
+    return os.environ.get("SUPABASE_URL", "")
 
-# Validate configuration on startup
-if not SUPABASE_URL.startswith("https://") or "supabase.co" not in SUPABASE_URL:
-    raise RuntimeError(f"Invalid SUPABASE_URL: {SUPABASE_URL}")
-if not SUPABASE_SERVICE_KEY.startswith(("sb_secret_", "eyJ")):
-    raise RuntimeError("SUPABASE_SERVICE_KEY must start with 'sb_secret_' or 'eyJ' (JWT) — check your .env file")
+def _get_key() -> str:
+    return os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or ""
 
-HEADERS = {
-    "apikey": SUPABASE_SERVICE_KEY,
-    "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-    "Content-Type": "application/json",
-}
+def _get_headers() -> dict:
+    key = _get_key()
+    return {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
 
 def _url(table: str) -> str:
-    return f"{SUPABASE_URL}/rest/v1/{table}"
+    return f"{_get_url()}/rest/v1/{table}"
 
 async def _get(table: str, params: dict = None, select: str = "*", order: str = None, limit: int = None) -> list:
     """Generic GET query."""
@@ -47,7 +44,7 @@ async def _get(table: str, params: dict = None, select: str = "*", order: str = 
     url += "?" + "&".join(query_parts)
     
     async with httpx.AsyncClient(timeout=15) as c:
-        r = await c.get(url, headers=HEADERS)
+        r = await c.get(url, headers=_get_headers())
         if r.status_code == 200:
             return r.json()
         return []
@@ -57,13 +54,13 @@ async def _get_in(table: str, field: str, values: list, select: str = "*") -> li
     vals = ",".join(str(v) for v in values)
     url = f"{_url(table)}?select={select}&{field}=in.({vals})"
     async with httpx.AsyncClient(timeout=15) as c:
-        r = await c.get(url, headers=HEADERS)
+        r = await c.get(url, headers=_get_headers())
         return r.json() if r.status_code == 200 else []
 
 async def _post(table: str, data: dict) -> dict:
     """Insert a row."""
     url = f"{_url(table)}"
-    headers = dict(HEADERS)
+    headers = dict(_get_headers())
     headers["Prefer"] = "return=representation"
     async with httpx.AsyncClient(timeout=15) as c:
         r = await c.post(url, json=data, headers=headers)
@@ -77,7 +74,7 @@ async def _patch(table: str, match: dict, data: dict) -> bool:
     query_parts = [f"{k}=eq.{v}" for k, v in match.items()]
     url += "?" + "&".join(query_parts)
     async with httpx.AsyncClient(timeout=15) as c:
-        r = await c.patch(url, json=data, headers=HEADERS)
+        r = await c.patch(url, json=data, headers=_get_headers())
         return r.status_code in (200, 204)
 
 async def _delete(table: str, match: dict) -> bool:
@@ -86,13 +83,13 @@ async def _delete(table: str, match: dict) -> bool:
     query_parts = [f"{k}=eq.{v}" for k, v in match.items()]
     url += "?" + "&".join(query_parts)
     async with httpx.AsyncClient(timeout=15) as c:
-        r = await c.delete(url, headers=HEADERS)
+        r = await c.delete(url, headers=_get_headers())
         return r.status_code in (200, 204)
 
 async def _rpc(fn: str, params: dict = None) -> dict:
     """Call a stored procedure."""
-    url = f"{SUPABASE_URL}/rest/v1/rpc/{fn}"
-    headers = dict(HEADERS)
+    url = f"{_get_url()}/rest/v1/rpc/{fn}"
+    headers = dict(_get_headers())
     async with httpx.AsyncClient(timeout=15) as c:
         r = await c.post(url, json=params or {}, headers=headers)
         return r.json() if r.status_code == 200 else None
@@ -118,7 +115,7 @@ async def get_alerts(severity: str = None, user_id: str = None, limit: int = 50,
     url += "?" + "&".join(query_parts)
     
     async with httpx.AsyncClient(timeout=15) as c:
-        r = await c.get(url, headers=HEADERS)
+        r = await c.get(url, headers=_get_headers())
         return r.json() if r.status_code == 200 else []
 
 async def create_alert(
@@ -163,20 +160,20 @@ async def get_wallets(chain: str = None, risk_min: int = None, risk_max: int = N
     url += "?" + "&".join(query_parts)
     
     async with httpx.AsyncClient(timeout=15) as c:
-        r = await c.get(url, headers=HEADERS)
+        r = await c.get(url, headers=_get_headers())
         return r.json() if r.status_code == 200 else []
 
 async def get_wallet(address: str, chain: str = "ethereum") -> dict:
     url = f"{_url('wallets')}?select=*&address=eq.{address}&chain=eq.{chain}&limit=1"
     async with httpx.AsyncClient(timeout=15) as c:
-        r = await c.get(url, headers=HEADERS)
+        r = await c.get(url, headers=_get_headers())
         data = r.json() if r.status_code == 200 else []
         return data[0] if data else None
 
 async def upsert_wallet(address: str, chain: str, **fields) -> dict:
     data = {"address": address, "chain": chain, **fields}
     url = f"{_url('wallets')}"
-    headers = dict(HEADERS)
+    headers = dict(_get_headers())
     headers["Prefer"] = "resolution=merge-duplicates"
     async with httpx.AsyncClient(timeout=15) as c:
         r = await c.post(url, json=data, headers=headers)
@@ -196,14 +193,14 @@ async def get_wallet_intel(address: str = None, chain: str = None, limit: int = 
     url += "?" + "&".join(query_parts)
     
     async with httpx.AsyncClient(timeout=15) as c:
-        r = await c.get(url, headers=HEADERS)
+        r = await c.get(url, headers=_get_headers())
         return r.json() if r.status_code == 200 else []
 
 async def get_wallet_connections(address: str) -> list:
     """Find all wallets connected to this address."""
     url = f"{_url('wallet_intel')}?select=*&related_addresses=cs.{{'{address}'}}&limit=50"
     async with httpx.AsyncClient(timeout=15) as c:
-        r = await c.get(url, headers=HEADERS)
+        r = await c.get(url, headers=_get_headers())
         return r.json() if r.status_code == 200 else []
 
 # ═════════════════════════════════════════════════════════
@@ -220,7 +217,7 @@ async def get_syndicate_wallets(status: str = None, chain: str = None, limit: in
     url += "?" + "&".join(query_parts)
     
     async with httpx.AsyncClient(timeout=15) as c:
-        r = await c.get(url, headers=HEADERS)
+        r = await c.get(url, headers=_get_headers())
         return r.json() if r.status_code == 200 else []
 
 # ═════════════════════════════════════════════════════════
@@ -262,7 +259,7 @@ async def get_token(address: str, chain: str = "ethereum") -> dict:
 async def upsert_token(address: str, chain: str, **fields) -> dict:
     data = {"address": address, "chain": chain, "last_fetched": datetime.now(timezone.utc).isoformat(), **fields}
     url = f"{_url('tokens')}"
-    headers = dict(HEADERS)
+    headers = dict(_get_headers())
     headers["Prefer"] = "resolution=merge-duplicates"
     async with httpx.AsyncClient(timeout=15) as c:
         r = await c.post(url, json=data, headers=headers)
@@ -361,7 +358,7 @@ async def get_contract_analysis(address: str, chain: str = "ethereum") -> dict:
 async def upsert_contract_analysis(address: str, chain: str, **fields) -> dict:
     data = {"address": address, "chain": chain, "analyzed_at": datetime.now(timezone.utc).isoformat(), **fields}
     url = f"{_url('contract_analyses')}"
-    headers = dict(HEADERS)
+    headers = dict(_get_headers())
     headers["Prefer"] = "resolution=merge-duplicates"
     async with httpx.AsyncClient(timeout=15) as c:
         r = await c.post(url, json=data, headers=headers)
@@ -439,7 +436,7 @@ async def check_health() -> dict:
     """Verify Supabase connectivity."""
     try:
         async with httpx.AsyncClient(timeout=5) as c:
-            r = await c.get(f"{SUPABASE_URL}/rest/v1/profiles?limit=0", headers=HEADERS)
+            r = await c.get(f"{_get_url()}/rest/v1/profiles?limit=0", headers=_get_headers())
             return {
                 "status": "healthy" if r.status_code == 200 else "degraded",
                 "tables": 18,  # total tables we expect
@@ -557,9 +554,9 @@ async def ensure_x402_payments_table():
     try:
         async with httpx.AsyncClient(timeout=15) as c:
             r = await c.post(
-                f"{SUPABASE_URL}/rest/v1/rpc/exec_sql",
+                f"{_get_url()}/rest/v1/rpc/exec_sql",
                 json={"query": sql},
-                headers=HEADERS,
+                headers=_get_headers(),
             )
             return r.status_code in (200, 204)
     except Exception:
