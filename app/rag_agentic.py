@@ -41,9 +41,15 @@ logger = logging.getLogger(__name__)
 
 # AI Router config
 OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY", "")
-AI_BASE = "https://openrouter.ai/api/v1/chat/completions"
-RERANK_MODEL = "openai/gpt-4.1-mini"  # Fast + cheap for reranking
-ANALYSIS_MODEL = "anthropic/claude-sonnet-4"  # Deep analysis
+# Decode base64 LLM key if present, otherwise use plain LLM_API_KEY
+if os.getenv("LLM_API_KEY_B64"):
+    import base64 as _b64
+    os.environ["LLM_API_KEY"] = _b64.b64decode(os.getenv("LLM_API_KEY_B64")).decode()
+LLM_API_KEY = os.getenv("LLM_API_KEY", OPENROUTER_KEY)
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com/v1/chat/completions")
+AI_BASE = LLM_BASE_URL if LLM_API_KEY else "https://openrouter.ai/api/v1/chat/completions"
+RERANK_MODEL = os.getenv("RAG_RERANK_MODEL", os.getenv("LLM_MODEL", "deepseek-v4-flash"))
+ANALYSIS_MODEL = os.getenv("RAG_ANALYSIS_MODEL", os.getenv("LLM_MODEL", "deepseek-v4-flash"))
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -76,7 +82,7 @@ For each document, output a JSON object with:
 Return a JSON list sorted by score descending. Only return the JSON, nothing else."""
 
     def __init__(self, api_key: str = None):
-        self.api_key = api_key or OPENROUTER_KEY
+        self.api_key = api_key or LLM_API_KEY
 
     async def rerank(
         self,
@@ -225,7 +231,7 @@ Create a comprehensive assessment with:
 Return as JSON. Be precise and evidence-based."""
 
     def __init__(self, api_key: str = None):
-        self.api_key = api_key or OPENROUTER_KEY
+        self.api_key = api_key or LLM_API_KEY
         self.reranker = LLMReranker(api_key)
 
     async def investigate(
@@ -512,6 +518,8 @@ class RealTimeTokenMonitor:
 
     def __init__(self):
         self.processed = set()
+        self._processed_order = []  # FIFO order for eviction
+        self._max_processed = 10000
         self.alerts = []
 
     async def scan_new_token(self, token_data: dict) -> Dict[str, Any]:
@@ -523,6 +531,14 @@ class RealTimeTokenMonitor:
         if address in self.processed:
             return {"status": "already_processed", "address": address}
         self.processed.add(address)
+        self._processed_order.append(address)
+
+        # Evict oldest half when over limit (FIFO)
+        if len(self.processed) > self._max_processed:
+            evict_count = len(self._processed_order) // 2
+            for old_addr in self._processed_order[:evict_count]:
+                self.processed.discard(old_addr)
+            self._processed_order = self._processed_order[evict_count:]
 
         # Phase 1: Quick keyword scan (sub-second)
         quick = await detect_scam_patterns(token_data)

@@ -1,27 +1,35 @@
-!*.example.json
-!actor.json
-!package*.json
+# Python
 *.egg
 *.egg-info/
-*.json
-*.key
-*.pem
 *.pyc
 *.pyo
 *.sock
-.env
+__pycache__/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
 .venv/
+venv/
+build/
+dist/
+
+# Env files — NEVER commit secrets
+.env
+*.env
+.env.*
+
+# Secrets and keys
+*.key
+*.pem
+
+# Data / cache / temp
 /cache/
 /logs/
 /tmp/
-<<<<<<< HEAD
-=======
->>>>>>> mcp/main
-__pycache__/
-build/
-dist/
 n8n-data/
-venv/
+
+# IDE
+*.json
+!*.example.json
+!actor.json
+!package*.json

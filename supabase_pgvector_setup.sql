@@ -1,6 +1,6 @@
 -- ═══════════════════════════════════════════════════════════════════
 -- RMI pgvector Setup — Run ONCE in Supabase SQL Editor
--- https://ufblzfxqwgaekrewncbi.supabase.co → SQL Editor
+-- https://<your-project>.supabase.co → SQL Editor
 -- ═══════════════════════════════════════════════════════════════════
 
 -- 1. Enable pgvector extension

@@ -38,9 +38,14 @@ async def _create_or_update_user(wallet: str, chain: str, profile: Dict) -> Dict
     """Create or update user in Supabase."""
     try:
         from supabase import create_client, Client
+        import os
         
-        supabase_url = "https://xyzcompany.supabase.co"  # TODO: from env
-        supabase_key = "your-anon-key"  # TODO: from env
+        supabase_url = os.environ.get("SUPABASE_URL", "")
+        supabase_key = os.environ.get("SUPABASE_KEY", "") or os.environ.get("SUPABASE_SERVICE_KEY", "") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+        
+        if not supabase_url or not supabase_key:
+            logger.warning("Supabase credentials not configured in environment")
+            return {}
         
         supabase: Client = create_client(supabase_url, supabase_key)
         

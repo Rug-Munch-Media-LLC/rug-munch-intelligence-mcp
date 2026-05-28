@@ -1,8 +1,9 @@
 """
-RAG Ingestion & Retrieval Service v2
+RAG Ingestion & Retrieval Service v3
 ====================================
 Uses CryptoEmbedder for real semantic embeddings.
-Redis-backed vector store with cosine similarity search.
+Redis-backed vector store with FAISS ANN index for fast search.
+Semantic cache for repeated/near-duplicate queries.
 
 Collections: wallet_profiles, token_analysis, scam_patterns,
              forensic_reports, market_intel, contract_audits, known_scams
@@ -30,6 +31,10 @@ REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "")
 # Track seeding state
 _seeded = False
 
+# Scam pattern pre-embedding cache (Feature 3)
+_pattern_cache: Dict[str, EmbeddingResult] = {}
+_pattern_cache_loaded = False
+
 
 async def _get_redis():
     import redis.asyncio as redis
@@ -38,6 +43,73 @@ async def _get_redis():
         password=REDIS_PASSWORD or None, db=0,
         decode_responses=True,
     )
+
+
+async def _preembed_scam_patterns():
+    """
+    Pre-embed all KNOWN_SCAM_PATTERNS and cache results.
+    Loads from Redis first (persistent cache), then embeds any missing ones.
+    """
+    global _pattern_cache, _pattern_cache_loaded
+
+    embedder = await get_embedder()
+    r = await _get_redis()
+
+    for pattern in KNOWN_SCAM_PATTERNS:
+        pattern_name = pattern["name"]
+
+        # 1. Try in-memory cache
+        if pattern_name in _pattern_cache:
+            continue
+
+        # 2. Try Redis persistent cache (30-day TTL)
+        redis_key = f"rag:pattern_cache:{pattern_name}"
+        try:
+            cached_data = await r.get(redis_key)
+            if cached_data:
+                cached = json.loads(cached_data)
+                _pattern_cache[pattern_name] = EmbeddingResult(
+                    vector=cached["vector"],
+                    dims=cached["dims"],
+                    model=cached["model"],
+                    head=cached.get("head", "scam_pattern"),
+                )
+                logger.debug(f"Pattern cache hit (Redis): {pattern_name}")
+                continue
+        except Exception as e:
+            logger.debug(f"Redis pattern cache read failed for {pattern_name}: {e}")
+
+        # 3. Embed and cache
+        try:
+            result = await embedder.embed_scam_pattern(
+                pattern_name=pattern["name"],
+                description=pattern["description"],
+                code_snippets=pattern.get("code_snippets", []),
+                indicators=pattern.get("indicators", []),
+                severity=pattern.get("severity", "high"),
+            )
+            _pattern_cache[pattern_name] = result
+
+            # Store in Redis with 30-day TTL
+            try:
+                await r.setex(
+                    redis_key,
+                    86400 * 30,
+                    json.dumps({
+                        "vector": result.vector,
+                        "dims": result.dims,
+                        "model": result.model,
+                        "head": result.head,
+                    }),
+                )
+            except Exception as e:
+                logger.debug(f"Redis pattern cache write failed for {pattern_name}: {e}")
+
+            logger.info(f"Pre-embedded scam pattern: {pattern_name}")
+        except Exception as e:
+            logger.warning(f"Failed to pre-embed pattern {pattern_name}: {e}")
+
+    _pattern_cache_loaded = True
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -100,6 +172,14 @@ async def ingest_document(
         await r.setex(key, ttl, json.dumps(doc))
     await r.sadd(f"rag:idx:{collection}", doc_id)
 
+    # Bump ANN index version so it gets rebuilt on next search
+    try:
+        from app.ann_index import get_ann_index
+        ann = get_ann_index()
+        await ann.bump_version(collection)
+    except Exception as e:
+        logger.debug(f"ANN version bump skipped: {e}")
+
     logger.info(f"Ingested {collection}/{doc_id}: {content[:60]}...")
     return {"id": doc_id, "dims": result.dims, "collection": collection}
 
@@ -152,9 +232,8 @@ async def _embed_by_collection(
             head="semantic",
         )
 
-
 # ═══════════════════════════════════════════════════════════════════
-# SEARCH
+# SEARCH — now backed by FAISS ANN index + semantic cache
 # ═══════════════════════════════════════════════════════════════════
 
 async def search_similar(
@@ -165,14 +244,112 @@ async def search_similar(
 ) -> List[Dict[str, Any]]:
     """
     Semantic search across any collection.
+    Uses FAISS ANN index for fast retrieval, with semantic cache.
     """
     embedder = await get_embedder()
-    return await embedder.search(
-        query=query,
-        collection=collection,
-        limit=limit,
-        min_similarity=min_similarity,
-    )
+    query_vec = await embedder.embed_query(query)
+
+    # 1. Check semantic cache
+    try:
+        from app.semantic_cache import get_semantic_cache
+        cache = get_semantic_cache()
+        cached = await cache.check(query_vec)
+        if cached is not None:
+            logger.info(f"Semantic cache hit for query: {query[:60]}")
+            return cached
+    except Exception as e:
+        logger.debug(f"Semantic cache check skipped: {e}")
+
+    # 2. Try FAISS ANN index search
+    results = []
+    try:
+        from app.ann_index import get_ann_index
+        ann = get_ann_index()
+        if ann.is_built(collection):
+            ann_results = await ann.search(
+                query_embedding=query_vec,
+                collection=collection,
+                limit=limit,
+                min_similarity=min_similarity,
+            )
+            if ann_results:
+                # ANN search already hydrates content; skip re-enrichment for hits that have content
+                needs_enrich = [r for r in ann_results if "content" not in r]
+                enriched = await _enrich_ann_results(collection, needs_enrich) if needs_enrich else []
+                results = [r for r in ann_results if "content" in r] + enriched
+        else:
+            # FAISS not built — try pgvector as primary ANN store
+            from app.supabase_vector import get_vector_store
+            store = await get_vector_store()
+            if store._table_ready:
+                pg_results = await store.search(
+                    query_embedding=query_vec,
+                    collection=collection,
+                    limit=limit,
+                    min_similarity=min_similarity,
+                )
+                if pg_results:
+                    results = pg_results
+                    logger.info(f"pgvector search: {len(results)} results from {collection}")
+    except Exception as e:
+        logger.warning(f"ANN/pgvector search failed, falling back to brute-force: {e}")
+        # 3. Fallback to embedder brute-force search
+        results = await embedder.search(
+            query=query,
+            collection=collection,
+            limit=limit,
+            min_similarity=min_similarity,
+        )
+
+    # 4. Store in semantic cache
+    if results:
+        try:
+            from app.semantic_cache import get_semantic_cache
+            cache = get_semantic_cache()
+            await cache.store(query_vec, results)
+        except Exception as e:
+            logger.debug(f"Semantic cache store skipped: {e}")
+
+    return results
+
+
+async def _enrich_ann_results(
+    collection: str,
+    ann_results: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """
+    Given ANN results (id + similarity), fetch full documents from Redis
+    and merge the content/metadata.
+    """
+    if not ann_results:
+        return []
+
+    r = await _get_redis()
+    pipe = r.pipeline()
+    for ar in ann_results:
+        pipe.get(f"rag:{collection}:{ar['id']}")
+
+    raw_docs = await pipe.execute()
+    enriched = []
+    for ar, data in zip(ann_results, raw_docs):
+        if not data:
+            # Return what we have even without enrichment
+            enriched.append(ar)
+            continue
+        try:
+            doc = json.loads(data)
+            enriched.append({
+                "id": doc.get("id", ar["id"]),
+                "similarity": ar["similarity"],
+                "content": doc.get("content", "")[:500],
+                "metadata": doc.get("metadata", {}),
+                "model": doc.get("model", ""),
+                "collection": doc.get("collection", collection),
+            })
+        except json.JSONDecodeError:
+            enriched.append(ar)
+
+    return enriched
 
 
 async def search_multi_collection(
@@ -185,20 +362,375 @@ async def search_multi_collection(
     if collections is None:
         collections = COLLECTIONS
 
-    embedder = await get_embedder()
-
-    all_results = []
-    for coll in collections:
+    async def _search_one(coll: str) -> List[Dict[str, Any]]:
         try:
-            results = await embedder.search(query, coll, limit=limit, min_similarity=min_similarity)
+            results = await search_similar(query, collection=coll, limit=limit, min_similarity=min_similarity)
             for r in results:
-                r["collection"] = coll
-            all_results.extend(results)
+                if "collection" not in r:
+                    r["collection"] = coll
+            return results
         except Exception as e:
             logger.warning(f"Search failed for {coll}: {e}")
+            return []
+
+    # Search all collections in parallel
+    all_per_collection = await asyncio.gather(*[_search_one(c) for c in collections])
+    all_results = [r for results in all_per_collection for r in results]
 
     all_results.sort(key=lambda x: x["similarity"], reverse=True)
     return all_results[:limit]
+
+
+# ═══════════════════════════════════════════════════════════════════
+# THREE-PILLAR HYBRID SEARCH
+# ═══════════════════════════════════════════════════════════════════
+
+async def three_pillar_search(
+    query: str,
+    collections: List[str] = None,
+    limit: int = 10,
+    min_similarity: float = 0.5,
+    entity_boost: float = 1.5,
+) -> Dict[str, Any]:
+    """
+    Three-pillar hybrid search:
+
+      Pillar 1 — Dense vector search via FAISS ANN index (semantic similarity)
+      Pillar 2 — Sparse text search via Redis key scanning / BM25-style matching
+      Pillar 3 — Entity exact-match lookup via EntityLookup
+
+    All three result sets are fused with Reciprocal Rank Fusion (k=60).
+
+    Returns dict with merged results + pillar attribution.
+    """
+    if collections is None:
+        collections = COLLECTIONS
+
+    embedder = await get_embedder()
+    query_vec = await embedder.embed_query(query)
+
+    # ── Pillar 1: Dense vector search (ANN) ──
+    pillar1_results: List[Dict[str, Any]] = []
+    try:
+        # Check semantic cache first
+        from app.semantic_cache import get_semantic_cache
+        cache = get_semantic_cache()
+        cached = await cache.check(query_vec)
+        if cached is not None:
+            pillar1_results = cached
+            for r in pillar1_results:
+                r["pillar"] = "dense (cached)"
+        else:
+            # ANN search across collections
+            for coll in collections:
+                try:
+                    from app.ann_index import get_ann_index
+                    ann = get_ann_index()
+                    ann_hits = await ann.search(
+                        query_embedding=query_vec,
+                        collection=coll,
+                        limit=limit,
+                        min_similarity=min_similarity,
+                    )
+                    enriched = await _enrich_ann_results(coll, ann_hits)
+                    for r in enriched:
+                        r["pillar"] = "dense"
+                    pillar1_results.extend(enriched)
+                except Exception as e:
+                    logger.debug(f"ANN search for {coll} failed: {e}")
+                    # Fallback to embedder search for this collection
+                    try:
+                        hits = await embedder.search(query, coll, limit=limit, min_similarity=min_similarity)
+                        for r in hits:
+                            r["pillar"] = "dense"
+                        pillar1_results.extend(hits)
+                    except Exception:
+                        pass
+
+            # Store in semantic cache
+            if pillar1_results:
+                await cache.store(query_vec, pillar1_results)
+    except Exception as e:
+        logger.warning(f"Pillar 1 (dense) failed: {e}")
+        # Fallback: use search_multi_collection
+        try:
+            pillar1_results = await search_multi_collection(
+                query, collections, limit=limit * 2, min_similarity=min_similarity
+            )
+            for r in pillar1_results:
+                r["pillar"] = "dense"
+        except Exception:
+            pass
+
+    # ── Pillar 2: Sparse text search (Redis keyword scan) ──
+    pillar2_results: List[Dict[str, Any]] = []
+    try:
+        pillar2_results = await _sparse_text_search(query, collections, limit=limit * 2)
+        for r in pillar2_results:
+            r["pillar"] = "sparse"
+    except Exception as e:
+        logger.warning(f"Pillar 2 (sparse) failed: {e}")
+
+    # ── Pillar 3: Entity exact-match lookup ──
+    pillar3_results: List[Dict[str, Any]] = []
+    entity_extraction = None
+    try:
+        from app.entity_extraction import extract_entities, EntityLookup
+        entity_extraction = extract_entities(query)
+        if entity_extraction.has_entities:
+            lookup = EntityLookup.get_instance()
+            for entity in entity_extraction.all_entities():
+                try:
+                    matches = await lookup.lookup(entity["value"])
+                    for m in matches:
+                        m["pillar"] = "entity"
+                    pillar3_results.extend(matches)
+                except Exception as e:
+                    logger.debug(f"Entity lookup for {entity['value']} failed: {e}")
+    except Exception as e:
+        logger.warning(f"Pillar 3 (entity) failed: {e}")
+
+    # ── RRF fusion ──
+    # Prepare ranked lists for RRF
+    p1_ranked = sorted(pillar1_results, key=lambda x: x.get("similarity", 0), reverse=True)
+    p2_ranked = sorted(pillar2_results, key=lambda x: x.get("text_score", 0), reverse=True)
+    p3_ranked = sorted(pillar3_results, key=lambda x: x.get("score", 0), reverse=True)
+
+    entity_doc_ids = set()
+    for r in pillar3_results:
+        did = r.get("doc_id") or r.get("id")
+        if did:
+            entity_doc_ids.add(did)
+
+    fused = _rrf_fuse(
+        [p1_ranked, p2_ranked, p3_ranked],
+        k=60,
+        entity_boost=entity_boost,
+        entity_doc_ids=entity_doc_ids,
+    )
+
+    # Add pillar attribution
+    pillar_map: Dict[str, List[str]] = {}
+    for r in pillar1_results:
+        did = r.get("id") or r.get("doc_id")
+        if did:
+            pillar_map.setdefault(did, [])
+            if "dense" not in pillar_map[did]:
+                pillar_map[did].append("dense")
+    for r in pillar2_results:
+        did = r.get("id") or r.get("doc_id")
+        if did:
+            pillar_map.setdefault(did, [])
+            if "sparse" not in pillar_map[did]:
+                pillar_map[did].append("sparse")
+    for r in pillar3_results:
+        did = r.get("id") or r.get("doc_id")
+        if did:
+            pillar_map.setdefault(did, [])
+            if "entity" not in pillar_map[did]:
+                pillar_map[did].append("entity")
+
+    for r in fused:
+        did = r.get("id") or r.get("doc_id")
+        r["pillars"] = pillar_map.get(did, ["dense"])
+        r["match_type"] = "+".join(r["pillars"])
+
+    return {
+        "results": fused[:limit],
+        "pillar_summary": {
+            "dense_hits": len(pillar1_results),
+            "sparse_hits": len(pillar2_results),
+            "entity_hits": len(pillar3_results),
+            "entity_doc_ids": list(entity_doc_ids),
+            "pillars_used": [p for p, n in [("dense", len(pillar1_results)), ("sparse", len(pillar2_results)), ("entity", len(pillar3_results))] if n > 0],
+        },
+        "entity_extraction": entity_extraction.to_dict() if entity_extraction else None,
+        "query": query,
+        "collections": collections,
+    }
+
+
+def _rrf_fuse(
+    ranked_lists: List[List[Dict[str, Any]]],
+    k: int = 60,
+    entity_boost: float = 1.5,
+    entity_doc_ids: set = None,
+) -> List[Dict[str, Any]]:
+    """
+    Reciprocal Rank Fusion of multiple result lists.
+    """
+    entity_doc_ids = entity_doc_ids or set()
+    scores: Dict[str, float] = {}
+    doc_data: Dict[str, Dict[str, Any]] = {}
+
+    for rlist in ranked_lists:
+        for rank, item in enumerate(rlist, start=1):
+            doc_id = item.get("doc_id") or item.get("id")
+            if not doc_id:
+                continue
+            rrf = 1.0 / (k + rank)
+            if doc_id in entity_doc_ids:
+                rrf *= entity_boost
+            scores[doc_id] = scores.get(doc_id, 0.0) + rrf
+            if doc_id not in doc_data:
+                doc_data[doc_id] = item
+
+    sorted_ids = sorted(scores, key=lambda d: scores[d], reverse=True)
+    results = []
+    for doc_id in sorted_ids:
+        entry = dict(doc_data[doc_id])
+        entry["rrf_score"] = round(scores[doc_id], 6)
+        entry["entity_match"] = doc_id in entity_doc_ids
+        results.append(entry)
+
+    return results
+
+
+# ═══════════════════════════════════════════════════════════════════
+# QUERY TRANSFORMATION SEARCH
+# ═══════════════════════════════════════════════════════════════════
+
+async def search_with_transform(
+    query: str,
+    collection: str = "wallet_profiles",
+    limit: int = 10,
+    strategy: str = "auto",
+) -> Dict[str, Any]:
+    """
+    Search with query transformation.
+    Transforms the query first, then searches with all transformed queries,
+    and merges results using RRF.
+    """
+    from app.query_transform import transform_query
+
+    transformed = await transform_query(query, strategy=strategy)
+
+    # Search with each transformed query
+    all_result_lists = []
+    for tq in transformed.transformed_queries:
+        try:
+            results = await search_similar(tq, collection=collection, limit=limit, min_similarity=0.3)
+            if results:
+                all_result_lists.append(results)
+        except Exception as e:
+            logger.debug(f"Transformed query search failed for '{tq[:60]}': {e}")
+
+    # If only one list (or none), just return as-is
+    if len(all_result_lists) <= 1:
+        results = all_result_lists[0] if all_result_lists else []
+        return {
+            "query": query,
+            "collection": collection,
+            "results": results[:limit],
+            "total": len(results),
+            "strategy": transformed.strategy,
+            "transformed_queries": transformed.transformed_queries,
+            "metadata": transformed.metadata,
+        }
+
+    # RRF merge across result lists
+    rrf_k = 60
+    scores: Dict[str, float] = {}
+    doc_data: Dict[str, Dict[str, Any]] = {}
+
+    for rlist in all_result_lists:
+        sorted_list = sorted(rlist, key=lambda x: x.get("similarity", 0), reverse=True)
+        for rank, item in enumerate(sorted_list, start=1):
+            doc_id = item.get("doc_id") or item.get("id")
+            if not doc_id:
+                continue
+            rrf = 1.0 / (rrf_k + rank)
+            scores[doc_id] = scores.get(doc_id, 0.0) + rrf
+            if doc_id not in doc_data:
+                doc_data[doc_id] = item
+
+    sorted_ids = sorted(scores, key=lambda d: scores[d], reverse=True)
+    merged = []
+    for doc_id in sorted_ids:
+        entry = dict(doc_data[doc_id])
+        entry["rrf_score"] = round(scores[doc_id], 6)
+        merged.append(entry)
+
+    return {
+        "query": query,
+        "collection": collection,
+        "results": merged[:limit],
+        "total": len(merged),
+        "strategy": transformed.strategy,
+        "transformed_queries": transformed.transformed_queries,
+        "metadata": transformed.metadata,
+    }
+
+
+async def _sparse_text_search(
+    query: str,
+    collections: List[str],
+    limit: int = 20,
+) -> List[Dict[str, Any]]:
+    """
+    Simple keyword-based text search over Redis-stored documents.
+    Tokenizes the query and matches against content fields.
+    This is a lightweight BM25-style fallback when pgvector FTS is not available.
+    """
+    r = await _get_redis()
+
+    # Tokenize query
+    query_tokens = set(query.lower().split())
+    if not query_tokens:
+        return []
+
+    results = []
+    for coll in collections:
+        try:
+            doc_ids = list(await r.smembers(f"rag:idx:{coll}"))
+            if not doc_ids:
+                continue
+
+            # Batch fetch (limit to avoid massive reads)
+            sample_ids = doc_ids[:200]
+            keys = [f"rag:{coll}:{did}" for did in sample_ids]
+            pipe = r.pipeline()
+            for k in keys:
+                pipe.get(k)
+            raw_docs = await pipe.execute()
+
+            for data in raw_docs:
+                if not data:
+                    continue
+                try:
+                    doc = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
+
+                content = doc.get("content", "").lower()
+                if not content:
+                    continue
+
+                # BM25-style scoring: count matching tokens
+                content_tokens = set(content.split())
+                matching = query_tokens & content_tokens
+                if not matching:
+                    continue
+
+                # Simple BM25-ish score: match ratio * idf-like factor
+                score = len(matching) / (len(query_tokens) + 0.5)
+                # Boost exact phrase matches
+                if query.lower() in content:
+                    score *= 2.0
+
+                results.append({
+                    "id": doc.get("id", ""),
+                    "doc_id": doc.get("id", ""),
+                    "text_score": round(score, 4),
+                    "content": doc.get("content", "")[:500],
+                    "metadata": doc.get("metadata", {}),
+                    "collection": coll,
+                })
+        except Exception as e:
+            logger.debug(f"Sparse search for {coll} failed: {e}")
+
+    results.sort(key=lambda x: x["text_score"], reverse=True)
+    return results[:limit]
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -213,7 +745,12 @@ async def detect_scam_patterns(
     Compare a token against all known scam patterns.
     Returns matched patterns with similarity scores.
     """
+    global _pattern_cache_loaded
     embedder = await get_embedder()
+
+    # Pre-embed patterns on first call if not already done
+    if not _pattern_cache_loaded:
+        await _preembed_scam_patterns()
 
     # Build a token embedding
     code = token_data.get("contract_code", "")
@@ -245,33 +782,77 @@ async def detect_scam_patterns(
         metadata=token_data,
     )
 
-    # Vector layout: token = [semantic(sem_dim) | code(128) | behavioral(64) | wallet(64)]
-    # Pattern layout: [semantic(sem_dim) | code(128)]
-    sem_dim = len(token_result.vector) - 128 - 64 - 64  # back out semantic dim
-    if sem_dim <= 0:
-        sem_dim = 1024  # fallback
+    # Vector layout:
+    #   token  = [semantic(sem_dim) | code(128) | behavioral(64) | wallet(64)]
+    #   pattern = [semantic(sem_dim) | code(128)]
+    # Both have a common [semantic | code] prefix if they use the same model.
+    # For the semantic comparison, use only the common prefix.
+    # For the code comparison, compare the 128-dim code sections.
 
-    token_sem = token_result.vector[:sem_dim]
-    token_code = token_result.vector[sem_dim:sem_dim + 128]
+    token_total = len(token_result.vector)
+    # If token vector has multi-head layout, extract heads by known offsets
+    if token_total > 128 + 64 + 64:
+        # Full multi-head: [semantic | code(128) | behavioral(64) | wallet(64)]
+        token_sem_end = token_total - 128 - 64 - 64
+        token_sem = token_result.vector[:token_sem_end]
+        token_code = token_result.vector[token_sem_end:token_sem_end + 128]
+    elif token_total > 128:
+        # Partial: [semantic | code(128)] — no behavioral/wallet
+        token_sem_end = token_total - 128
+        token_sem = token_result.vector[:token_sem_end]
+        token_code = token_result.vector[token_sem_end:token_sem_end + 128]
+    else:
+        # Only semantic — use as-is
+        token_sem = token_result.vector
+        token_code = [0.0] * 128
 
     deep_matches = []
     for pattern in KNOWN_SCAM_PATTERNS:
-        pattern_text = f"SCAM: {pattern['name']}. {pattern['description']}"
-        pattern_result = await embedder.embed_scam_pattern(
-            pattern_name=pattern["name"],
-            description=pattern["description"],
-            code_snippets=pattern.get("code_snippets", []),
-            indicators=pattern.get("indicators", []),
-            severity=pattern.get("severity", "high"),
-        )
+        # Use pre-embedded cache if available, otherwise embed on-demand and cache
+        pattern_name = pattern["name"]
+        if pattern_name in _pattern_cache:
+            pattern_result = _pattern_cache[pattern_name]
+        else:
+            pattern_result = await embedder.embed_scam_pattern(
+                pattern_name=pattern["name"],
+                description=pattern["description"],
+                code_snippets=pattern.get("code_snippets", []),
+                indicators=pattern.get("indicators", []),
+                severity=pattern.get("severity", "high"),
+            )
+            # Cache for future use
+            _pattern_cache[pattern_name] = pattern_result
+            # Also persist to Redis
+            try:
+                r = await _get_redis()
+                redis_key = f"rag:pattern_cache:{pattern_name}"
+                await r.setex(
+                    redis_key,
+                    86400 * 30,
+                    json.dumps({
+                        "vector": pattern_result.vector,
+                        "dims": pattern_result.dims,
+                        "model": pattern_result.model,
+                        "head": pattern_result.head,
+                    }),
+                )
+            except Exception:
+                pass
 
         # Extract pattern semantic + code portions
-        pat_sem_dim = len(pattern_result.vector) - 128
-        pattern_sem = pattern_result.vector[:pat_sem_dim]
-        pattern_code = pattern_result.vector[pat_sem_dim:pat_sem_dim + 128] if len(pattern_result.vector) > pat_sem_dim else [0.0] * 128
+        pat_total = len(pattern_result.vector)
+        if pat_total > 128:
+            pat_sem_end = pat_total - 128
+            pattern_sem = pattern_result.vector[:pat_sem_end]
+            pattern_code = pattern_result.vector[pat_sem_end:pat_sem_end + 128]
+        else:
+            pattern_sem = pattern_result.vector
+            pattern_code = [0.0] * 128
 
-        # Compare same-length portions
+        # Compare same-length semantic portions (may differ if different models)
         min_sem = min(len(token_sem), len(pattern_sem))
+        if min_sem == 0:
+            continue
         sem_sim = embedder.cosine_similarity(token_sem[:min_sem], pattern_sem[:min_sem])
 
         # Code similarity
@@ -352,7 +933,6 @@ async def seed_known_scams() -> Dict[str, Any]:
     _seeded = True
     return {"status": "seeded", "count": count, "patterns": [p["name"] for p in KNOWN_SCAM_PATTERNS]}
 
-
 # ═══════════════════════════════════════════════════════════════════
 # STATS
 # ═══════════════════════════════════════════════════════════════════
@@ -377,7 +957,6 @@ async def ingest_forensic_report(
         metadata=meta,
     )
 
-
 async def get_stats() -> Dict[str, Any]:
     embedder = await get_embedder()
     r = await _get_redis()
@@ -390,9 +969,71 @@ async def get_stats() -> Dict[str, Any]:
         except Exception:
             collection_sizes[coll] = 0
 
+    # Get ANN index stats
+    ann_stats = {}
+    try:
+        from app.ann_index import get_ann_index
+        ann = get_ann_index()
+        ann_stats = ann.stats()
+    except Exception:
+        pass
+
+    # Get semantic cache stats
+    cache_stats = {}
+    try:
+        from app.semantic_cache import get_semantic_cache
+        cache = get_semantic_cache()
+        cache_stats = await cache.stats()
+    except Exception:
+        pass
+
     return {
         "embedder": embedder.stats,
         "collections": collection_sizes,
         "total_docs": sum(collection_sizes.values()),
         "seeded": _seeded,
+        "ann_index": ann_stats,
+        "semantic_cache": cache_stats,
     }
+
+# ═══════════════════════════════════════════════════════════════════
+# GOPLUS SECURITY ANALYSIS
+# ═══════════════════════════════════════════════════════════════════
+
+async def get_goplus_analysis(token_address: str, chain: str = "1") -> Dict[str, Any]:
+    """
+    Run GoPlus Security API token risk check and return structured results.
+    Chain IDs: 1=ETH, 56=BSC, 137=Polygon, 42161=Arbitrum, 43114=Avalanche,
+    10=Optimism, 8453=Base, 324=zkSync, 534352=Scroll, 59144=Linea.
+    """
+    from app.scam_sources import GoPlusConnector
+
+    result = await GoPlusConnector.check_token(chain, token_address)
+    if not result:
+        return {"error": "GoPlus check returned no data", "address": token_address, "chain": chain}
+
+    # Ingest the result into the RAG knowledge base for future retrieval
+    try:
+        content = (
+            f"GoPlus Security Scan [{chain}]: {token_address} — "
+            f"honeypot={result.get('is_honeypot')}, "
+            f"buy_tax={result.get('buy_tax')}, sell_tax={result.get('sell_tax')}, "
+            f"proxy={result.get('is_proxy')}, "
+            f"blacklisted={result.get('is_blacklisted')}, "
+            f"hidden_owner={result.get('hidden_owner')}, "
+            f"risk_score={result.get('risk_score')}"
+        )
+        await ingest_document(
+            collection="token_analysis",
+            content=content,
+            metadata={
+                "source": "goplus",
+                "address": token_address,
+                "chain": chain,
+                **result,
+            },
+        )
+    except Exception as e:
+        logger.warning(f"Failed to ingest GoPlus result for {token_address}: {e}")
+
+    return result

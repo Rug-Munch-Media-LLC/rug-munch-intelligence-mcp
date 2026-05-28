@@ -420,14 +420,26 @@ class HuggingFaceEmbedder:
         url = f"{self.BASE}/{model_id}"
         async with httpx.AsyncClient(timeout=60) as client:
             # HF API expects either a single string or list
-            results = []
+            results: List[List[float]] = []
             for text in texts:
                 resp = await client.post(url, headers=headers, json={"inputs": text})
                 if resp.status_code == 503:  # model loading
                     await asyncio.sleep(3)
                     resp = await client.post(url, headers=headers, json={"inputs": text})
                 resp.raise_for_status()
-                results.append(resp.json())
+                data = resp.json()
+                # HF feature-extraction returns nested lists: [[0.1, 0.2, ...]]
+                # Handle both shapes: list of floats or list of list of floats
+                if isinstance(data, list) and len(data) > 0:
+                    if isinstance(data[0], list):
+                        # Already [[float]] — take the first (mean-pooled usually)
+                        results.append(data[0] if len(data) == 1 else data[0])
+                    else:
+                        # Flat [float] — wrap it
+                        results.append(data)
+                else:
+                    logger.warning(f"HF returned unexpected shape: {type(data)}")
+                    results.append([0.0] * 1024)
             return results
 
     async def embed_one(self, text: str, model: str = None) -> List[float]:
@@ -589,8 +601,18 @@ class CryptoEmbedder:
         return [self._hash_embed(text) for text in texts]
 
     async def _semantic_embed_one(self, text: str, head: str = "semantic") -> List[float]:
+        # Check cache first
+        cache_key = await self._cache_key(head, text)
+        cached = await self._cache_get(cache_key)
+        if cached is not None:
+            return cached
+
         results = await self._semantic_embed([text], head)
-        return results[0] if results else self._hash_embed(text)
+        vector = results[0] if results else self._hash_embed(text)
+
+        # Store in cache (24h TTL for semantic embeddings)
+        await self._cache_set(cache_key, vector, ttl=86400)
+        return vector
 
     def _hash_embed(self, text: str, dims: int = 384) -> List[float]:
         """Deterministic hash-based embedding (emergency fallback)."""

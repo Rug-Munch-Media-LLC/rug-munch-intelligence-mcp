@@ -21,17 +21,24 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any, Tuple
 import httpx
 import numpy as np
+from dotenv import load_dotenv
+
+# Load env vars at module level so keys are available before any class instantiation
+load_dotenv("/app/.env", override=True)
 
 logger = logging.getLogger(__name__)
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
 
-HEADERS = {
-    "apikey": SUPABASE_SERVICE_KEY,
-    "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-    "Content-Type": "application/json",
-}
+
+def _get_headers():
+    """Build headers dynamically to pick up env changes without module reload."""
+    key = os.environ.get("SUPABASE_SERVICE_KEY", "") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+    return {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
 
 # Table configuration
 VECTOR_TABLE = "rag_vectors"
@@ -107,7 +114,7 @@ class SupabaseVectorStore:
         """Execute a Supabase RPC function."""
         url = f"{SUPABASE_URL}/rest/v1/rpc/{fn}"
         async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(url, json=params or {}, headers=HEADERS)
+            resp = await client.post(url, json=params or {}, headers=_get_headers())
             resp.raise_for_status()
             return resp.json() if resp.text else {}
 
@@ -121,7 +128,7 @@ class SupabaseVectorStore:
                 params[k] = f"eq.{v}"
 
         async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.get(url, params=params, headers=HEADERS)
+            resp = await client.get(url, params=params, headers=_get_headers())
             resp.raise_for_status()
             return resp.json() if resp.text else []
 
@@ -130,17 +137,19 @@ class SupabaseVectorStore:
         url = f"{SUPABASE_URL}/rest/v1/{table}"
         params = {"on_conflict": "id"}
         async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(url, json=rows, params=params, headers=HEADERS)
+            resp = await client.post(url, json=rows, params=params, headers=_get_headers())
             resp.raise_for_status()
             return resp.json() if resp.text else {}
 
     async def initialize(self) -> bool:
         """Create table and indexes if not exist. Falls back gracefully."""
-        # Try existing search_embeddings RPC first
+        # Try existing search_embeddings RPC first (with correct dimension)
         try:
+            # The table is vector(640) — use that dimension for the test
             test = await self._rpc("search_embeddings", {
-                "query_embedding": [0.1] * 128,
+                "query_embedding": [0.1] * 640,
                 "match_count": 1,
+                "similarity_threshold": 0.0,
             })
             self._table_ready = True
             logger.info("pgvector: search_embeddings RPC available")
@@ -190,14 +199,14 @@ class SupabaseVectorStore:
                 url = f"{SUPABASE_URL}/rest/v1/rag_vectors"
                 params = {"on_conflict": "id"}
                 async with httpx.AsyncClient(timeout=10) as client:
-                    resp = await client.post(url, json=test_row, params=params, headers=HEADERS)
+                    resp = await client.post(url, json=test_row, params=params, headers=_get_headers())
                     if resp.status_code in (200, 201):
                         self._table_ready = True
                         logger.info("pgvector: rag_vectors table ready")
                         # Cleanup test row
                         await client.delete(
                             f"{SUPABASE_URL}/rest/v1/rag_vectors?id=eq._pgvector_health_check",
-                            headers=HEADERS
+                            headers=_get_headers()
                         )
             except Exception as e:
                 logger.warning(f"pgvector table not found. Run: /root/backend/supabase_pgvector_setup.sql in Supabase SQL Editor")
@@ -337,14 +346,17 @@ class SupabaseVectorStore:
                 return []
 
         # pgvector search (primary)
+        # Pad query vector to 640 dims (table dimension) before calling RPC
+        padded_query = query_embedding[:640] + [0.0] * (640 - len(query_embedding))
         try:
             results = await self._rpc("search_embeddings", {
-                "query_embedding": query_embedding,
+                "query_embedding": padded_query,
                 "namespace": collection or "default",
                 "match_count": limit,
                 "similarity_threshold": min_similarity,
             })
-            if results:
+            # search_embeddings returns [] for no matches — that's a valid result
+            if results is not None:
                 return [{
                     "id": r.get("id") or r.get("document_id"),
                     "similarity": round(r.get("similarity", 0), 4),
@@ -352,9 +364,9 @@ class SupabaseVectorStore:
                     "metadata": r.get("metadata", {}),
                     "source": r.get("source", ""),
                     "severity": r.get("severity", ""),
-                } for r in results]
-        except Exception:
-            pass
+                } for r in (results or [])]
+        except Exception as e:
+            logger.warning(f"search_embeddings RPC failed: {e}")
 
         # Fallback: direct SQL query via REST
         # Build filter query
@@ -533,8 +545,52 @@ class SupabaseVectorStore:
         except Exception:
             return 0
 
+    async def build_hnsw_index(
+        self,
+        m: int = 16,
+        ef_construction: int = 200,
+    ) -> bool:
+        """
+        Build/rebuild HNSW index for ANN search.
+        HNSW provides better recall than IVFFlat at similar query speeds,
+        and does not require a training step.
+
+        Parameters:
+          m:               Max connections per layer (default 16; higher = more recall, more memory)
+          ef_construction: Build-time search width (default 200; higher = better index quality)
+        """
+        try:
+            # Drop existing HNSW index if present (to rebuild with new params)
+            try:
+                drop_sql = "DROP INDEX IF EXISTS idx_rag_embedding_hnsw;"
+                await self._rpc("exec_sql", {"sql": drop_sql})
+            except Exception:
+                pass
+
+            sql = f"""
+            CREATE INDEX IF NOT EXISTS idx_rag_embedding_hnsw
+            ON {VECTOR_TABLE} USING hnsw (embedding vector_cosine_ops)
+            WITH (m = {int(m)}, ef_construction = {int(ef_construction)});
+            """
+            await self._rpc("exec_sql", {"sql": sql})
+            logger.info(f"HNSW index built (m={m}, ef_construction={ef_construction})")
+            return True
+        except Exception as e:
+            logger.warning(f"HNSW index build failed: {e}")
+            return False
+
     async def build_index(self) -> bool:
-        """Build/rebuild IVFFlat index for ANN search."""
+        """
+        Build/rebuild ANN index for fast vector search.
+        Prefers HNSW (higher recall, no training) over IVFFlat.
+        Falls back to IVFFlat if HNSW fails.
+        """
+        # Try HNSW first (better quality, no training step)
+        hnsw_ok = await self.build_hnsw_index(m=16, ef_construction=200)
+        if hnsw_ok:
+            return True
+
+        # Fallback: IVFFlat
         try:
             sql = f"""
             CREATE INDEX IF NOT EXISTS idx_rag_embedding_ivfflat
@@ -542,10 +598,10 @@ class SupabaseVectorStore:
             WITH (lists = 100);
             """
             await self._rpc("exec_sql", {"sql": sql})
-            logger.info("IVFFlat index built")
+            logger.info("IVFFlat index built (HNSW fallback)")
             return True
         except Exception as e:
-            logger.warning(f"Index build failed: {e}")
+            logger.warning(f"Index build failed (both HNSW and IVFFlat): {e}")
             return False
 
     async def list_distinct(self, column: str, collection: str = None) -> List[str]:
@@ -574,7 +630,7 @@ _vector_store: Optional[SupabaseVectorStore] = None
 
 async def get_vector_store() -> SupabaseVectorStore:
     global _vector_store
-    if _vector_store is None:
-        _vector_store = SupabaseVectorStore()
-        await _vector_store.initialize()
+    # Always re-initialize to pick up env changes
+    _vector_store = SupabaseVectorStore()
+    await _vector_store.initialize()
     return _vector_store

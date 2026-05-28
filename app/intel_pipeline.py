@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 HF_TOKEN = os.getenv("HUGGINGFACE_TOKEN", "")
 HF_API = "https://api-inference.huggingface.co/models"
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://ufblzfxqwgaekrewncbi.supabase.co")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
 
 # ── HF Models (Paywalled — using local fallback) ──────

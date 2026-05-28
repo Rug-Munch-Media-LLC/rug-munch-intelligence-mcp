@@ -15,6 +15,13 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from dotenv import load_dotenv
+load_dotenv()  # Load LLM_API_KEY, LLM_MODEL, etc from .env
+import os, base64
+# Decode base64 LLM key if present
+_llm_b64 = os.getenv('LLM_API_KEY_B64', '')
+if _llm_b64:
+    os.environ['LLM_API_KEY'] = base64.b64decode(_llm_b64).decode()
 from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel
 from typing import Optional
@@ -1952,13 +1959,26 @@ async def rag_ingest(request: Request, data: dict):
     return result
 
 @app.get("/api/v1/rag/search")
-async def rag_search(request: Request, q: str, collection: str = "wallet_profiles", limit: int = 10):
-    """Semantic search across RAG collections using CryptoEmbedder."""
+async def rag_search(request: Request, q: str, collection: str = "wallet_profiles", limit: int = 10, apply_decay: bool = True, use_three_pillar: bool = False):
+    """Semantic search across RAG collections. Uses FAISS ANN index by default.
+    Set use_three_pillar=true for three-pillar hybrid search (dense + sparse + entity)."""
+    if use_three_pillar:
+        from app.rag_service import three_pillar_search
+        coll_list = None if collection == "all" else [collection]
+        result = await three_pillar_search(query=q, collections=coll_list, limit=limit)
+        return {**result, "mode": "three_pillar"}
+
     from app.rag_service import search_similar, search_multi_collection
     if collection == "all":
         results = await search_multi_collection(q, limit=limit)
     else:
         results = await search_similar(q, collection=collection, limit=limit)
+
+    # Apply temporal decay scoring — old content gets downweighted
+    if apply_decay and results:
+        from app.temporal_decay import apply_temporal_decay
+        results = apply_temporal_decay(results)
+
     return {"query": q, "collection": collection, "results": results, "total": len(results)}
 
 @app.get("/api/v1/rag/stats")
@@ -1981,6 +2001,22 @@ async def rag_detect_scam(request: Request, data: dict):
     result = await detect_scam_patterns(data)
     return result
 
+@app.get("/api/v1/rag/search-transformed")
+async def rag_search_transformed(request: Request, q: str, collection: str = "wallet_profiles", limit: int = 10, strategy: str = "auto"):
+    """Semantic search with query transformation (HyDE, expansion, step-back, auto)."""
+    from app.rag_service import search_with_transform
+    result = await search_with_transform(q, collection=collection, limit=limit, strategy=strategy)
+    return result
+
+@app.post("/api/v1/rag/evaluate")
+async def rag_evaluate(request: Request, data: dict = None):
+    """Run RAG evaluation against golden test set. Optional: collection filter."""
+    from app.ragas_eval import run_evaluation
+    collection = (data or {}).get("collection", None)
+    limit = (data or {}).get("limit", 10)
+    result = await run_evaluation(collection=collection, limit=limit)
+    return result
+
 @app.post("/api/v1/rag/ingest-forensic")
 async def rag_ingest_forensic(request: Request, data: dict):
     """Ingest forensic report text."""
@@ -1988,6 +2024,106 @@ async def rag_ingest_forensic(request: Request, data: dict):
     report_name = data.get("name", "forensic_report")
     from app.rag_service import ingest_forensic_report
     return await ingest_forensic_report(report_text, report_name)
+
+@app.get("/api/v1/rag/goplus-analysis")
+async def rag_goplus_analysis(request: Request, token_address: str, chain: str = "1"):
+    """Run GoPlus Security API token risk analysis and ingest results into RAG."""
+    if not token_address:
+        raise HTTPException(status_code=400, detail="token_address required")
+    from app.rag_service import get_goplus_analysis
+    result = await get_goplus_analysis(token_address, chain)
+    return result
+
+# ═══════════════════════════════════════════════════════════════════
+# FAISS ANN INDEX + SEMANTIC CACHE + THREE-PILLAR SEARCH
+# ═══════════════════════════════════════════════════════════════════
+
+@app.post("/api/v1/rag/build-index")
+async def rag_build_index(request: Request, data: dict = None):
+    """
+    Build FAISS ANN index for one or all collections.
+    Body (optional): {"collection": "scam_patterns"} or {"all": true}
+    If no body or all=true, builds indexes for all collections.
+    """
+    data = data or {}
+    collection = data.get("collection")
+    build_all = data.get("all", not collection)
+
+    from app.ann_index import get_ann_index
+    ann = get_ann_index()
+
+    if build_all:
+        from app.crypto_embeddings import COLLECTIONS
+        results = {}
+        for coll in COLLECTIONS:
+            try:
+                results[coll] = await ann.build_index(coll, force=True)
+            except Exception as e:
+                results[coll] = {"error": str(e)}
+        return {"status": "built", "indexes": results, "stats": ann.stats()}
+    else:
+        if not collection:
+            raise HTTPException(status_code=400, detail="collection required (or pass all=true)")
+        result = await ann.build_index(collection, force=True)
+        return {"status": "built", "collection": collection, "result": result, "stats": ann.stats()}
+
+
+@app.get("/api/v1/rag/three-pillar-search")
+async def rag_three_pillar_search(
+    request: Request,
+    q: str,
+    collections: str = "all",
+    limit: int = 10,
+    min_similarity: float = 0.5,
+):
+    """
+    Three-pillar hybrid search:
+      Pillar 1: Dense vector search via FAISS ANN (semantic similarity)
+      Pillar 2: Sparse text search (keyword/BM25-style matching)
+      Pillar 3: Entity exact-match lookup (addresses, symbols, hashes)
+
+    Results are fused with Reciprocal Rank Fusion (k=60).
+    """
+    if not q:
+        raise HTTPException(status_code=400, detail="q (query) required")
+
+    from app.rag_service import three_pillar_search
+    from app.crypto_embeddings import COLLECTIONS
+
+    coll_list = COLLECTIONS if collections == "all" else [c.strip() for c in collections.split(",")]
+
+    result = await three_pillar_search(
+        query=q,
+        collections=coll_list,
+        limit=limit,
+        min_similarity=min_similarity,
+    )
+    return result
+
+
+@app.get("/api/v1/rag/ann-stats")
+async def rag_ann_stats(request: Request):
+    """Get FAISS ANN index stats for all collections."""
+    from app.ann_index import get_ann_index
+    ann = get_ann_index()
+    return ann.stats()
+
+
+@app.post("/api/v1/rag/cache-clear")
+async def rag_cache_clear(request: Request):
+    """Clear the semantic query cache."""
+    from app.semantic_cache import get_semantic_cache
+    cache = get_semantic_cache()
+    deleted = await cache.clear()
+    return {"status": "cleared", "entries_removed": deleted}
+
+
+@app.get("/api/v1/rag/cache-stats")
+async def rag_cache_stats(request: Request):
+    """Get semantic cache statistics."""
+    from app.semantic_cache import get_semantic_cache
+    cache = get_semantic_cache()
+    return await cache.stats()
 
 # ═══════════════════════════════════════════════════════════════════
 # TIER-1 RAG — Agentic Investigation + LLM Reranking
@@ -2116,6 +2252,196 @@ async def cluster_labels_backfill(request: Request):
     from app.bundle_cluster_rag import backfill_label_templates
     count = await backfill_label_templates()
     return {"status": "backfilled", "count": count}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# TIER-1 RAG — World-Class Feature Endpoints
+# ═══════════════════════════════════════════════════════════════════
+
+@app.post("/api/v1/rag/chunk-document")
+async def rag_chunk_document(request: Request, data: dict):
+    """
+    Contextual chunking pipeline — Anthropic-style contextual retrieval.
+    Chunks a document and prepends LLM-generated context to each chunk
+    to dramatically improve retrieval accuracy (65% → 89%).
+    """
+    text = data.get("text", "")
+    doc_id = data.get("doc_id", "")
+    source = data.get("source", "")
+    chunk_size = data.get("chunk_size", 2500)
+    use_llm = data.get("use_llm_context", True)
+    if not text:
+        return {"error": "text is required"}
+    from app.contextual_chunking import process_document
+    result = await process_document(
+        text, doc_id=doc_id, source=source,
+        chunk_size=chunk_size, use_llm_context=use_llm,
+    )
+    return {
+        "doc_id": result.doc_id,
+        "total_chunks": len(result.chunks),
+        "total_chars": result.total_chars,
+        "processing_time_ms": result.processing_time_ms,
+        "chunks": [
+            {
+                "index": c.index,
+                "content": c.content[:200] + "..." if len(c.content) > 200 else c.content,
+                "context": c.context_text,
+                "contextualized": c.contextualized[:300] + "..." if len(c.contextualized) > 300 else c.contextualized,
+                "hash": c.content_hash,
+                "parent_id": c.parent_id,
+            }
+            for c in result.chunks
+        ],
+    }
+
+@app.post("/api/v1/rag/cross-rerank")
+async def rag_cross_rerank(request: Request, data: dict):
+    """
+    Cross-encoder reranking — bge-reranker-v2-m3 (local, CPU).
+    Stage 2 in the 3-stage reranking pipeline:
+    Vector search (stage 1) → Cross-encoder (stage 2) → LLM rerank (stage 3)
+    """
+    query = data.get("query", "")
+    documents = data.get("documents", [])
+    top_k = data.get("top_k", 10)
+    if not query or not documents:
+        return {"error": "query and documents are required"}
+    from app.cross_encoder_reranker import get_reranker
+    reranker = await get_reranker()
+    results = await reranker.rerank(query, documents, top_k=top_k)
+    return {"query": query, "reranked": results, "total": len(results)}
+
+@app.post("/api/v1/rag/entity-search")
+async def rag_entity_search(request: Request, data: dict):
+    """
+    Entity-augmented hybrid search.
+    Extracts crypto entities (addresses, symbols, chains) from query,
+    does exact-match lookup + vector search, merges with RRF.
+    Critical for finding specific addresses that cosine similarity misses.
+    """
+    query = data.get("query", "")
+    limit = data.get("limit", 10)
+    collection = data.get("collection", None)  # Optional: narrow to one collection
+    if not query:
+        return {"error": "query is required"}
+    from app.entity_extraction import hybrid_query, extract_entities
+    # Show extracted entities
+    entities = extract_entities(query)
+    # Run hybrid search with optional collection filter
+    collections = [collection] if collection else None
+    try:
+        results = await asyncio.wait_for(
+            hybrid_query(query, collections=collections, limit=limit),
+            timeout=30,
+        )
+    except asyncio.TimeoutError:
+        results = {"error": "search timed out", "partial": True}
+    return {
+        "query": query,
+        "entities": entities.to_dict(),
+        "results": results,
+    }
+
+@app.post("/api/v1/rag/entity-index")
+async def rag_entity_index(request: Request, data: dict):
+    """Index a document's entities for exact-match lookup."""
+    doc_id = data.get("doc_id", "")
+    text = data.get("text", "")
+    collection = data.get("collection", "general")
+    if not doc_id or not text:
+        return {"error": "doc_id and text are required"}
+    from app.entity_extraction import get_entity_lookup, extract_entities
+    lookup = get_entity_lookup()
+    entities_result = extract_entities(text)
+    indexed = await lookup.batch_index(doc_id, text, collection)
+    count = indexed.total_count if hasattr(indexed, 'total_count') else indexed
+    return {"doc_id": doc_id, "entities_found": entities_result.total_count, "indexed": count}
+
+@app.post("/api/v1/rag/check-hallucination")
+async def rag_check_hallucination(request: Request, data: dict):
+    """
+    Hallucination detection — DeBERTa NLI guardrail.
+    Verifies that a generated answer is faithful to the retrieved context.
+    Flags contradictions and unsupported claims.
+    """
+    answer = data.get("answer", "")
+    context = data.get("context", "")
+    sources = data.get("sources", [])
+    if not answer:
+        return {"error": "answer is required"}
+    from app.hallucination_guard import get_guard
+    guard = await get_guard()
+    if sources:
+        result = await guard.check_answer_with_sources(answer, sources)
+        return result.__dict__ if hasattr(result, '__dict__') else result
+    else:
+        result = await guard.check_answer(answer, context)
+        return result.__dict__ if hasattr(result, '__dict__') else result
+
+@app.post("/api/v1/rag/verify-citations")
+async def rag_verify_citations(request: Request, data: dict):
+    """Verify inline citations [1], [2] in answer against source documents."""
+    answer = data.get("answer", "")
+    sources = data.get("sources", [])
+    if not answer:
+        return {"error": "answer is required"}
+    from app.hallucination_guard import get_guard
+    guard = await get_guard()
+    result = await guard.verify_citations(answer, sources)
+    return result.__dict__ if hasattr(result, '__dict__') else result
+
+@app.get("/api/v1/rag/decay-info")
+async def rag_decay_info(request: Request):
+    """Get temporal decay half-lives per collection."""
+    from app.temporal_decay import HALF_LIVES, COLLECTION_DOMAIN, get_half_life
+    from app.rag_service import COLLECTIONS
+    info = {}
+    for coll in COLLECTIONS:
+        hl = get_half_life(coll)
+        info[coll] = {
+            "domain": COLLECTION_DOMAIN.get(coll, "default"),
+            "half_life_days": hl if hl != float("inf") else "never",
+        }
+    safe_halves = {k: (v if v != float("inf") else "never") for k, v in HALF_LIVES.items()}
+    return {"collections": info, "all_domains": safe_halves}
+
+@app.get("/api/v1/rag/tier1-health")
+async def rag_tier1_health(request: Request):
+    """Health check for all Tier-1 RAG features."""
+    import os as _os
+    health = {}
+    # Cross-encoder
+    try:
+        from app.cross_encoder_reranker import get_reranker
+        reranker = await get_reranker()
+        health["cross_encoder"] = reranker.health_check()
+    except Exception as e:
+        health["cross_encoder"] = {"status": "error", "error": str(e)}
+    # Entity extraction (no model needed)
+    try:
+        from app.entity_extraction import extract_entities
+        test = extract_entities("Check 0xdAC17F958D2ee523a2206206994597C13D831ec7 on Ethereum")
+        health["entity_extraction"] = {"status": "ok", "test_entities": test.total_count}
+    except Exception as e:
+        health["entity_extraction"] = {"status": "error", "error": str(e)}
+    # Hallucination guard
+    try:
+        from app.hallucination_guard import get_guard
+        guard = await get_guard()
+        health["hallucination_guard"] = guard.health_check()
+    except Exception as e:
+        health["hallucination_guard"] = {"status": "error", "error": str(e)}
+    # Temporal decay (pure math, always ok)
+    from app.temporal_decay import HALF_LIVES as _HL
+    health["temporal_decay"] = {"status": "ok", "domains": len(_HL)}
+    # Contextual chunking
+    health["contextual_chunking"] = {"status": "ok", "llm_available": bool(_os.getenv("OPENROUTER_API_KEY", ""))}
+
+    health["overall"] = "degraded" if any(
+        v.get("status") == "error" for v in health.values() if isinstance(v, dict)
+    ) else "healthy"
+    return health
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -3995,6 +4321,49 @@ async def admin_tasks(request: Request):
 async def admin_self_heal(request: Request):
     """Trigger self-healing."""
     return {"status": "healing", "services_restarted": []}
+
+
+@app.post("/api/v1/admin/reload-env")
+async def admin_reload_env(request: Request):
+    """
+    Re-read .env file and update os.environ with new values.
+    Also re-decodes LLM_API_KEY_B64 → LLM_API_KEY.
+
+    Use after editing .env to pick up new config without restarting:
+        curl -X POST http://localhost:8000/api/v1/admin/reload-env
+    """
+    from dotenv import load_dotenv
+    import base64 as _b64
+
+    # Reload .env with override so new values replace old ones
+    loaded = load_dotenv(override=True)
+
+    # Re-decode base64 LLM key if present
+    _llm_b64 = os.getenv("LLM_API_KEY_B64", "")
+    key_status = "unchanged"
+    if _llm_b64:
+        decoded = _b64.b64decode(_llm_b64).decode()
+        os.environ["LLM_API_KEY"] = decoded
+        key_status = "decoded_from_b64"
+    elif os.getenv("LLM_API_KEY"):
+        key_status = "plain_key_unchanged"
+    else:
+        key_status = "no_key_set"
+
+    # Report current env state (non-sensitive)
+    env_snapshot = {
+        "LLM_MODEL": os.getenv("LLM_MODEL", ""),
+        "LLM_BASE_URL": os.getenv("LLM_BASE_URL", ""),
+        "LLM_API_KEY_SET": bool(os.getenv("LLM_API_KEY", "")),
+        "LLM_API_KEY_B64_SET": bool(os.getenv("LLM_API_KEY_B64", "")),
+    }
+
+    return {
+        "status": "ok",
+        "env_loaded": loaded,
+        "llm_key_status": key_status,
+        "env_snapshot": env_snapshot,
+    }
 
 # ═══════════════════════════════════════════════════════════
 # WALLET DB

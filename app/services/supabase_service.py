@@ -21,8 +21,8 @@ if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
 # Validate configuration on startup
 if not SUPABASE_URL.startswith("https://") or "supabase.co" not in SUPABASE_URL:
     raise RuntimeError(f"Invalid SUPABASE_URL: {SUPABASE_URL}")
-if not SUPABASE_SERVICE_KEY.startswith("sb_secret_"):
-    raise RuntimeError("SUPABASE_SERVICE_KEY must start with 'sb_secret_' — check your .env file")
+if not SUPABASE_SERVICE_KEY.startswith(("sb_secret_", "eyJ")):
+    raise RuntimeError("SUPABASE_SERVICE_KEY must start with 'sb_secret_' or 'eyJ' (JWT) — check your .env file")
 
 HEADERS = {
     "apikey": SUPABASE_SERVICE_KEY,

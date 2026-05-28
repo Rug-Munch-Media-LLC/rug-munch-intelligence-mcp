@@ -6,10 +6,18 @@ Routes requests to optimal AI provider based on quota, latency, and cost.
 For now, a minimal stub that delegates to OpenRouter.
 """
 
+import os
+import base64
+
 from fastapi import APIRouter, HTTPException
 from typing import Dict, Any, Optional, List
 
 router = APIRouter(tags=["AI Router"])
+
+# Decode base64 LLM key if present, otherwise use plain LLM_API_KEY
+# (safety net: ensures key is decoded even when imported without main.py)
+if os.getenv("LLM_API_KEY_B64"):
+    os.environ["LLM_API_KEY"] = base64.b64decode(os.getenv("LLM_API_KEY_B64")).decode()
 
 # Model tiers (for reference, full config in ai_router.py)
 MODEL_TIERS = {
@@ -22,6 +30,12 @@ MODEL_TIERS = {
 
 # Providers (for reference)
 PROVIDERS = {
+    "deepseek": {
+        "url": os.getenv("LLM_BASE_URL", "https://api.deepseek.com/v1/chat/completions"),
+        "key_env": "LLM_API_KEY",
+        "model": os.getenv("LLM_MODEL", "deepseek-v4-flash"),
+        "rpm": 100,
+    },
     "openrouter": {
         "url": "https://openrouter.ai/api/v1/chat/completions",
         "key_env": "OPENROUTER_API_KEY",
