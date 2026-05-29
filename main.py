@@ -198,6 +198,18 @@ async def _startup():
     except Exception as e:
         print(f"[WARN] KG warmup failed (Pillar 3 expansion will be unavailable): {e}")
 
+    # Pre-warm cross-encoder reranker (avoids 3s cold-start on first rerank query)
+    try:
+        from app.cross_encoder_reranker import get_reranker
+        import time as _time3
+        _t0 = _time3.time()
+        reranker = await get_reranker()
+        await reranker.warm_up()
+        _elapsed = _time3.time() - _t0
+        print(f"[INFO] Cross-encoder reranker warmed: BAAI/bge-reranker-v2-m3 ({_elapsed:.1f}s)")
+    except Exception as e:
+        print(f"[WARN] Cross-encoder warmup failed: {e}")
+
 from app.email_router import router as email_router
 app.include_router(email_router)
 from app.mail_dashboard import router as mail_router

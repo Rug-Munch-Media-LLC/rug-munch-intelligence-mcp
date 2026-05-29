@@ -47,7 +47,12 @@ async def _get_redis():
     """Get or create a shared Redis connection (singleton pattern to prevent leaks)."""
     global _redis_pool
     import redis.asyncio as redis
-    if _redis_pool is None or _redis_pool._closed:
+    if _redis_pool is not None:
+        try:
+            await _redis_pool.ping()
+        except Exception:
+            _redis_pool = None
+    if _redis_pool is None:
         _redis_pool = redis.Redis(
             host=REDIS_HOST, port=REDIS_PORT,
             password=REDIS_PASSWORD or None, db=0,
