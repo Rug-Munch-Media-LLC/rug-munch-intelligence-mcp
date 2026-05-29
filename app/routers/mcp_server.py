@@ -29,7 +29,7 @@ router = APIRouter(tags=["mcp"])
 
 MCP_PROTOCOL_VERSION = "2024-11-05"
 SERVER_NAME = "Rug Munch Intelligence"
-SERVER_VERSION = "3.1.0"
+SERVER_VERSION = "3.2.0"
 
 
 def _get_tools() -> Dict[str, Any]:
@@ -215,15 +215,73 @@ def _build_discovery():
         "transports": ["http"],
         "authentication": {
             "type": "x402",
-            "description": f"Pay-per-use. 1-5 free trials per tool. USDC on {len(chains)} chains, USDT, BTC, EUR. Full refund if no data returned.",
+            "description": f"Pay-per-use micropayments. 1-5 free trials per tool. Connect wallet for additional free calls. USDC on Base/Solana, USDT/USDC on TRON, BTC via Mempool.space, EUR/SEPA via Asterpay. Full refund if no data returned.",
             "discovery_url": "https://mcp.rugmunch.io/.well-known/x402",
+            "wallet_providers": {
+                "evm": {
+                    "description": "Any EIP-7702 compatible wallet: MetaMask, Coinbase Wallet, WalletConnect, Rabby, OKX Wallet, Trust Wallet, Frame, Rainbow",
+                    "chains": ["base", "ethereum", "bsc", "polygon", "arbitrum", "optimism", "avalanche", "fantom", "gnosis"],
+                    "facilitators": ["coinbase_cdp", "eip7702", "cloudflare_x402", "payai"],
+                },
+                "solana": {
+                    "description": "Phantom, Solflare, Backpack, Coinbase Wallet, Magic Eden",
+                    "chains": ["solana"],
+                    "facilitators": ["coinbase_cdp", "payai"],
+                },
+                "tron": {
+                    "description": "TronLink, TokenPocket, OKX Wallet",
+                    "chains": ["tron"],
+                    "facilitators": ["tron_selfverify"],
+                },
+                "bitcoin": {
+                    "description": "Any Bitcoin wallet (1-confirmation)",
+                    "chains": ["bitcoin"],
+                    "facilitators": ["bitcoin_selfverify"],
+                },
+                "fiat": {
+                    "description": "EUR/SEPA bank transfer via Asterpay",
+                    "chains": ["sepa"],
+                    "facilitators": ["asterpay"],
+                },
+            },
         },
         "capabilities": {"tools": True, "resources": False, "prompts": False},
         "directories": {
             "smithery": "https://smithery.ai/server/@cryptorugmuncher/rug-munch-intelligence",
             "glama": "https://glama.ai/mcp/servers/@cryptorugmuncher/rug-munch-intelligence",
             "mcp_so": "https://mcp.so/server/rug-munch-intelligence",
-            "github": "https://github.com/cryptorugmuncher/rug-munch-intelligence",
+            "github": "https://github.com/Rug-Munch-Media-LLC/rug-munch-intelligence",
+            "huggingface": "https://huggingface.co/cryptorugmunch/rug-munch-intelligence",
+        },
+        "integrations": {
+            "openai_agents": {
+                "discovery": "https://mcp.rugmunch.io/.well-known/x402",
+                "endpoint": "https://mcp.rugmunch.io/mcp",
+                "protocol": "x402",
+                "description": "OpenAI Agents SDK with x402 payment support. Automatic 402 handling via coinbase_cdp or eip7702 facilitator.",
+            },
+            "claude_desktop": {
+                "endpoint": "https://mcp.rugmunch.io/mcp",
+                "protocol": "mcp-streamable-http",
+                "description": "Claude Desktop via MCP Streamable HTTP transport. Configure in claude_desktop_config.json.",
+            },
+            "anthropic_agents": {
+                "discovery": "https://mcp.rugmunch.io/.well-known/x402",
+                "endpoint": "https://mcp.rugmunch.io/mcp",
+                "protocol": "x402+mcp",
+                "description": "Anthropic Agents with x402 micropayments. Use the Streamable HTTP transport.",
+            },
+            "openlang": {
+                "discovery": "https://mcp.rugmunch.io/.well-known/x402",
+                "endpoint": "https://mcp.rugmunch.io/mcp",
+                "protocol": "x402",
+                "description": "OpenLang MCP client with automatic x402 payment flow.",
+            },
+            "cursor": {
+                "endpoint": "https://mcp.rugmunch.io/mcp",
+                "protocol": "mcp-streamable-http",
+                "description": "Cursor IDE via MCP. Add as MCP server in Settings > MCP.",
+            },
         },
         "stats": {
             "total_tools": len(tools),
