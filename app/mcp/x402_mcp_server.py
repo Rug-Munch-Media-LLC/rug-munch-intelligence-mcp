@@ -150,8 +150,8 @@ class MultiChainFacilitator:
     }
     
     third_party = {
-        'base': 'https://x402-base.cryptorugmuncher.workers.dev',
-        'solana': 'https://x402-sol.cryptorugmuncher.workers.dev',
+        'base': 'https://mcp.rugmunch.io',
+        'solana': 'https://mcp.rugmunch.io',
     }
 
 

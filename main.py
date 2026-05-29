@@ -3437,11 +3437,9 @@ async def x402_tools_discovery(request: Request):
         # Route to whichever worker the tool is available on
         chains = t.get("chains", [])
         if "BASE" in chains or "SOLANA" in chains:
-            endpoint_base = "https://x402-base.cryptorugmuncher.workers.dev"
-            if "SOLANA" in chains and "BASE" not in chains:
-                endpoint_base = "https://x402-sol.cryptorugmuncher.workers.dev"
+            endpoint_base = "https://mcp.rugmunch.io"
         else:
-            endpoint_base = "https://x402-base.cryptorugmuncher.workers.dev"
+            endpoint_base = "https://mcp.rugmunch.io"
         tools.append({
             "name": name,
             "description": t.get("description", ""),
@@ -3465,7 +3463,7 @@ async def x402_tools_discovery(request: Request):
         "refund_policy": "Full refund if tool returns no data. Request within 48h via POST /api/v1/x402/refund.",
         "discovery_urls": {
             "x402": "https://mcp.rugmunch.io/.well-known/x402",
-            "mcp": "https://x402-base.cryptorugmuncher.workers.dev/mcp",
+            "mcp": "https://mcp.rugmunch.io/mcp",
             "catalog": "https://mcp.rugmunch.io/api/v1/x402/tools-catalog",
             "openapi": "https://mcp.rugmunch.io/openapi.json",
         },
