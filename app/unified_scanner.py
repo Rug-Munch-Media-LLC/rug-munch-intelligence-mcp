@@ -132,71 +132,255 @@ class WalletRiskFactors:
 
 
 # ═══════════════════════════════════════════
-# HELIUS — On-chain wallet data (FREE tier)
+# RESULT CACHE — Redis-backed, 1hr TTL
 # ═══════════════════════════════════════════
 
+import hashlib
+
+async def _cache_get(key: str) -> Optional[Dict]:
+    """Get cached wallet scan result."""
+    try:
+        import redis.asyncio as aioredis
+        import os, json
+        r = await aioredis.from_url(
+            f"redis://{os.getenv('REDIS_HOST','rmi-redis')}:{os.getenv('REDIS_PORT','6379')}",
+            password=os.getenv('REDIS_PASSWORD','') or None,
+        )
+        cached = await r.get(f"rmi:wallet_cache:{key}")
+        await r.close()
+        if cached:
+            return json.loads(cached)
+    except Exception:
+        pass
+    return None
+
+
+async def _cache_set(key: str, data: Dict, ttl: int = 3600):
+    """Cache wallet scan result for 1 hour."""
+    try:
+        import redis.asyncio as aioredis
+        import os, json
+        r = await aioredis.from_url(
+            f"redis://{os.getenv('REDIS_HOST','rmi-redis')}:{os.getenv('REDIS_PORT','6379')}",
+            password=os.getenv('REDIS_PASSWORD','') or None,
+        )
+        await r.setex(f"rmi:wallet_cache:{key}", ttl, json.dumps(data))
+        await r.close()
+    except Exception:
+        pass
+
+
+# ═══════════════════════════════════════════
+# HELIUS CREDENTIAL POOL — Primary + Fallback
+# ═══════════════════════════════════════════
+
+_HELIUS_KEYS = None
+_HELIUS_INDEX = 0
+
+def _get_helius_key() -> Optional[str]:
+    """Round-robin through Helius API keys. Returns None if none configured."""
+    global _HELIUS_KEYS, _HELIUS_INDEX
+    if _HELIUS_KEYS is None:
+        import os
+        keys = []
+        # Primary key
+        k1 = os.getenv("HELIUS_API_KEY", "").strip()
+        if k1: keys.append(k1)
+        # Fallback keys (comma-separated or separate env vars)
+        k2 = os.getenv("HELIUS_API_KEY_2", "").strip()
+        if k2: keys.append(k2)
+        k3 = os.getenv("HELIUS_API_KEY_3", "").strip()
+        if k3: keys.append(k3)
+        _HELIUS_KEYS = keys
+    if not _HELIUS_KEYS:
+        return None
+    key = _HELIUS_KEYS[_HELIUS_INDEX % len(_HELIUS_KEYS)]
+    _HELIUS_INDEX += 1
+    return key
+
+
+async def _helius_call(method: str, params: list) -> Optional[dict]:
+    """Call Helius RPC with credential pool fallback."""
+    for attempt in range(3):  # try up to 3 keys
+        key = _get_helius_key()
+        if not key:
+            return None
+        try:
+            async with httpx.AsyncClient(timeout=12.0) as client:
+                resp = await client.post(
+                    f"https://mainnet.helius-rpc.com/?api-key={key}",
+                    json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if "error" not in data:
+                        return data
+                # 401/429 = try next key
+                if resp.status_code in (401, 429):
+                    continue
+        except Exception:
+            continue
+    return None
+
+
 async def _fetch_helius_wallet(address: str) -> Dict[str, Any]:
-    """Fetch wallet age, tx count, balances, and token holdings from Helius."""
+    """Fetch wallet age, tx count, balances, and token holdings from Helius (credential pool)."""
+    result = {}
+    
+    # Token balances
+    bal_data = await _helius_call("getTokenAccountsByOwner", [
+        address,
+        {"programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"},
+        {"encoding": "jsonParsed"},
+    ])
+    if bal_data:
+        accounts = (bal_data.get("result", {}) or {}).get("value", [])
+        tokens = []
+        for acc in accounts:
+            info = (acc.get("account", {}).get("data", {}).get("parsed", {}).get("info", {}))
+            amt = float(info.get("tokenAmount", {}).get("uiAmount", 0) or 0)
+            mint = info.get("mint", "")
+            if mint and amt > 0:
+                tokens.append({"mint": mint, "amount": amt})
+        result["tokens"] = tokens
+        result["token_count"] = len(tokens)
+        result["data_sources"] = ["helius"]
+    
+    # Transaction signatures for age/activity
+    sig_data = await _helius_call("getSignaturesForAddress", [address, {"limit": 100}])
+    if sig_data:
+        sigs = sig_data.get("result", []) or []
+        if sigs:
+            result["tx_count_sample"] = len(sigs)
+            result["last_tx"] = sigs[0].get("blockTime")
+            first = sigs[-1].get("blockTime")
+            if first:
+                age_seconds = datetime.now(timezone.utc).timestamp() - first
+                result["wallet_age_days"] = int(age_seconds / 86400)
+                result["tx_count"] = len(sigs)
+                result["data_sources"] = result.get("data_sources", []) + ["helius_tx"]
+    
+    # SOL balance
+    sol_data = await _helius_call("getBalance", [address])
+    if sol_data:
+        bal = sol_data.get("result", {}).get("value", 0)
+        result["sol_balance"] = bal / 1e9 if bal else 0
+    
+    return result
+
+
+# ═══════════════════════════════════════════
+# MORALIS — EVM wallet data (multi-chain)
+# ═══════════════════════════════════════════
+
+async def _fetch_moralis_wallet(address: str, chain: str) -> Dict[str, Any]:
+    """Fetch EVM wallet data from Moralis (balance, tx history, token holdings)."""
     import os
-    key = os.getenv("HELIUS_API_KEY", "")
+    key = os.getenv("MORALIS_API_KEY", "").strip()
     if not key:
         return {}
+    
+    chain_map = {
+        "ethereum": "eth", "bsc": "bsc", "polygon": "polygon",
+        "arbitrum": "arbitrum", "base": "base", "optimism": "optimism",
+        "avalanche": "avalanche", "fantom": "fantom",
+    }
+    moralis_chain = chain_map.get(chain, "eth")
     
     result = {}
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            url = f"https://mainnet.helius-rpc.com/?api-key={key}"
+            headers = {"X-API-Key": key}
             
-            # Get token balances
-            resp = await client.post(url, json={
-                "jsonrpc": "2.0", "id": 1, "method": "getTokenAccountsByOwner",
-                "params": [address, {"programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"},
-                           {"encoding": "jsonParsed"}],
+            # Token balances
+            resp = await client.get(
+                f"https://deep-index.moralis.io/api/v2.2/{address}/erc20",
+                params={"chain": moralis_chain}, headers=headers,
+            )
+            if resp.status_code == 200:
+                tokens_data = resp.json()
+                tokens = []
+                for t in tokens_data[:50]:
+                    amt = float(t.get("balance_formatted", 0) or 0)
+                    if amt > 0:
+                        tokens.append({"mint": t.get("token_address", ""), "amount": amt, "symbol": t.get("symbol", "")})
+                result["tokens"] = tokens
+                result["token_count"] = len(tokens)
+                result["data_sources"] = result.get("data_sources", []) + ["moralis"]
+            
+            # Native balance
+            resp2 = await client.get(
+                f"https://deep-index.moralis.io/api/v2.2/{address}/balance",
+                params={"chain": moralis_chain}, headers=headers,
+            )
+            if resp2.status_code == 200:
+                bal = resp2.json().get("balance", 0)
+                if bal:
+                    result["native_balance"] = float(bal) / 1e18
+            
+            # Transaction count for activity
+            resp3 = await client.get(
+                f"https://deep-index.moralis.io/api/v2.2/{address}",
+                params={"chain": moralis_chain}, headers=headers,
+            )
+            if resp3.status_code == 200:
+                wallet_data = resp3.json()
+                if wallet_data.get("transactions"):
+                    txs = wallet_data["transactions"]
+                    result["tx_count"] = len(txs)
+                    result["data_sources"] = result.get("data_sources", []) + ["moralis_tx"]
+    except Exception:
+        pass
+    
+    return result
+
+
+# ═══════════════════════════════════════════
+# ETHERSCAN — EVM transaction data (free tier)
+# ═══════════════════════════════════════════
+
+ETHERSCAN_APIS = {
+    "ethereum": "https://api.etherscan.io/api",
+    "bsc": "https://api.bscscan.com/api",
+    "polygon": "https://api.polygonscan.com/api",
+    "arbitrum": "https://api.arbiscan.io/api",
+    "base": "https://api.basescan.org/api",
+    "optimism": "https://api-optimistic.etherscan.io/api",
+    "avalanche": "https://api.snowtrace.io/api",
+    "fantom": "https://api.ftmscan.com/api",
+}
+
+async def _fetch_etherscan_wallet(address: str, chain: str) -> Dict[str, Any]:
+    """Fetch EVM wallet tx count and age from Etherscan family (free tier, no API key needed for basic calls)."""
+    if chain not in ETHERSCAN_APIS:
+        return {}
+    
+    result = {}
+    try:
+        async with httpx.AsyncClient(timeout=12.0) as client:
+            api_url = ETHERSCAN_APIS[chain]
+            
+            # Get transaction list (free, no key needed for basic)
+            resp = await client.get(api_url, params={
+                "module": "account", "action": "txlist",
+                "address": address, "startblock": 0, "endblock": 99999999,
+                "page": 1, "offset": 10, "sort": "asc",
             })
             if resp.status_code == 200:
                 data = resp.json()
-                accounts = (data.get("result", {}) or {}).get("value", [])
-                tokens = []
-                total_value = 0.0
-                for acc in accounts:
-                    info = (acc.get("account", {}).get("data", {}).get("parsed", {}).get("info", {}))
-                    amt = float(info.get("tokenAmount", {}).get("uiAmount", 0) or 0)
-                    mint = info.get("mint", "")
-                    if mint and amt > 0:
-                        tokens.append({"mint": mint, "amount": amt})
-                result["tokens"] = tokens
-                result["token_count"] = len(tokens)
-                result["data_sources"] = ["helius"]
-            
-            # Get transaction signatures for age/activity
-            resp2 = await client.post(url, json={
-                "jsonrpc": "2.0", "id": 2, "method": "getSignaturesForAddress",
-                "params": [address, {"limit": 100}],
-            })
-            if resp2.status_code == 200:
-                sigs = resp2.json().get("result", []) or []
-                if sigs:
-                    result["tx_count_sample"] = len(sigs)
-                    result["last_tx"] = sigs[0].get("blockTime")
-                    first = sigs[-1].get("blockTime")
-                    if first:
-                        age_seconds = datetime.now(timezone.utc).timestamp() - first
-                        result["wallet_age_days"] = int(age_seconds / 86400)
-                        if len(sigs) >= 100:
-                            result["tx_count"] = len(sigs)
-                        result["data_sources"] = result.get("data_sources", []) + ["helius_tx"]
-                        
-            # Get SOL balance
-            resp3 = await client.post(url, json={
-                "jsonrpc": "2.0", "id": 3, "method": "getBalance",
-                "params": [address],
-            })
-            if resp3.status_code == 200:
-                bal = resp3.json().get("result", {}).get("value", 0)
-                result["sol_balance"] = bal / 1e9 if bal else 0
-                
-    except Exception as e:
-        logger.debug(f"Helius wallet fetch failed for {address}: {e}")
+                if data.get("status") == "1":
+                    txs = data.get("result", [])
+                    if txs:
+                        first_ts = int(txs[0].get("timeStamp", 0))
+                        last_ts = int(txs[-1].get("timeStamp", 0))
+                        if first_ts:
+                            result["wallet_age_days"] = int((datetime.now(timezone.utc).timestamp() - first_ts) / 86400)
+                        if last_ts:
+                            result["last_tx"] = last_ts
+                        result["tx_count_sample"] = len(txs)
+                        result["data_sources"] = ["etherscan"]
+    except Exception:
+        pass
     
     return result
 
@@ -282,42 +466,61 @@ async def _scan_held_tokens(tokens: list, chain: str) -> Dict[str, Any]:
 # ═══════════════════════════════════════════
 
 async def scan_wallet(wallet_address: str, chain: str = "solana", tier: str = "free") -> Dict[str, Any]:
-    """Unified wallet scanner — SENTINEL + Helius + Wallet Memory + Token Scanner."""
+    """Unified wallet scanner — SENTINEL + Helius/Moralis/Etherscan pool + Wallet Memory + Token Scanner."""
     import time
+    
+    # ── Redis cache check (1hr TTL, skips repeat scans) ──
+    cache_key = hashlib.sha256(f"{chain}:{wallet_address}:{tier}".encode()).hexdigest()[:16]
+    cached = await _cache_get(cache_key)
+    if cached:
+        cached["cached"] = True
+        logger.info(f"Wallet scan {wallet_address[:12]}... [{chain}] = CACHED")
+        return cached
+    
     factors = WalletRiskFactors()
     start = time.time()
     data_sources = []
     token_list = []
     
-    # ── FREE: Helius on-chain data (age, tx, tokens, balances) ──
+    # ── On-chain data: chain-specific multi-source fetchers ──
+    onchain = {}
     if chain == "solana":
-        helius = await _fetch_helius_wallet(wallet_address)
-        if helius:
-            factors.wallet_age_days = helius.get("wallet_age_days", 0)
-            factors.total_tx_count = helius.get("tx_count", 0)
-            factors.current_balance_usd = helius.get("sol_balance", 0)
-            token_list = helius.get("tokens", [])
-            factors.unique_tokens_held = helius.get("token_count", 0)
-            if helius.get("last_tx"):
-                last_ts = helius["last_tx"]
-                if isinstance(last_ts, (int, float)):
-                    factors.days_since_last_tx = int((datetime.now(timezone.utc).timestamp() - last_ts) / 86400)
-            data_sources.extend(helius.get("data_sources", []))
+        # Solana: Helius (credential pool) + fallback to public RPC
+        onchain = await _fetch_helius_wallet(wallet_address)
+        if not onchain:
+            # Fallback to free public Solana RPC
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.post("https://api.mainnet-beta.solana.com", json={
+                        "jsonrpc": "2.0", "id": 1, "method": "getBalance",
+                        "params": [wallet_address],
+                    })
+                    if resp.status_code == 200:
+                        bal = resp.json().get("result", {}).get("value", 0)
+                        onchain = {"sol_balance": bal / 1e9 if bal else 0, "data_sources": ["solana_public"]}
+            except Exception:
+                pass
+    else:
+        # EVM chain: Moralis (primary) + Etherscan family (fallback)
+        onchain = await _fetch_moralis_wallet(wallet_address, chain)
+        etherscan = await _fetch_etherscan_wallet(wallet_address, chain)
+        if etherscan and not onchain.get("wallet_age_days"):
+            onchain["wallet_age_days"] = etherscan.get("wallet_age_days", 0)
+            onchain["data_sources"] = onchain.get("data_sources", []) + etherscan.get("data_sources", [])
     
-    # ── FREE: SENTINEL address labels (6-source label resolution) ──
-    sentinel_labels = await _fetch_sentinel_labels(wallet_address, chain)
-    if sentinel_labels:
-        factors.entity_label = sentinel_labels.get("category", "")
-        factors.is_labeled_scammer = "scam" in str(sentinel_labels).lower()
-        factors.is_labeled_sanctioned = "sanction" in str(sentinel_labels).lower() or "ofac" in str(sentinel_labels).lower()
-        factors.is_labeled_exchange = "exchange" in str(sentinel_labels).lower() or "cex" in str(sentinel_labels).lower()
-        factors.is_labeled_bot = "bot" in str(sentinel_labels).lower() or "mev" in str(sentinel_labels).lower()
-        factors.is_labeled_whale = "whale" in str(sentinel_labels).lower()
-        factors.is_labeled_insider = "insider" in str(sentinel_labels).lower()
-        factors.entity_confidence = sentinel_labels.get("risk_score", 50)
-        data_sources.append("sentinel_labels")
+    if onchain:
+        factors.wallet_age_days = onchain.get("wallet_age_days", 0)
+        factors.total_tx_count = onchain.get("tx_count", onchain.get("tx_count_sample", 0))
+        factors.current_balance_usd = onchain.get("sol_balance", onchain.get("native_balance", 0))
+        token_list = onchain.get("tokens", [])
+        factors.unique_tokens_held = onchain.get("token_count", len(token_list))
+        if onchain.get("last_tx"):
+            last_ts = onchain["last_tx"]
+            if isinstance(last_ts, (int, float)):
+                factors.days_since_last_tx = int((datetime.now(timezone.utc).timestamp() - last_ts) / 86400)
+        data_sources.extend(onchain.get("data_sources", []))
     
-    # ── DexScreener volume data ──
+    # ── DexScreener volume + labels (FREE tier, all chains) ──
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.get(
@@ -338,6 +541,19 @@ async def scan_wallet(wallet_address: str, chain: str = "solana", tier: str = "f
                     data_sources.append("dexscreener")
     except Exception:
         pass
+    
+    # ── SENTINEL address labels (6-source label resolution, FREE tier) ──
+    sentinel_labels = await _fetch_sentinel_labels(wallet_address, chain)
+    if sentinel_labels:
+        factors.entity_label = sentinel_labels.get("category", "")
+        factors.is_labeled_scammer = factors.is_labeled_scammer or "scam" in str(sentinel_labels).lower()
+        factors.is_labeled_sanctioned = factors.is_labeled_sanctioned or "sanction" in str(sentinel_labels).lower() or "ofac" in str(sentinel_labels).lower()
+        factors.is_labeled_exchange = "exchange" in str(sentinel_labels).lower() or "cex" in str(sentinel_labels).lower()
+        factors.is_labeled_bot = "bot" in str(sentinel_labels).lower() or "mev" in str(sentinel_labels).lower()
+        factors.is_labeled_whale = "whale" in str(sentinel_labels).lower()
+        factors.is_labeled_insider = "insider" in str(sentinel_labels).lower()
+        factors.entity_confidence = max(factors.entity_confidence, sentinel_labels.get("risk_score", 50))
+        data_sources.append("sentinel_labels")
     
     # ── PRO: Wallet Memory Bank (cross-chain identity + clusters) ──
     if tier in ("pro", "elite"):
@@ -497,7 +713,7 @@ async def scan_wallet(wallet_address: str, chain: str = "solana", tier: str = "f
     elapsed = time.time() - start
     logger.info(f"Wallet scan {wallet_address[:12]}... [{chain}] = {factors.total_risk_score}/100 ({factors.risk_category}) conf={factors.confidence}% in {elapsed:.1f}s")
     
-    return {
+    result = {
         "wallet": wallet_address,
         "chain": chain,
         "risk_score": factors.total_risk_score,
@@ -562,6 +778,11 @@ async def scan_wallet(wallet_address: str, chain: str = "solana", tier: str = "f
         "scanned_at": datetime.now(timezone.utc).isoformat(),
         "tool_fingerprints": None,
     }
+    
+    # Cache result for 1hr
+    asyncio.create_task(_cache_set(cache_key, result, ttl=3600))
+    
+    return result
 
 
 # ═══════════════════════════════════════════════════════════════
