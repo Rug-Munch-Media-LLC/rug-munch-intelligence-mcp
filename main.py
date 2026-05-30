@@ -198,17 +198,23 @@ async def _startup():
     except Exception as e:
         print(f"[WARN] KG warmup failed (Pillar 3 expansion will be unavailable): {e}")
 
-    # Pre-warm cross-encoder reranker (avoids 3s cold-start on first rerank query)
-    try:
-        from app.cross_encoder_reranker import get_reranker
-        import time as _time3
-        _t0 = _time3.time()
-        reranker = await get_reranker()
-        await reranker.warm_up()
-        _elapsed = _time3.time() - _t0
-        print(f"[INFO] Cross-encoder reranker warmed: BAAI/bge-reranker-v2-m3 ({_elapsed:.1f}s)")
-    except Exception as e:
-        print(f"[WARN] Cross-encoder warmup failed: {e}")
+    # Cross-encoder reranker: lazy-load on first use (skipping 45s pre-warm).
+    # The fp32 model (2.1GB) times out on CPU with >9 docs anyway per the documented
+    # pitfall. Set RAG_PREWARM_RERANKER=true to pre-load at startup.
+    # ONNX INT8 quantization (future) would drop this to ~15s / 500MB.
+    if os.environ.get("RAG_PREWARM_RERANKER", "").lower() == "true":
+        try:
+            from app.cross_encoder_reranker import get_reranker
+            import time as _time3
+            _t0 = _time3.time()
+            reranker = await get_reranker()
+            await reranker.warm_up()
+            _elapsed = _time3.time() - _t0
+            print(f"[INFO] Cross-encoder reranker pre-warmed: ({_elapsed:.1f}s)")
+        except Exception as e:
+            print(f"[WARN] Cross-encoder warmup failed: {e}")
+    else:
+        print("[INFO] Cross-encoder reranker deferred (lazy-load on first rerank query)")
 
 from app.email_router import router as email_router
 app.include_router(email_router)
@@ -6231,4 +6237,44 @@ async def wallet_ofac_check(request: Request, address: str):
         return {"address": address, "sanctioned": False}
     except Exception as e:
         return {"address": address, "error": str(e)}
+
+
+# ═══════════════════════════════════════════════════════════
+# DEXSCREENER PARTNER INTEGRATION
+# ═══════════════════════════════════════════════════════════
+
+@app.get("/api/v1/dexscreener/security/{chain}/{address}")
+async def dexscreener_security(chain: str, address: str):
+    """Partner endpoint for DexScreener token security badges."""
+    from app.token_scanner import scan_token as unified_scan
+    
+    try:
+        scan = await unified_scan(address, chain, tier="free")
+    except Exception as e:
+        return {
+            "chain": chain, "address": address,
+            "error": str(e), "safety_score": 50,
+        }
+    
+    # ScanResult is a dataclass, access fields directly
+    flag_list = []
+    for f in (scan.risk_flags or [])[:5]:
+        if isinstance(f, dict):
+            flag_list.append({
+                "type": f.get("flag") or f.get("name", "unknown"),
+                "severity": f.get("severity", "medium"),
+            })
+        else:
+            flag_list.append({"type": str(f), "severity": "medium"})
+    
+    return {
+        "chain": chain, "address": address,
+        "safety_score": scan.safety_score,
+        "token_name": scan.name,
+        "symbol": scan.symbol,
+        "flags": flag_list, "flag_count": len(flag_list),
+        "provider": "rugmunch.io",
+        "provider_url": "https://rugmunch.io",
+        "scanned_at": scan.scanned_at if hasattr(scan, 'scanned_at') else datetime.now(timezone.utc).isoformat(),
+    }
 
