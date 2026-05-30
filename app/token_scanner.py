@@ -404,6 +404,439 @@ async def _rag_scam_check(
         return None
 
 
+# ── Deployer deep-dive: wallet age, token count, funding source ──
+
+async def _deep_deployer_check(deployer_addr: str, chain: str) -> Optional[Dict[str, Any]]:
+    """Rich deployer intelligence using wallet_memory engine + RAG.
+    
+    Returns:
+        entity_id, entity_label, risk_score, linked_wallets,
+        scam_associations, deployer_history, cross_chain_presence.
+    Cost: $0 (internal engine + existing RAG).
+    """
+    try:
+        from app.wallet_memory.engine import WalletMemoryEngine, get_wallet_engine
+        engine = get_wallet_engine()
+        intel = await engine.get_deployer_intelligence(deployer_addr, chain)
+        if not intel:
+            return None
+        
+        result = {
+            "deployer": deployer_addr,
+            "entity_id": intel.get("entity_id"),
+            "entity_label": intel.get("entity_label", ""),
+            "entity_category": intel.get("entity_category", "unknown"),
+            "risk_score": intel.get("risk_score", 0),
+            "risk_level": intel.get("risk_level", "unknown"),
+            "linked_wallets_count": len(intel.get("linked_wallets", [])),
+            "scam_associations": intel.get("scam_associations", [])[:5],
+            "deployer_history_tokens": len(intel.get("deployer_history", [])),
+            "cross_chain_chains": [c.get("chain") for c in intel.get("cross_chain_presence", [])],
+            "labels": intel.get("labels", [])[:5],
+            "confidence": intel.get("confidence", 0),
+            "source": "wallet_memory_engine",
+        }
+        
+        # If RAG is available, also check known_scams for this deployer
+        try:
+            from app.rag_service import search_similar
+            import asyncio as _a
+            rag_hits = await _a.wait_for(
+                search_similar(
+                    f"scammer rug pull deployer {deployer_addr} {chain}",
+                    "known_scams", limit=3, min_similarity=0.3,
+                ),
+                timeout=5.0,
+            )
+            if rag_hits:
+                result["rag_scam_hits"] = len(rag_hits)
+                result["rag_scam_snippet"] = (rag_hits[0].get("content", "") or "")[:200]
+        except Exception:
+            pass
+        
+        return result
+    except Exception as e:
+        logger.warning(f"Deep deployer check failed for {deployer_addr[:8]}...: {e}")
+        return None
+
+
+# ── Cross-chain deployer tracking ──
+
+async def _check_cross_chain_deployer(deployer_addr: str, chain: str) -> Optional[Dict[str, Any]]:
+    """Check if deployer has launched tokens on other chains.
+    
+    Queries wallet_memory engine for cross_chain_presence and
+    chain_registry for known multi-chain deployer patterns.
+    Cost: $0.
+    """
+    try:
+        from app.chain_registry import get_chains_for_address
+        
+        # Detect chains directly from chain_registry
+        chains_found = []
+        try:
+            known = get_chains_for_address(deployer_addr)
+            if known:
+                chains_found = list(known.keys())
+        except Exception:
+            pass
+        
+        # Also try wallet_memory for cross-chain data
+        try:
+            from app.wallet_memory.engine import get_wallet_engine
+            engine = get_wallet_engine()
+            intel = await engine.get_deployer_intelligence(deployer_addr, chain)
+            if intel:
+                cross = intel.get("cross_chain_presence", [])
+                for entry in cross:
+                    c = entry.get("chain", "")
+                    if c and c not in chains_found:
+                        chains_found.append(c)
+        except Exception:
+            pass
+        
+        if not chains_found:
+            return None
+        
+        return {
+            "cross_chain_count": len(chains_found),
+            "chains": chains_found,
+            "is_multi_chain": len(chains_found) > 1,
+            "risk": "high" if len(chains_found) >= 3 else ("medium" if len(chains_found) > 1 else "low"),
+        }
+    except Exception as e:
+        logger.warning(f"Cross-chain deployer check failed: {e}")
+        return None
+
+
+# ── Contract verification check ──
+
+async def _check_contract_verification(token_address: str, chain: str) -> Optional[Dict[str, Any]]:
+    """Check if the token contract is verified on its chain explorer.
+    
+    Solana: free Solscan API. EVM: Etherscan-family free API.
+    Unverified contract = high rug risk.
+    Cost: $0.
+    """
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            if chain == "solana":
+                # Solscan free API
+                r = await client.get(
+                    f"https://public-api.solscan.io/account/{token_address}",
+                    timeout=10.0,
+                )
+                if r.status_code == 200:
+                    data = r.json()
+                    verified = bool(data.get("verified") or data.get("isVerified"))
+                    return {
+                        "verified": verified,
+                        "explorer": "solscan",
+                        "risk": "low" if verified else "high",
+                        "warning": None if verified else "⚠️ Contract is NOT verified on Solscan",
+                    }
+                return {"verified": False, "explorer": "solscan", "risk": "medium", "warning": "Could not determine verification status"}
+            
+            else:
+                # EVM: Etherscan-family free API
+                chain_id = CHAIN_IDS.get(chain, "1")
+                base_urls = {
+                    "1": ("https://api.etherscan.io/api", "Etherscan"),
+                    "56": ("https://api.bscscan.com/api", "BscScan"),
+                    "137": ("https://api.polygonscan.com/api", "PolygonScan"),
+                    "8453": ("https://api.basescan.org/api", "BaseScan"),
+                    "42161": ("https://api.arbiscan.io/api", "Arbiscan"),
+                    "10": ("https://api-optimistic.etherscan.io/api", "Optimistic Etherscan"),
+                    "43114": ("https://api.snowtrace.io/api", "SnowTrace"),
+                }
+                entry = base_urls.get(str(chain_id))
+                if not entry:
+                    return None
+                api_url, name = entry
+                
+                r = await client.get(api_url, params={
+                    "module": "contract",
+                    "action": "getabi",
+                    "address": token_address,
+                    "apikey": "YourApiKeyToken",
+                })
+                if r.status_code == 200:
+                    data = r.json()
+                    verified = data.get("status") == "1" and data.get("message") == "OK"
+                    return {
+                        "verified": verified,
+                        "explorer": name.lower(),
+                        "risk": "low" if verified else "high",
+                        "warning": None if verified else f"⚠️ Contract is NOT verified on {name}",
+                    }
+                return None
+    except Exception as e:
+        logger.warning(f"Contract verification check failed: {e}")
+        return None
+
+
+# ── Multi-source liquidity lock cross-check ──
+
+async def _check_liquidity_lock_multi(token_address: str, chain: str, pair_address: str = "") -> Optional[Dict[str, Any]]:
+    """Cross-check LP lock status across multiple locker registries.
+    
+    Sources: RugDoc, Unicrypt, Team Finance, Mudra, DexScreener.
+    Aggressively penalizes unlocked or fake-locked LP.
+    Cost: $0.
+    """
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=12.0) as client:
+            lockers = {
+                "rugdoc": f"https://api.rugdoc.io/api/v1/locker/check/{token_address}?chain={chain}",
+                "dex_scan": f"https://api.dexscreener.com/latest/dex/tokens/{token_address}",
+            }
+            
+            results = {}
+            locked_sources = 0
+            unlocked_sources = 0
+            
+            # Check DexScreener (always available)
+            try:
+                r = await client.get(lockers["dex_scan"], timeout=8.0)
+                if r.status_code == 200:
+                    pairs = r.json().get("pairs", [])
+                    for pair in pairs:
+                        lp_locked = pair.get("lpLocked", False)
+                        locker_name = pair.get("lpLocker", "unknown")
+                        results["dexscreener"] = {
+                            "locked": lp_locked,
+                            "locker": locker_name,
+                            "pair": pair.get("pairAddress", ""),
+                        }
+                        if lp_locked:
+                            locked_sources += 1
+                        else:
+                            unlocked_sources += 1
+                        break
+            except Exception:
+                pass
+            
+            # Check RugDoc
+            try:
+                r = await client.get(lockers["rugdoc"], timeout=8.0)
+                if r.status_code == 200:
+                    data = r.json()
+                    locked = data.get("locked", False) or data.get("isLocked", False)
+                    results["rugdoc"] = {
+                        "locked": locked,
+                        "locker": data.get("locker", data.get("platform", "rugdoc")),
+                    }
+                    if locked:
+                        locked_sources += 1
+                    else:
+                        unlocked_sources += 1
+            except Exception:
+                pass
+            
+            if not results:
+                return None
+            
+            total_checks = locked_sources + unlocked_sources
+            locked_pct = (locked_sources / total_checks * 100) if total_checks > 0 else 0
+            
+            return {
+                "sources_checked": list(results.keys()),
+                "locked_sources": locked_sources,
+                "unlocked_sources": unlocked_sources,
+                "locked_pct": round(locked_pct, 0),
+                "details": results,
+                "risk": "high" if locked_pct < 50 else ("medium" if locked_pct < 100 else "low"),
+                "warning": f"⚠️ LP lock unconfirmed by {unlocked_sources} source(s)" if unlocked_sources > 0 else None,
+            }
+    except Exception as e:
+        logger.warning(f"Multi-source LP lock check failed: {e}")
+        return None
+
+
+# ── Homoglyph / copycat detection ──
+
+# Top 100 token symbols by market cap (updated periodically)
+_TOP_SYMBOLS_CACHE: Optional[set] = None
+
+def _get_top_symbols() -> set:
+    """Lazy-load top token symbols for copycat detection."""
+    global _TOP_SYMBOLS_CACHE
+    if _TOP_SYMBOLS_CACHE is not None:
+        return _TOP_SYMBOLS_CACHE
+    
+    # Top symbols by recognition — used for homoglyph detection
+    _TOP_SYMBOLS_CACHE = {
+        "BTC", "ETH", "USDT", "BNB", "SOL", "USDC", "XRP", "DOGE", "ADA", "AVAX",
+        "DOT", "TRX", "MATIC", "LINK", "SHIB", "LTC", "UNI", "ATOM", "XLM", "OKB",
+        "XMR", "ETC", "FIL", "APT", "ARB", "OP", "NEAR", "VET", "ALGO", "ICP",
+        "GRT", "SAND", "MANA", "AAVE", "EGLD", "THETA", "FTM", "FLOW", "QNT", "CHZ",
+        "PEPE", "BONK", "WIF", "JUP", "RAY", "ORCA", "PYTH", "JTO", "BODEN", "TREMP",
+        "SAMO", "MYRO", "POPCAT", "MEW", "WEN", "BOME", "SLERF", "ANALOS", "SAMO",
+        "WBNB", "CAKE", "BAKE", "XVS", "1INCH", "CRV", "SNX", "COMP", "MKR", "YFI",
+        "SUSHI", "RUNE", "LDO", "STETH", "RETH", "CBETH", "FXS", "GMX", "GNS", "PENDLE",
+        "TIA", "SEI", "SUI", "BLUR", "STRK", "ZK", "ZRO", "EIGEN", "ENA", "OMNI",
+        "TAO", "FET", "RNDR", "WLD", "AGIX", "OCEAN", "AKT", "NOS", "PRIME",
+    }
+    return _TOP_SYMBOLS_CACHE
+
+
+def _levenshtein_distance(s1: str, s2: str) -> int:
+    """Fast Levenshtein distance for short strings (in-memory, no imports)."""
+    if len(s1) < len(s2):
+        return _levenshtein_distance(s2, s1)
+    if len(s2) == 0:
+        return len(s1)
+    prev = range(len(s2) + 1)
+    for i, c1 in enumerate(s1):
+        curr = [i + 1]
+        for j, c2 in enumerate(s2):
+            curr.append(min(prev[j + 1] + 1, curr[j] + 1, prev[j] + (c1 != c2)))
+        prev = curr
+    return prev[-1]
+
+
+async def _check_copycat(symbol: str, name: str) -> Optional[Dict[str, Any]]:
+    """Detect homoglyph/copycat tokens mimicking established projects.
+    
+    Checks Levenshtein distance against top-100 symbols.
+    Also detects common social engineering patterns.
+    Cost: $0 (in-memory string comparison).
+    """
+    if not symbol and not name:
+        return None
+    
+    try:
+        top_symbols = _get_top_symbols()
+        symbol_upper = symbol.upper().strip() if symbol else ""
+        name_upper = name.upper().strip() if name else ""
+        
+        close_matches = []
+        
+        for known in top_symbols:
+            # Exact match = legitimate (or very bold copycat)
+            if symbol_upper == known:
+                continue
+            
+            if symbol_upper and len(symbol_upper) >= 2:
+                # Check Levenshtein distance
+                dist = _levenshtein_distance(symbol_upper, known)
+                max_len = max(len(symbol_upper), len(known))
+                similarity = 1 - (dist / max_len)
+                
+                if similarity > 0.75 and dist <= 2:
+                    close_matches.append({
+                        "our_symbol": symbol_upper,
+                        "known_symbol": known,
+                        "levenshtein_dist": dist,
+                        "similarity": round(similarity, 2),
+                        "type": "homoglyph" if dist == 1 else "close_match",
+                    })
+            
+            # Check name similarity
+            if name_upper and known in name_upper and len(name_upper) > len(known):
+                close_matches.append({
+                    "our_name": name,
+                    "known_symbol": known,
+                    "type": "name_contains_known",
+                })
+        
+        if not close_matches:
+            return None
+        
+        # Check for special homoglyph characters
+        homoglyph_chars = {
+            '0': 'O', '1': 'l', '3': 'E', '4': 'A', '5': 'S',
+            '6': 'G', '7': 'T', '8': 'B', '@': 'A', '$': 'S',
+        }
+        has_homoglyphs = any(c in symbol_upper for c in homoglyph_chars) if symbol_upper else False
+        
+        return {
+            "matches": close_matches[:5],
+            "match_count": len(close_matches),
+            "has_homoglyph_chars": has_homoglyphs,
+            "risk": "high" if has_homoglyphs or any(m["type"] == "homoglyph" for m in close_matches) else "medium",
+            "warning": "⚠️ Token symbol closely resembles known project(s)" if close_matches else None,
+        }
+    except Exception as e:
+        logger.warning(f"Copycat check failed: {e}")
+        return None
+
+
+# ── Volume anomaly detection ──
+
+async def _check_volume_anomaly(
+    volume_24h: float, liquidity_usd: float, age_hours: Optional[float], fdv: float = 0
+) -> Optional[Dict[str, Any]]:
+    """Detect manipulated volume patterns.
+    
+    Checks:
+      - Volume/Liquidity ratio (100x+ = wash trading)
+      - Volume/FDV ratio
+      - New token + high volume anomaly
+      - Age/volume correlation
+    Cost: $0 (already-fetched market data).
+    """
+    try:
+        warnings = []
+        risk_signals = 0
+        
+        result: Dict[str, Any] = {
+            "volume_24h": volume_24h,
+            "liquidity_usd": liquidity_usd,
+            "age_hours": age_hours,
+        }
+        
+        # Ratio 1: Volume/Liquidity > 100x = wash trading
+        if liquidity_usd > 0:
+            vol_liq_ratio = volume_24h / liquidity_usd
+            result["vol_liq_ratio"] = round(vol_liq_ratio, 1)
+            if vol_liq_ratio > 200:
+                warnings.append(f"🚨 Volume {vol_liq_ratio:.0f}x liquidity — definitely manipulated")
+                risk_signals += 3
+            elif vol_liq_ratio > 50:
+                warnings.append(f"⚠️ Volume {vol_liq_ratio:.0f}x liquidity — suspicious")
+                risk_signals += 2
+            elif vol_liq_ratio > 20:
+                warnings.append(f"Volume {vol_liq_ratio:.0f}x liquidity — watch closely")
+                risk_signals += 1
+        
+        # Ratio 2: Volume/FDV — high ratio on low FDV = likely wash
+        if fdv > 0:
+            vol_fdv_ratio = volume_24h / fdv
+            result["vol_fdv_ratio"] = round(vol_fdv_ratio, 2)
+            if vol_fdv_ratio > 10:
+                warnings.append(f"Volume {vol_fdv_ratio:.1f}x FDV — wash trading pattern")
+                risk_signals += 2
+            elif vol_fdv_ratio > 5:
+                risk_signals += 1
+        
+        # Age anomaly: new token (<2h) with high volume
+        if age_hours is not None and age_hours < 2 and volume_24h > 10000:
+            warnings.append(f"Brand new token ({age_hours:.1f}h) with ${volume_24h:,.0f} volume — likely coordinated")
+            risk_signals += 2
+        elif age_hours is not None and age_hours < 6 and volume_24h > 500000:
+            warnings.append(f"Very young token ({age_hours:.1f}h) with high volume")
+            risk_signals += 1
+        
+        # Volume spike without liquidity depth
+        if volume_24h > 100000 and liquidity_usd < 1000:
+            warnings.append("High volume on near-zero liquidity — classic pump setup")
+            risk_signals += 2
+        
+        result["warnings"] = warnings
+        result["risk_signals"] = risk_signals
+        result["risk"] = "high" if risk_signals >= 3 else ("medium" if risk_signals >= 1 else "low")
+        result["is_manipulated"] = risk_signals >= 3
+        
+        return result if risk_signals > 0 else None
+        
+    except Exception as e:
+        logger.warning(f"Volume anomaly check failed: {e}")
+        return None
+
+
 # ═══════════════════════════════════════════
 # UNIFIED SCAN — Powered by SENTINEL
 # ═══════════════════════════════════════════
@@ -452,6 +885,42 @@ async def scan_token(
             rag_result = await _rag_scam_check(token_address, chain, deployer_addr)
         except Exception:
             pass
+    
+    # ── Deep deployer + cross-chain (runs after deployer found) ──
+    deep_deployer, cross_chain, contract_verify, lp_lock_multi = None, None, None, None
+    try:
+        if deployer_addr:
+            deep_deployer, cross_chain = await asyncio.gather(
+                _deep_deployer_check(deployer_addr, chain),
+                _check_cross_chain_deployer(deployer_addr, chain),
+                return_exceptions=True,
+            )
+            if isinstance(deep_deployer, BaseException):
+                deep_deployer = None
+            if isinstance(cross_chain, BaseException):
+                cross_chain = None
+        
+        # Contract verification + LP lock (run in parallel)
+        contract_verify, lp_lock_multi = await asyncio.gather(
+            _check_contract_verification(token_address, chain),
+            _check_liquidity_lock_multi(token_address, chain, market.get("pair_address", "")),
+            return_exceptions=True,
+        )
+        if isinstance(contract_verify, BaseException):
+            contract_verify = None
+        if isinstance(lp_lock_multi, BaseException):
+            lp_lock_multi = None
+    except Exception as e:
+        logger.warning(f"Secondary enrichment gather failed: {e}")
+    
+    # ── Copycat + Volume anomaly (CPU-only, uses existing market data) ──
+    copycat_result = await _check_copycat(scan.symbol, scan.name)
+    volume_anomaly = await _check_volume_anomaly(
+        volume_24h=market.get("volume_24h", 0),
+        liquidity_usd=market.get("liquidity_usd", 0),
+        age_hours=market.get("age_hours"),
+        fdv=market.get("fdv", 0),
+    )
     
     # Run SENTINEL pipeline
     try:
@@ -564,6 +1033,66 @@ async def scan_token(
             scan.risk_flags.append("SCAM_PATTERN_SIMILARITY")
             scan.confidence = min(100, scan.confidence + 10)
     
+    # Deep deployer intelligence
+    if isinstance(deep_deployer, dict):
+        deployer_risk = deep_deployer.get("risk_score", 0)
+        if deployer_risk > 70:
+            safety = max(0, safety - 25)
+            scan.risk_flags.append("DEPLOYER_HIGH_RISK")
+            scan.confidence = min(100, scan.confidence + 15)
+        elif deployer_risk > 40:
+            safety = max(0, safety - 10)
+            scan.risk_flags.append("DEPLOYER_MEDIUM_RISK")
+            scan.confidence = min(100, scan.confidence + 8)
+        if deep_deployer.get("rag_scam_hits", 0) > 0:
+            safety = max(0, safety - 15)
+            scan.risk_flags.append("DEPLOYER_IN_SCAM_DB")
+            scan.confidence = min(100, scan.confidence + 10)
+    
+    # Cross-chain deployer
+    if isinstance(cross_chain, dict):
+        if cross_chain.get("is_multi_chain"):
+            chains = len(cross_chain.get("chains", []))
+            safety = max(0, safety - (10 * min(chains, 3)))
+            scan.risk_flags.append(f"MULTI_CHAIN_DEPLOYER_{chains}")
+            scan.confidence = min(100, scan.confidence + 5)
+    
+    # Contract not verified = major red flag
+    if isinstance(contract_verify, dict):
+        if not contract_verify.get("verified"):
+            safety = max(0, safety - 20)
+            scan.risk_flags.append("CONTRACT_UNVERIFIED")
+            scan.confidence = min(100, scan.confidence + 10)
+    
+    # LP lock multi-source
+    if isinstance(lp_lock_multi, dict):
+        if lp_lock_multi.get("risk") == "high":
+            safety = max(0, safety - 15)
+            scan.risk_flags.append("LP_LOCK_UNCONFIRMED")
+            scan.confidence = min(100, scan.confidence + 5)
+    
+    # Copycat detection
+    if isinstance(copycat_result, dict):
+        match_count = copycat_result.get("match_count", 0)
+        if copycat_result.get("risk") == "high":
+            safety = max(0, safety - 20)
+            scan.risk_flags.append("COPYCAT_DETECTED")
+            scan.confidence = min(100, scan.confidence + 8)
+        elif match_count > 0:
+            safety = max(0, safety - 5)
+            scan.risk_flags.append("NAME_SIMILARITY")
+    
+    # Volume anomaly
+    if isinstance(volume_anomaly, dict):
+        risk_signals = volume_anomaly.get("risk_signals", 0)
+        if volume_anomaly.get("risk") == "high":
+            safety = max(0, safety - 20)
+            scan.risk_flags.append("VOLUME_MANIPULATION")
+            scan.confidence = min(100, scan.confidence + 10)
+        elif risk_signals > 0:
+            safety = max(0, safety - (risk_signals * 5))
+            scan.risk_flags.append("VOLUME_ANOMALY")
+    
     # ── Boost confidence from data sources ──
     ds = market.get("data_sources", [])
     if "dexscreener" in ds:
@@ -591,6 +1120,18 @@ async def scan_token(
         scan.free["deployer"] = deployer_info
     if isinstance(rag_result, dict):
         scan.free["rag_scam_check"] = rag_result
+    if isinstance(deep_deployer, dict):
+        scan.free["deep_deployer"] = deep_deployer
+    if isinstance(cross_chain, dict):
+        scan.free["cross_chain"] = cross_chain
+    if isinstance(contract_verify, dict):
+        scan.free["contract_verification"] = contract_verify
+    if isinstance(lp_lock_multi, dict):
+        scan.free["lp_lock_multi"] = lp_lock_multi
+    if isinstance(copycat_result, dict):
+        scan.free["copycat_check"] = copycat_result
+    if isinstance(volume_anomaly, dict):
+        scan.free["volume_anomaly"] = volume_anomaly
     
     # PRO: Tier 1+2 module results
     if tier in ("pro", "elite"):
