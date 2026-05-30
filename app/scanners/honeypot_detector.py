@@ -86,6 +86,10 @@ class HoneypotDetector:
     async def close(self):
         await self.client.aclose()
 
+    async def analyze(self, token_address: str, chain: str, pair_address: str = "") -> HoneypotReport:
+        """Alias for detect() — matches SENTINEL pipeline interface."""
+        return await self.detect(token_address, chain, pair_address)
+
     async def detect(self, token_address: str, chain: str, pair_address: str = "") -> HoneypotReport:
         chain = chain.lower()
         if is_solana(chain):

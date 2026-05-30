@@ -145,8 +145,11 @@ class ContractAuthorityScanner:
     async def close(self):
         await self._http.aclose()
 
-    # ── Public Entry Point ──────────────────────────────────
+    async def analyze(self, token_address: str, chain: str) -> ContractAuthorityReport:
+        """Alias for scan() — matches SENTINEL pipeline interface."""
+        return await self.scan(token_address, chain)
 
+    # ── Public Entry Point ──────────────────────────────────
     async def scan(self, token_address: str, chain: str) -> ContractAuthorityReport:
         """Run full authority analysis for a token on the given chain."""
         chain_lower = chain.lower().strip()

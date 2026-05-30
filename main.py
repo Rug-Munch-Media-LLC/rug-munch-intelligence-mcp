@@ -1662,6 +1662,18 @@ async def scan_token(request: Request, data: dict):
         }), {"source": "token_scan", "chain": chain, "tier": tier}))
     except: pass
     
+    # Broadcast to WebSocket stream
+    try:
+        import asyncio as _asyncio2
+        _asyncio2.create_task(ws_broadcast_scan({
+            "token": scan.token_address,
+            "chain": scan.chain,
+            "symbol": scan.free.get("symbol", ""),
+            "safety_score": scan.safety_score,
+            "risk_flags": scan.risk_flags[:3] if scan.risk_flags else [],
+        }))
+    except: pass
+    
     # Build response with usage info
     usage_info = {}
     if not is_internal and not is_paid:
@@ -1677,11 +1689,13 @@ async def scan_token(request: Request, data: dict):
     return {
         "token": scan.token_address,
         "chain": scan.chain,
-        "symbol": scan.free.get("symbol", ""),
-        "name": scan.free.get("name", ""),
+        "symbol": scan.symbol,
+        "name": scan.name,
         "safety_score": scan.safety_score,
+        "confidence": scan.confidence,
         "risk_flags": scan.risk_flags,
         "tier": scan.tier_required,
+        "modules_analyzed": len(scan.free.get("modules_run", [])),
         "free": scan.free,
         "pro": scan.pro if tier in ("pro", "elite") else None,
         "elite": scan.elite if tier == "elite" else None,
@@ -6277,4 +6291,196 @@ async def dexscreener_security(chain: str, address: str):
         "provider_url": "https://rugmunch.io",
         "scanned_at": scan.scanned_at if hasattr(scan, 'scanned_at') else datetime.now(timezone.utc).isoformat(),
     }
+
+
+# ═══════════════════════════════════════════════════════════
+# TRANSACTION SIMULATION
+# ═══════════════════════════════════════════════════════════
+
+@app.post("/api/v1/simulate/transaction")
+async def simulate_transaction_endpoint(data: dict):
+    """
+    Pre-flight transaction simulation.
+    
+    Simulates a sell transaction to detect honeypots, excessive taxes,
+    and reverts BEFORE the user signs. No gas spent.
+    
+    Body: {"token_address": "...", "chain": "solana"}
+    Returns: {can_sell, can_buy, sell_tax_pct, risk, warnings, ...}
+    """
+    from app.tx_simulator import simulate_transaction
+    
+    token = data.get("token_address", data.get("address", ""))
+    chain = data.get("chain", "solana")
+    
+    if not token:
+        raise HTTPException(status_code=400, detail="token_address required")
+    
+    result = await simulate_transaction(token, chain)
+    
+    return {
+        "token_address": result.token_address,
+        "chain": result.chain,
+        "can_sell": result.can_sell,
+        "can_buy": result.can_buy,
+        "is_honeypot": result.is_honeypot,
+        "sell_tax_pct": round(result.sell_tax_pct, 2),
+        "buy_tax_pct": round(result.buy_tax_pct, 2),
+        "expected_output": result.expected_output,
+        "expected_output_token": result.expected_output_token,
+        "risk": result.risk,
+        "warnings": result.warnings,
+        "simulated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+# ═══════════════════════════════════════════════════════════
+# WEBSOCKET REAL-TIME STREAMS
+# ═══════════════════════════════════════════════════════════
+
+from fastapi import WebSocket, WebSocketDisconnect
+import redis.asyncio as aioredis
+
+# Connected WebSocket clients
+_ws_clients: dict = {"scans": set(), "alerts": set()}
+
+
+@app.websocket("/ws/v1/stream/scans")
+async def ws_stream_scans(websocket: WebSocket):
+    """Real-time token scan results stream.
+    
+    Connect to receive live scan results as they happen.
+    Each message: {"type": "scan", "token": "...", "chain": "...", "safety_score": 85, ...}
+    """
+    await websocket.accept()
+    _ws_clients["scans"].add(websocket)
+    try:
+        # Send welcome
+        await websocket.send_json({
+            "type": "connected",
+            "stream": "scans",
+            "message": "Receiving live token scans...",
+            "connected_at": datetime.now(timezone.utc).isoformat(),
+        })
+        # Subscribe to Redis pub/sub for scan events
+        redis_host = os.getenv("REDIS_HOST", "rmi-redis")
+        redis_port = int(os.getenv("REDIS_PORT", "6379"))
+        redis_pass = os.getenv("REDIS_PASSWORD", "")
+        r = await aioredis.from_url(
+            f"redis://{redis_host}:{redis_port}",
+            password=redis_pass or None,
+            decode_responses=True,
+        )
+        pubsub = r.pubsub()
+        await pubsub.subscribe("rmi:ws:scans")
+        
+        async for message in pubsub.listen():
+            if message["type"] == "message":
+                try:
+                    data = json.loads(message["data"])
+                    await websocket.send_json(data)
+                except json.JSONDecodeError:
+                    pass
+            
+            # Check for client disconnect
+            try:
+                await asyncio.wait_for(websocket.receive_text(), timeout=0.01)
+            except asyncio.TimeoutError:
+                pass
+    except (WebSocketDisconnect, Exception):
+        pass
+    finally:
+        _ws_clients["scans"].discard(websocket)
+        try:
+            await pubsub.unsubscribe("rmi:ws:scans")
+            await r.close()
+        except Exception:
+            pass
+
+
+@app.websocket("/ws/v1/stream/alerts")
+async def ws_stream_alerts(websocket: WebSocket):
+    """Real-time scam/honeypot alert stream.
+    
+    Receive instant alerts for: honeypots detected, rug pulls, flash loans,
+    high-risk tokens, whale movements.
+    """
+    await websocket.accept()
+    _ws_clients["alerts"].add(websocket)
+    try:
+        await websocket.send_json({
+            "type": "connected",
+            "stream": "alerts",
+            "message": "Listening for real-time security alerts...",
+            "connected_at": datetime.now(timezone.utc).isoformat(),
+        })
+        redis_host = os.getenv("REDIS_HOST", "rmi-redis")
+        redis_pass = os.getenv("REDIS_PASSWORD", "")
+        r = await aioredis.from_url(
+            f"redis://{redis_host}:{os.getenv('REDIS_PORT','6379')}",
+            password=redis_pass or None,
+            decode_responses=True,
+        )
+        pubsub = r.pubsub()
+        await pubsub.subscribe("rmi:ws:alerts")
+        
+        async for message in pubsub.listen():
+            if message["type"] == "message":
+                try:
+                    data = json.loads(message["data"])
+                    await websocket.send_json(data)
+                except json.JSONDecodeError:
+                    pass
+            try:
+                await asyncio.wait_for(websocket.receive_text(), timeout=0.01)
+            except asyncio.TimeoutError:
+                pass
+    except (WebSocketDisconnect, Exception):
+        pass
+    finally:
+        _ws_clients["alerts"].discard(websocket)
+        try:
+            await pubsub.unsubscribe("rmi:ws:alerts")
+            await r.close()
+        except Exception:
+            pass
+
+
+# Helper to broadcast scan results to WebSocket clients
+async def ws_broadcast_scan(scan_data: dict):
+    """Publish scan result to Redis for WebSocket streaming."""
+    try:
+        redis_host = os.getenv("REDIS_HOST", "rmi-redis")
+        redis_pass = os.getenv("REDIS_PASSWORD", "")
+        r = await aioredis.from_url(
+            f"redis://{redis_host}:{os.getenv('REDIS_PORT','6379')}",
+            password=redis_pass or None,
+        )
+        await r.publish("rmi:ws:scans", json.dumps({
+            "type": "scan",
+            **scan_data,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }))
+        await r.close()
+    except Exception:
+        pass
+
+
+async def ws_broadcast_alert(alert_data: dict):
+    """Publish security alert to Redis for WebSocket streaming."""
+    try:
+        redis_host = os.getenv("REDIS_HOST", "rmi-redis")
+        redis_pass = os.getenv("REDIS_PASSWORD", "")
+        r = await aioredis.from_url(
+            f"redis://{redis_host}:{os.getenv('REDIS_PORT','6379')}",
+            password=redis_pass or None,
+        )
+        await r.publish("rmi:ws:alerts", json.dumps({
+            "type": "alert",
+            **alert_data,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }))
+        await r.close()
+    except Exception:
+        pass
 
