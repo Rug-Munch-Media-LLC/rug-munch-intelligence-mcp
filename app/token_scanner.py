@@ -186,6 +186,225 @@ async def fetch_market_data(token_address: str, chain: str) -> Dict[str, Any]:
 
 
 # ═══════════════════════════════════════════
+# RICH ENRICHMENT (all FREE — degrade gracefully)
+# ═══════════════════════════════════════════
+
+
+async def _simulate_trade(token_address: str, chain: str) -> Optional[Dict[str, Any]]:
+    """Simulate buy/sell via Jupiter (Solana) or eth_call (EVM).
+    
+    Returns honeypot status, effective tax rate, and risk assessment.
+    Cost: $0 (Jupiter free API + public EVM RPCs).
+    """
+    try:
+        from app.tx_simulator import simulate_transaction
+        result = await simulate_transaction(token_address, chain)
+        return {
+            "can_sell": result.can_sell,
+            "can_buy": result.can_buy,
+            "sell_tax_pct": result.sell_tax_pct,
+            "buy_tax_pct": result.buy_tax_pct,
+            "risk": result.risk,
+            "is_honeypot": result.is_honeypot,
+            "warnings": result.warnings,
+            "expected_output": result.expected_output,
+            "expected_output_token": result.expected_output_token,
+        }
+    except Exception as e:
+        logger.warning(f"Trade simulation failed for {token_address[:8]}...: {e}")
+        return None
+
+
+async def _get_holder_data(token_address: str, chain: str) -> Optional[Dict[str, Any]]:
+    """Get holder count + top-10 concentration.
+    
+    Cascades: Helius → Birdeye → Solscan → DexScreener.
+    Cost: $0 (all free tiers).
+    """
+    try:
+        from app.unified_provider import get_unified_provider
+        provider = get_unified_provider()
+        holders = await provider.get_token_holders(token_address, limit=50)
+        if not holders:
+            return None
+
+        total = len(holders)
+        # Filter out holders with valid amounts
+        valid = [h for h in holders if h.get("amount", 0) > 0]
+        if not valid:
+            return {"total_holders": total, "holder_count_valid": 0, "concentration_risk": "unknown"}
+
+        total_amount = sum(h.get("amount", 0) for h in valid)
+        if total_amount <= 0:
+            return {"total_holders": total, "concentration_risk": "unknown"}
+
+        sorted_holders = sorted(valid, key=lambda h: h.get("amount", 0), reverse=True)
+        top1_share = (sorted_holders[0]["amount"] / total_amount * 100) if sorted_holders else 0
+        top10_amount = sum(h["amount"] for h in sorted_holders[:10])
+        top10_share = top10_amount / total_amount * 100
+
+        if top10_share > 80:
+            risk = "high"
+        elif top10_share > 50:
+            risk = "medium"
+        else:
+            risk = "low"
+
+        return {
+            "total_holders": total,
+            "holder_count_valid": len(valid),
+            "top1_pct": round(top1_share, 1),
+            "top10_pct": round(top10_share, 1),
+            "concentration_risk": risk,
+            "data_source": holders[0].get("source", "unknown") if holders else "unknown",
+        }
+    except Exception as e:
+        logger.warning(f"Holder data failed for {token_address[:8]}...: {e}")
+        return None
+
+
+async def _get_deployer_info(token_address: str, chain: str) -> Optional[Dict[str, Any]]:
+    """Get deployer wallet address and basic info.
+    
+    For Solana: uses FreeSolscanClient to find first transaction signer.
+    For EVM: uses Etherscan-family free API for contract creator.
+    Cost: $0.
+    """
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            if chain == "solana":
+                try:
+                    from app.free_solscan_client import FreeSolscanClient
+                    solscan = FreeSolscanClient()
+                    # Get token holder/transfer info — first tx = deployer activity
+                    if hasattr(solscan, 'get_token_holders'):
+                        # Try getting info via account endpoint
+                        r = await client.get(
+                            f"https://public-api.solscan.io/token/meta?tokenAddress={token_address}",
+                            timeout=10.0
+                        )
+                        if r.status_code == 200:
+                            meta = r.json()
+                            owner = meta.get("owner", meta.get("tokenAuthority", ""))
+                            if owner:
+                                return {"deployer": owner, "source": "solscan_token_meta"}
+                    return None
+                except Exception:
+                    return None
+            else:
+                # EVM: Etherscan family free API
+                chain_id = CHAIN_IDS.get(chain, "1")
+                base_urls = {
+                    "1": "https://api.etherscan.io/api",
+                    "56": "https://api.bscscan.com/api", 
+                    "137": "https://api.polygonscan.com/api",
+                    "8453": "https://api.basescan.org/api",
+                    "42161": "https://api.arbiscan.io/api",
+                    "10": "https://api-optimistic.etherscan.io/api",
+                    "43114": "https://api.snowtrace.io/api",
+                }
+                api_url = base_urls.get(str(chain_id))
+                if not api_url:
+                    return None
+                r = await client.get(api_url, params={
+                    "module": "contract",
+                    "action": "getcontractcreation",
+                    "contractaddresses": token_address,
+                    "apikey": "YourApiKeyToken",  # Free tier no-auth for creation endpoint
+                })
+                if r.status_code == 200:
+                    data = r.json()
+                    results = data.get("result", [])
+                    if results and isinstance(results, list) and len(results) > 0:
+                        creator = results[0].get("contractCreator", "")
+                        tx_hash = results[0].get("txHash", "")
+                        if creator:
+                            return {
+                                "deployer": creator,
+                                "tx_hash": tx_hash,
+                                "source": "etherscan_family",
+                            }
+                return None
+    except Exception as e:
+        logger.warning(f"Deployer info failed for {token_address[:8]}...: {e}")
+        return None
+
+
+async def _rag_scam_check(
+    token_address: str, chain: str, deployer: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
+    """Query known_scams RAG collection for token/deployer match.
+    
+    Checks both token address and deployer against 67K+ documented scams.
+    Cost: $0 (local BGE-small embeddings + FAISS ANN search).
+    """
+    try:
+        from app.rag_service import search_similar
+        import asyncio as _a
+
+        queries = []
+        # Always check token address
+        queries.append(
+            _a.wait_for(
+                search_similar(
+                    f"scam honeypot rug token {token_address} {chain}",
+                    "known_scams",
+                    limit=5,
+                    min_similarity=0.25,
+                ),
+                timeout=8.0,
+            )
+        )
+
+        # Check deployer if known
+        if deployer:
+            queries.append(
+                _a.wait_for(
+                    search_similar(
+                        f"scammer wallet deployer {deployer} {chain}",
+                        "known_scams",
+                        limit=3,
+                        min_similarity=0.25,
+                    ),
+                    timeout=5.0,
+                )
+            )
+
+        results = await _a.gather(*queries, return_exceptions=True)
+
+        token_matches = results[0] if isinstance(results[0], list) else []
+        deployer_matches = (
+            results[1] if len(results) > 1 and isinstance(results[1], list) else []
+        )
+
+        all_matches = token_matches + deployer_matches
+        if not all_matches:
+            return None
+
+        # Deduplicate by content prefix
+        seen = set()
+        unique = []
+        for m in all_matches:
+            key = (m.get("content", "") or "")[:80]
+            if key not in seen:
+                seen.add(key)
+                unique.append(m)
+
+        match_snippets = [m.get("content", "")[:200] for m in unique[:3]]
+
+        return {
+            "scam_matches": len(unique),
+            "top_snippets": match_snippets,
+            "is_known_scam": len(unique) >= 2,
+            "matched_collections": list({m.get("collection", "known_scams") for m in unique}),
+        }
+    except Exception as e:
+        logger.warning(f"RAG scam check failed for {token_address[:8]}...: {e}")
+        return None
+
+
+# ═══════════════════════════════════════════
 # UNIFIED SCAN — Powered by SENTINEL
 # ═══════════════════════════════════════════
 
@@ -203,6 +422,36 @@ async def scan_token(
     market = await fetch_market_data(token_address, chain)
     scan.symbol = market.get("symbol", "")
     scan.name = market.get("name", "")
+    
+    # ── Run all FREE enrichments in parallel ──
+    sim_result, holder_data, deployer_info = None, None, None
+    try:
+        sim_result, holder_data, deployer_info = await asyncio.gather(
+            _simulate_trade(token_address, chain),
+            _get_holder_data(token_address, chain),
+            _get_deployer_info(token_address, chain),
+            return_exceptions=True,
+        )
+        # unwrap exceptions
+        if isinstance(sim_result, BaseException):
+            sim_result = None
+        if isinstance(holder_data, BaseException):
+            holder_data = None
+        if isinstance(deployer_info, BaseException):
+            deployer_info = None
+    except Exception as e:
+        logger.warning(f"Enrichment gather failed: {e}")
+    
+    # ── RAG scam check (after deployer lookup) ──
+    rag_result = None
+    deployer_addr = None
+    if isinstance(deployer_info, dict):
+        deployer_addr = deployer_info.get("deployer")
+    if token_address:
+        try:
+            rag_result = await _rag_scam_check(token_address, chain, deployer_addr)
+        except Exception:
+            pass
     
     # Run SENTINEL pipeline
     try:
@@ -274,6 +523,47 @@ async def scan_token(
         safety = max(0, safety - 8)
         scan.risk_flags.append("VERY_NEW")
     
+    # ── Adjust from enrichment data (simulation + holders + RAG) ──
+    # Trade simulation
+    if isinstance(sim_result, dict):
+        if sim_result.get("is_honeypot"):
+            safety = max(0, safety - 50)
+            scan.risk_flags.append("HONEYPOT_SIMULATED")
+            scan.confidence = min(100, scan.confidence + 20)
+        elif sim_result.get("risk") == "critical":
+            safety = max(0, safety - 25)
+            scan.risk_flags.append("TRADE_SIM_CRITICAL")
+            scan.confidence = min(100, scan.confidence + 10)
+        elif sim_result.get("sell_tax_pct", 0) > 20:
+            safety = max(0, safety - 10)
+            scan.risk_flags.append(f"SIM_TAX_{sim_result['sell_tax_pct']:.0f}%")
+    
+    # Holder concentration
+    if isinstance(holder_data, dict):
+        if holder_data.get("concentration_risk") == "high":
+            safety = max(0, safety - 15)
+            scan.risk_flags.append("HOLDER_CONCENTRATION_HIGH")
+            scan.confidence = min(100, scan.confidence + 5)
+        elif holder_data.get("concentration_risk") == "medium":
+            safety = max(0, safety - 5)
+            if "top10_pct" in holder_data:
+                scan.risk_flags.append(f"HOLDER_TOP10_{holder_data['top10_pct']:.0f}%")
+    
+    # Deployer info
+    if isinstance(deployer_info, dict):
+        scan.confidence = min(100, scan.confidence + 3)
+    
+    # RAG scam check
+    if isinstance(rag_result, dict):
+        if rag_result.get("is_known_scam"):
+            safety = max(0, safety - 40)
+            scan.risk_flags.append("KNOWN_SCAM_MATCH")
+            scan.confidence = min(100, scan.confidence + 25)
+        elif rag_result.get("scam_matches", 0) > 0:
+            safety = max(0, safety - 15)
+            scan.risk_flags.append("SCAM_PATTERN_SIMILARITY")
+            scan.confidence = min(100, scan.confidence + 10)
+    
     # ── Boost confidence from data sources ──
     ds = market.get("data_sources", [])
     if "dexscreener" in ds:
@@ -286,12 +576,21 @@ async def scan_token(
     scan.safety_score = max(0, min(100, safety))
     
     # ── Build tier data ──
-    # FREE: market data + SENTINEL risk summary
+    # FREE: market data + SENTINEL risk summary + enrichments
     scan.free = {
         **market,
         "modules_run": sentinel.modules_run if sentinel else [],
         "risk_level": sentinel.risk_level if sentinel else "unknown",
     }
+    # Add enrichment data if available
+    if isinstance(sim_result, dict):
+        scan.free["simulation"] = sim_result
+    if isinstance(holder_data, dict):
+        scan.free["holders"] = holder_data
+    if isinstance(deployer_info, dict):
+        scan.free["deployer"] = deployer_info
+    if isinstance(rag_result, dict):
+        scan.free["rag_scam_check"] = rag_result
     
     # PRO: Tier 1+2 module results
     if tier in ("pro", "elite"):

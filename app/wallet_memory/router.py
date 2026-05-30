@@ -240,3 +240,116 @@ async def label_stats():
         "loading": is_loading(),
         "last_counts": get_last_load_counts(),
     }
+
+# ── Fast Label Lookup ───────────────────────────────────────────
+
+@router.get("/{address}/labels")
+async def get_wallet_labels(
+    address: str,
+    chain: str = Query(default=""),
+):
+    """Fast label lookup — returns all labels for an address instantly."""
+    engine = _get_engine()
+    
+    # Try known chains
+    chains_to_check = [chain] if chain else ["ethereum", "solana", "bitcoin", "tron"]
+    
+    labels = []
+    for ch in chains_to_check:
+        try:
+            profile = await engine.get_wallet_profile(address, ch, depth=0)
+            if profile and profile.get("labels"):
+                labels.extend(profile["labels"])
+        except Exception:
+            continue
+    
+    # Also check threat actor database
+    from app.auto_labeler import get_auto_labeler
+    labeler = get_auto_labeler()
+    
+    # Check if this wallet appears in auto-labeler observations
+    for ch in chains_to_check:
+        key = f"{ch}:{address.lower()}"
+        if key in labeler.pending_observations:
+            for obs in labeler.pending_observations.get(key, []):
+                if isinstance(obs, dict) and obs.get("label_key"):
+                    labels.append(obs)
+    
+    return {
+        "address": address,
+        "chain": chain or "auto",
+        "labels": labels,
+        "count": len(labels),
+        "queried_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.post("/labels/batch")
+async def batch_label_lookup(request: dict):
+    """Bulk lookup — query up to 100 addresses at once."""
+    addresses = request.get("addresses", [])
+    chain = request.get("chain", "")
+    
+    if len(addresses) > 100:
+        raise HTTPException(status_code=400, detail="Max 100 addresses per batch")
+    
+    engine = _get_engine()
+    results = {}
+    
+    for addr in addresses[:100]:
+        try:
+            profile = await engine.get_wallet_profile(addr, chain or "ethereum", depth=0)
+            results[addr] = {
+                "labels": profile.get("labels", []) if profile else [],
+                "risk_score": profile.get("risk_score", 0) if profile else 0,
+            }
+        except Exception:
+            results[addr] = {"labels": [], "risk_score": 0}
+    
+    return {
+        "queried": len(addresses),
+        "results": results,
+        "chain": chain or "auto",
+    }
+
+
+@router.get("/labels/freshness")
+async def label_freshness_stats():
+    """Check how fresh our labels are — when were they last verified."""
+    import csv, os, time
+    
+    clean_dir = os.path.join(os.environ.get("RMI_DATA_DIR", "/app/data"), "wallet-labels-clean")
+    manifest_path = os.path.join(clean_dir, "manifest.json")
+    
+    freshness = {
+        "clean_data_generated": None,
+        "age_hours": None,
+        "status": "unknown",
+        "files": {},
+    }
+    
+    if os.path.exists(manifest_path):
+        import json
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+        generated = manifest.get("generated_at")
+        if generated:
+            gen_time = datetime.fromisoformat(generated).replace(tzinfo=timezone.utc)
+            age = (datetime.now(timezone.utc) - gen_time).total_seconds() / 3600
+            freshness["clean_data_generated"] = generated
+            freshness["age_hours"] = round(age, 1)
+            freshness["status"] = "fresh" if age < 24 else "stale" if age < 72 else "critical"
+    
+    # Check individual files
+    for fname in ["wallet_labels_ethereum.csv", "wallet_labels_solana.csv", 
+                  "wallet_labels_threat_actors.csv"]:
+        fpath = os.path.join(clean_dir, fname)
+        if os.path.exists(fpath):
+            mtime = datetime.fromtimestamp(os.path.getmtime(fpath), tz=timezone.utc)
+            freshness["files"][fname] = {
+                "size_kb": round(os.path.getsize(fpath) / 1024, 1),
+                "last_modified": mtime.isoformat(),
+                "age_hours": round((datetime.now(timezone.utc) - mtime).total_seconds() / 3600, 1),
+            }
+    
+    return freshness

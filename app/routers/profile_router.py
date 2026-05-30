@@ -120,7 +120,7 @@ def _get_supabase():
         import os
         
         url = os.getenv("SUPABASE_URL", "")
-        key = os.getenv("SUPABASE_KEY", "") or os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+        key = os.getenv("SUPABASE_SERVICE_KEY", "") or os.getenv("SUPABASE_KEY", "") or os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
         
         if not url or not key:
             return None
@@ -145,7 +145,7 @@ async def _get_current_user_id(authorization: str = Header(None)) -> Optional[st
         
         supabase = create_client(
             os.getenv("SUPABASE_URL"),
-            os.getenv("SUPABASE_KEY")
+            os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
         )
         
         user = supabase.auth.get_user(token)
@@ -478,6 +478,136 @@ async def update_profile(req: ProfileUpdate, authorization: str = Header(None)):
         raise HTTPException(status_code=404, detail="Profile not found")
     
     return {"status": "ok", "profile": result.data[0]}
+
+
+
+@router.get("/social/farcaster/{fid}")
+async def get_farcaster_profile(fid: int):
+    """Fetch Farcaster profile by FID using public Hub API."""
+    try:
+        from app.socialfi_resolver import fetch_farcaster_profile
+        profile = await fetch_farcaster_profile(fid)
+        if not profile:
+            raise HTTPException(status_code=404, detail="Farcaster profile not found")
+        return {"status": "ok", "farcaster": profile}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)[:200])
+
+
+@router.get("/social/resolve-ens/{address}")
+async def resolve_ens(address: str):
+    """Resolve Ethereum address to ENS name."""
+    try:
+        from app.socialfi_resolver import resolve_ens_name
+        name = await resolve_ens_name(address)
+        return {"address": address, "ens_name": name}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)[:200])
+
+
+@router.get("/social/farcaster-handle/{handle:path}")
+async def resolve_farcaster(handle: str):
+    """Resolve Farcaster handle to FID and fetch profile."""
+    try:
+        from app.socialfi_resolver import resolve_farcaster_handle, fetch_farcaster_profile
+        fid = await resolve_farcaster_handle(handle)
+        if not fid:
+            raise HTTPException(status_code=404, detail="Farcaster handle not found")
+        profile = await fetch_farcaster_profile(fid)
+        if not profile:
+            raise HTTPException(status_code=404, detail="Farcaster profile not found")
+        return {"status": "ok", "farcaster": profile}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)[:200])
+
+
+@router.get("/social")
+async def list_socialfi_integrations():
+    """List available SocialFi integrations."""
+    return {
+        "available": [
+            {
+                "platform": "farcaster",
+                "description": "Decentralized social network — connect FID to fetch profile, casts, followers",
+                "endpoints": [
+                    "GET /social/farcaster/{fid}",
+                    "GET /social/farcaster-handle/{handle}",
+                ]
+            },
+            {
+                "platform": "ens",
+                "description": "Ethereum Name Service — resolve .eth names to addresses and vice versa",
+                "endpoints": [
+                    "GET /social/resolve-ens/{address}",
+                ]
+            },
+            {
+                "platform": "lens",
+                "description": "Lens Protocol — decentralized social graph (coming soon)",
+                "endpoints": []
+            },
+        ]
+    }
+
+@router.get("/admin/users")
+async def admin_list_users(authorization: str = Header(None)):
+    """Admin: List all users with full details."""
+    user_id = await _get_current_user_id(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    supabase = _get_supabase()
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Supabase not configured")
+
+    # Fetch all profiles
+    result = supabase.table("profiles").select("*").order("created_at", desc=True).limit(200).execute()
+    
+    return {"users": result.data or [], "total": len(result.data) if result.data else 0}
+
+
+@router.post("/admin/users/{target_user_id}/verify")
+async def admin_verify_user(target_user_id: str, authorization: str = Header(None)):
+    """Admin: Verify a user."""
+    admin_id = await _get_current_user_id(authorization)
+    if not admin_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    supabase = _get_supabase()
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Supabase not configured")
+
+    supabase.table("profiles").update({
+        "is_verified": True,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }).eq("user_id", target_user_id).execute()
+
+    return {"status": "ok", "user_id": target_user_id, "verified": True}
+
+
+@router.post("/admin/users/{target_user_id}/ban")
+async def admin_ban_user(target_user_id: str, authorization: str = Header(None)):
+    """Admin: Ban a user."""
+    admin_id = await _get_current_user_id(authorization)
+    if not admin_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    supabase = _get_supabase()
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Supabase not configured")
+
+    supabase.table("profiles").update({
+        "is_banned": True,
+        "banned_at": datetime.now(timezone.utc).isoformat(),
+        "banned_by": admin_id,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }).eq("user_id", target_user_id).execute()
+
+    return {"status": "ok", "user_id": target_user_id, "banned": True}
 
 
 @router.get("/{username}")
@@ -896,5 +1026,3 @@ async def get_my_notifications(authorization: str = Header(None), unread_only: b
     
     return {"notifications": result.data or []}
 
-
-# ── Health ────────────────────────────────────────────────────

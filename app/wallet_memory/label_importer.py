@@ -1086,3 +1086,47 @@ def get_last_load_counts() -> Dict[str, int]:
 def is_loading() -> bool:
     """Check if a label import is currently in progress."""
     return _loading
+
+# ── Clean Data Loader (from label quality fixer) ─────────────────────
+
+CLEAN_DIR = os.path.join(DATA_DIR, "wallet-labels-clean")
+
+async def load_clean_labels(storage) -> dict:
+    """Load pre-cleaned, deduplicated labels from the quality fixer.
+    Returns stats dict with counts."""
+    import csv
+    
+    stats = {"ethereum": 0, "solana": 0, "errors": 0}
+    
+    for chain in ["ethereum", "solana"]:
+        path = os.path.join(CLEAN_DIR, f"wallet_labels_{chain}.csv")
+        if not os.path.exists(path):
+            logger.warning(f"Clean labels file not found: {path}")
+            continue
+        
+        labels = []
+        with open(path, 'r') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                labels.append({
+                    "address": row["address"],
+                    "chain": row["chain"],
+                    "source": row.get("source", "clean_import"),
+                    "name": row.get("name", ""),
+                    "label_type": row.get("label_type", ""),
+                    "label_subtype": row.get("label_subtype", ""),
+                    "project": row.get("project", ""),
+                    "entity_type": row.get("entity_type", "unknown"),
+                })
+        
+        if labels and storage:
+            try:
+                await storage.bulk_import(labels, source=f"clean_{chain}")
+                stats[chain] = len(labels)
+                logger.info(f"Loaded {len(labels):,} clean {chain} labels")
+            except Exception as e:
+                logger.error(f"Failed to import clean {chain} labels: {e}")
+                stats["errors"] += 1
+    
+    logger.info(f"Clean label import complete: {stats}")
+    return stats
