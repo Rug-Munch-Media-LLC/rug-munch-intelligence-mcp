@@ -1,396 +1,350 @@
 """
-News Router — Aggregated Crypto News Feed
-==========================================
+News Router — THE Crypto News Aggregator Feed
+=============================================
+200+ sources. Real data only. No fake articles.
 
-Pulls from:
-  - RSS feeds (CoinDesk, CryptoSlate, The Block) via built-in RSS fallback
-  - CoinGecko News API (free, no key)
-  - Ghost CMS posts (if configured)
-  - Community Bulletin (internal)
-  - Twitter/X sentiment (internal AI analysis)
-
-Cached via 5-minute memory cache so we don't hammer APIs on every reload.
+Endpoints:
+  GET /api/v1/news/feed       — Full aggregated feed with filters
+  GET /api/v1/news/sources    — Active sources list with counts
+  GET /api/v1/news/sentiment  — Real-time sentiment overview
+  GET /api/v1/news/headlines  — Top headlines only
+  GET /api/v1/news/stats      — Source/category statistics
+  POST /api/v1/news/comment   — Comment on article (social)
+  GET /api/v1/news/comments/:article_id — Get comments for article
 """
-
-import os
 import asyncio
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
-
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
-
 import httpx
-import asyncio
+import hashlib
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/news", tags=["news"])
 
-# ─── Cache ────────────────────────────────────────────────────────────────
-
-_NEWS_CACHE: List[Dict[str, Any]] = []
-_CACHE_TS: Optional[datetime] = None
-_CACHE_TTL = timedelta(minutes=5)
-
-# ─── Models ───────────────────────────────────────────────────────────────
-
+# ─── Models ───────────────────────────────────────────────────────
 class NewsArticle(BaseModel):
     id: Optional[str] = None
     title: str = ""
     url: str = ""
+    description: Optional[str] = None
     source: str = ""
-    excerpt: Optional[str] = None
     published_at: Optional[str] = None
     image_url: Optional[str] = None
     category: Optional[str] = None
-    credibility: Optional[str] = None
     sentiment: Optional[str] = None
-    reading_time: Optional[int] = None
-    ai_score: Optional[float] = None
+    kind: Optional[str] = None
+    tier: Optional[str] = None
+    reddit_score: Optional[int] = None
+    reddit_comments: Optional[int] = None
+    risk_score: Optional[float] = None
+    token_address: Optional[str] = None
+    chain: Optional[str] = None
+    comment_count: Optional[int] = 0
 
-class CombinedNewsResponse(BaseModel):
+class NewsFeedResponse(BaseModel):
     status: str = "success"
     articles: List[NewsArticle] = []
     total: int = 0
     sources: List[str] = []
+    source_count: int = 0
+    sentiment_summary: Dict[str, int] = {}
+    tiers: List[str] = []
     cached: bool = False
     fetched_at: str = ""
 
-# ─── External Fetchers ───────────────────────────────────────────────────
+class CommentRequest(BaseModel):
+    article_id: str
+    author: str = "anon"
+    content: str
+    parent_id: Optional[str] = None
 
-async def _fetch_coingecko_news(client: httpx.AsyncClient, limit: int = 15) -> List[Dict[str, Any]]:
-    """Fetch latest crypto news from CoinGecko News API (free, no key)."""
+class CommentResponse(BaseModel):
+    id: str
+    article_id: str
+    author: str
+    content: str
+    created_at: str
+    parent_id: Optional[str] = None
+    likes: int = 0
+
+# ─── In-memory cache ──────────────────────────────────────────────
+_NEWS_CACHE = []
+_CACHE_TS: Optional[datetime] = None
+_CACHE_TTL = timedelta(minutes=3)
+
+# In-memory comments store (ephemeral — persists via Redis later)
+_COMMENTS: Dict[str, List[Dict]] = {}
+
+# ─── Helpers ──────────────────────────────────────────────────────
+
+def _make_comment_id(article_id: str, content: str) -> str:
+    h = hashlib.md5(f"{article_id}:{content}:{datetime.now(timezone.utc).isoformat()}".encode()).hexdigest()
+    return f"comment-{h[:12]}"
+
+async def _refresh_cache(include_rss: bool, include_reddit: bool, include_internal: bool):
+    """Background cache refresh task."""
+    global _NEWS_CACHE, _CACHE_TS
     try:
-        r = await client.get(
-            "https://api.coingecko.com/api/v3/news",
-            params={"per_page": limit},
-            timeout=10.0
+        from app.news_service import get_news_service
+        svc = get_news_service()
+        result = await svc.fetch_all(
+            limit=200,
+            include_rss=include_rss,
+            include_reddit=include_reddit,
+            include_internal=include_internal,
         )
-        r.raise_for_status()
-        data = r.json()
-        articles = data.get("data", [])
-        result: List[Dict[str, Any]] = []
-        for idx, article in enumerate(articles[:limit]):
-            result.append({
-                "id": f"cg-{idx}",
-                "title": article.get("title", "Untitled"),
-                "url": article.get("url", "#"),
-                "source": article.get("source", {}).get("name", "CoinGecko"),
-                "excerpt": article.get("description", "")[:280],
-                "published_at": article.get("updated_at", datetime.now(timezone.utc).isoformat()),
-                "image_url": article.get("thumb_2x", ""),
-                "category": article.get("categories", ["market"])[0] if article.get("categories") else "market",
-                "credibility": "verified",
-                "sentiment": "neutral",
-                "reading_time": max(1, len(article.get("description", "")) // 1200),
-                "ai_score": round(7.0 + (hash(article.get("title", "")) % 30) / 10, 1),
-            })
-        return result
+        _NEWS_CACHE = result
+        _CACHE_TS = datetime.now(timezone.utc)
+        logger.info(f"News cache refreshed: {result.get('total', 0)} articles from {result.get('source_count', 0)} sources")
     except Exception as e:
-        print(f"[News] CoinGecko error: {e}")
-        return []
+        logger.warning(f"Background news refresh failed: {e}")
 
 
-async def _fetch_cryptopanic_news(client: httpx.AsyncClient, limit: int = 20) -> List[Dict[str, Any]]:
-    """Fetch CryptoPanic public news (no key needed for basic endpoint)."""
-    try:
-        # Public endpoint - no API key required
-        r = await client.get(
-            "https://cryptopanic.com/api/v1/posts/",
-            params={"auth_token": "demo", "public": "true", "limit": min(limit, 20)},
-            timeout=10.0,
-            follow_redirects=True
-        )
-        r.raise_for_status()
-        data = r.json()
-        posts = data.get("results", [])
-        result: List[Dict[str, Any]] = []
-        for idx, p in enumerate(posts[:limit]):
-            result.append({
-                "id": f"cp-{idx}",
-                "title": p.get("title", "Untitled"),
-                "url": p.get("url", "#"),
-                "source": "CryptoPanic",
-                "excerpt": p.get("metadata", {}).get("description", "")[:280] or p.get("title", ""),
-                "published_at": p.get("published_at", datetime.now(timezone.utc).isoformat()),
-                "image_url": "",
-                "category": p.get("currencies", [{}])[0].get("code", "market").lower() if p.get("currencies") else "market",
-                "credibility": "verified",
-                "sentiment": "bullish" if p.get("votes", {}).get("liked", 0) > p.get("votes", {}).get("disliked", 0) else "neutral",
-                "reading_time": 3,
-                "ai_score": round(7.5 + (hash(p.get("title", "")) % 25) / 10, 1),
-            })
-        return result
-    except Exception as e:
-        print(f"[News] CryptoPanic error: {e}")
-        return []
+# ─── Main Feed ────────────────────────────────────────────────────
 
-
-async def _fetch_ghost_posts(client: httpx.AsyncClient, limit: int = 10) -> List[Dict[str, Any]]:
-    """Fetch Ghost CMS posts if configured."""
-    ghost_key = os.getenv("GHOST_CONTENT_API_KEY", "")
-    ghost_url = os.getenv("GHOST_URL", "http://localhost:2368")
-    if not ghost_key:
-        return []
-    try:
-        r = await client.get(
-            f"{ghost_url}/ghost/api/content/posts/",
-            params={"key": ghost_key, "limit": limit, "fields": "title,url,published_at,excerpt,slug"},
-            timeout=10.0,
-            follow_redirects=True
-        )
-        r.raise_for_status()
-        data = r.json()
-        posts = data.get("posts", [])
-        result: List[Dict[str, Any]] = []
-        for idx, p in enumerate(posts[:limit]):
-            result.append({
-                "id": f"ghost-{idx}",
-                "title": p.get("title", "Untitled"),
-                "url": f"/ghost/{p.get('slug', '')}/",
-                "source": "RMI Blog",
-                "excerpt": p.get("excerpt", "")[:280],
-                "published_at": p.get("published_at", datetime.now(timezone.utc).isoformat()),
-                "image_url": "",
-                "category": "community",
-                "credibility": "verified",
-                "sentiment": "neutral",
-                "reading_time": 5,
-                "ai_score": 8.5,
-            })
-        return result
-    except Exception as e:
-        print(f"[News] Ghost error: {e}")
-        return []
-
-
-def _build_internal_news() -> List[Dict[str, Any]]:
-    """Internal RMI intelligence news."""
-    return [
-        {
-            "id": "internal-1",
-            "title": "SOSANA V2.0 Token Migration: Active Threat Detected",
-            "url": "/autopsy",
-            "source": "RMI Intel",
-            "excerpt": "Token migration contract showing suspicious ownership patterns and liquidity behavior. Devs retain mint authority.",
-            "published_at": (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat(),
-            "image_url": "",
-            "category": "security",
-            "credibility": "verified",
-            "sentiment": "bearish",
-            "reading_time": 3,
-            "ai_score": 9.7,
-        },
-        {
-            "id": "internal-2",
-            "title": "$12M USDC Moved to Binance — Whale Dump Signal",
-            "url": "/whale-watch",
-            "source": "RMI Intel",
-            "excerpt": "Whale wallet 0x2b7c...a44f transferred 12M USDC to Binance deposit. Historically correlated with major sell-offs.",
-            "published_at": (datetime.now(timezone.utc) - timedelta(hours=4)).isoformat(),
-            "image_url": "",
-            "category": "whale",
-            "credibility": "verified",
-            "sentiment": "bearish",
-            "reading_time": 2,
-            "ai_score": 8.9,
-        },
-        {
-            "id": "internal-3",
-            "title": "BONK Whale Accumulation Signals on Solana",
-            "url": "/whale-watch",
-            "source": "RMI Intel",
-            "excerpt": "Large wallet movements detected with unusual trading patterns emerging. Potential accumulation phase.",
-            "published_at": (datetime.now(timezone.utc) - timedelta(hours=6)).isoformat(),
-            "image_url": "",
-            "category": "whale",
-            "credibility": "verified",
-            "sentiment": "bullish",
-            "reading_time": 2,
-            "ai_score": 7.2,
-        },
-        {
-            "id": "internal-4",
-            "title": "New Pattern: Liquidity Lock Evasion on Base",
-            "url": "/patterns/proxy-evasion",
-            "source": "RMI Alpha",
-            "excerpt": "Devs using proxy contracts to bypass LP lock verification systems. 8 tokens flagged using this technique.",
-            "published_at": (datetime.now(timezone.utc) - timedelta(hours=8)).isoformat(),
-            "image_url": "",
-            "category": "alpha",
-            "credibility": "verified",
-            "sentiment": "neutral",
-            "reading_time": 4,
-            "ai_score": 9.1,
-        },
-        {
-            "id": "internal-5",
-            "title": "Solana Bundle Detection Alert — $240K Coordinated Dump",
-            "url": "/scanner",
-            "source": "RMI Scan",
-            "excerpt": "12 coordinated wallets detected selling in sequence within 90 seconds. Bundle probability: 97%.",
-            "published_at": (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat(),
-            "image_url": "",
-            "category": "security",
-            "credibility": "verified",
-            "sentiment": "bearish",
-            "reading_time": 2,
-            "ai_score": 9.8,
-        },
-    ]
-
-
-async def _fetch_all_news(limit: int = 50) -> List[Dict[str, Any]]:
-    """Fetch from all sources and merge, deduplicate, sort by recency."""
+@router.get("/feed", response_model=NewsFeedResponse)
+async def get_news_feed(
+    limit: int = Query(50, ge=1, le=200),
+    sentiment: Optional[str] = Query(None, description="bullish, bearish, neutral, slightly_bullish, slightly_bearish"),
+    source: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    tier: Optional[str] = Query(None, description="news, social, market, rmi, api"),
+    kind: Optional[str] = Query(None, description="external, internal, social, api"),
+    include_rss: bool = Query(True),
+    include_reddit: bool = Query(True),
+    include_internal: bool = Query(True),
+    refresh: bool = Query(False, description="Force refresh, bypass cache"),
+):
+    """Full aggregated news feed from all sources."""
     global _NEWS_CACHE, _CACHE_TS
 
-    # Return cached if fresh
-    if _NEWS_CACHE and _CACHE_TS and (datetime.now(timezone.utc) - _CACHE_TS) < _CACHE_TTL:
-        return _NEWS_CACHE
+    # Return cache if fresh
+    if not refresh and _NEWS_CACHE and _CACHE_TS and (datetime.now(timezone.utc) - _CACHE_TS) < _CACHE_TTL:
+        result = _NEWS_CACHE
+    else:
+        # Serve stale cache immediately while refreshing in background
+        if _NEWS_CACHE and not refresh:
+            result = _NEWS_CACHE
+            # Background refresh
+            asyncio.create_task(_refresh_cache(include_rss, include_reddit, include_internal))
+        else:
+            # First load or forced refresh — fetch inline but with limits
+            try:
+                from app.news_service import get_news_service
+                svc = get_news_service()
+                result = await svc.fetch_all(
+                    limit=200,
+                    include_rss=include_rss,
+                    include_reddit=include_reddit,
+                    include_internal=include_internal,
+                )
+                _NEWS_CACHE = result
+                _CACHE_TS = datetime.now(timezone.utc)
+            except Exception as e:
+                logger.error(f"News fetch failed: {e}")
+                if _NEWS_CACHE:
+                    result = _NEWS_CACHE
+                else:
+                    raise HTTPException(status_code=500, detail=f"News aggregation failed: {str(e)}")
 
-    async with httpx.AsyncClient() as client:
-        external, cryptopanic, ghost = await asyncio.gather(
-            _fetch_coingecko_news(client, limit=15),
-            _fetch_cryptopanic_news(client, limit=10),
-            _fetch_ghost_posts(client, limit=5),
-        )
+    articles = result.get("articles", [])
 
-    internal = _build_internal_news()
-    all_articles = external + cryptopanic + ghost + internal
+    # Apply filters
+    if sentiment:
+        articles = [a for a in articles if a.get("sentiment", "").lower() == sentiment.lower()]
+    if source:
+        articles = [a for a in articles if source.lower() in a.get("source", "").lower()]
+    if category:
+        articles = [a for a in articles if a.get("category", "").lower() == category.lower()]
+    if tier:
+        articles = [a for a in articles if a.get("tier", "").lower() == tier.lower()]
+    if kind:
+        articles = [a for a in articles if a.get("kind", "").lower() == kind.lower()]
 
-    # Deduplicate by URL
-    seen = set()
-    unique = []
-    for a in all_articles:
-        url = a.get("url", "")
-        if url and url != "#" and url in seen:
-            continue
-        seen.add(url)
-        unique.append(a)
+    articles = articles[:limit]
 
-    # Sort by recency (newest first)
-    def parse_ts(a: Dict) -> datetime:
-        try:
-            return datetime.fromisoformat(a.get("published_at", "2020-01-01").replace("Z", "+00:00"))
-        except Exception:
-            return datetime(2020, 1, 1, tzinfo=timezone.utc)
-    unique.sort(key=parse_ts, reverse=True)
+    # Enrich with comment counts
+    for a in articles:
+        aid = a.get("id", "")
+        a["comment_count"] = len(_COMMENTS.get(aid, []))
 
-    _NEWS_CACHE = unique[:limit]
-    _CACHE_TS = datetime.now(timezone.utc)
-    return _NEWS_CACHE
-
-# ─── API ENDPOINTS ────────────────────────────────────────────────────────
-
-@router.get("/combined", response_model=CombinedNewsResponse)
-async def get_combined_news(
-    limit: int = Query(50, ge=1, le=100),
-    sentiment: Optional[str] = Query(None, description="Filter by sentiment: bullish, bearish, neutral"),
-    source: Optional[str] = Query(None, description="Filter by source name"),
-    category: Optional[str] = Query(None, description="Filter by category"),
-):
-    """
-    Get combined news feed from all external + internal sources.
-    """
-    try:
-        articles = await _fetch_all_news(limit=100)
-
-        if sentiment:
-            articles = [a for a in articles if a.get("sentiment", "").lower() == sentiment.lower()]
-        if source:
-            articles = [a for a in articles if source.lower() in a.get("source", "").lower()]
-        if category:
-            articles = [a for a in articles if category.lower() in a.get("category", "").lower()]
-
-        articles = articles[:limit]
-
-        return CombinedNewsResponse(
-            status="success",
-            articles=[NewsArticle(**a) for a in articles],
-            total=len(articles),
-            sources=sorted(set(a.get("source", "") for a in articles)),
-            cached=bool(_NEWS_CACHE),
-            fetched_at=(_CACHE_TS or datetime.now(timezone.utc)).isoformat(),
-        )
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"News fetch failed: {str(e)}")
+    return NewsFeedResponse(
+        status="success",
+        articles=[NewsArticle(**a) for a in articles],
+        total=len(articles),
+        sources=result.get("sources", []),
+        source_count=result.get("source_count", 0),
+        sentiment_summary=result.get("sentiment_summary", {}),
+        tiers=result.get("tiers", []),
+        cached=bool(_NEWS_CACHE),
+        fetched_at=(_CACHE_TS or datetime.now(timezone.utc)).isoformat(),
+    )
 
 
-@router.get("/sources", response_model=List[str])
-async def get_news_sources():
-    """Get list of active news sources."""
-    articles = await _fetch_all_news(limit=100)
-    return sorted(set(a.get("source", "") for a in articles if a.get("source")))
-
-
-@router.get("/categories", response_model=List[str])
-async def get_news_categories():
-    """Get list of news categories."""
-    articles = await _fetch_all_news(limit=100)
-    return sorted(set(a.get("category", "general") for a in articles if a.get("category")))
-
-
-@router.get("/twitter")
-async def get_twitter_sentiment():
-    """Twitter sentiment summary (AI-analyzed)."""
-    return {
-        "sentiment": {
-            "positive": 63,
-            "neutral": 24,
-            "negative": 13,
-            "top_trends": ["#Solana", "#Bitcoin", "#AI", "#Web3", "#DeFi"]
-        },
-        "tweets": [
-            {
-                "id": "tw-1",
-                "text": "Just detected another $SOL bundle dump — 14 wallets coordinating. RMI flagged it before it happened. This is why we built this.",
-                "author": "@CryptoRugMunch",
-                "handle": "CryptoRugMunch",
-                "timestamp": (datetime.now(timezone.utc) - timedelta(minutes=45)).isoformat(),
-                "likes": 1240,
-                "reposts": 389,
-                "replies": 67,
-            },
-            {
-                "id": "tw-2",
-                "text": "New honeypot pattern on Base: contracts that look renounced but actually have hidden upgrade paths. Stay safe out there.",
-                "author": "@CryptoRugMunch",
-                "handle": "CryptoRugMunch",
-                "timestamp": (datetime.now(timezone.utc) - timedelta(hours=3)).isoformat(),
-                "likes": 892,
-                "reposts": 445,
-                "replies": 102,
-            },
-            {
-                "id": "tw-3",
-                "text": "Our AI syndicate is now tracking 1.2M wallet addresses across 8 chains. The more you feed it, the smarter it gets.",
-                "author": "@CryptoRugMunch",
-                "handle": "CryptoRugMunch",
-                "timestamp": (datetime.now(timezone.utc) - timedelta(hours=8)).isoformat(),
-                "likes": 2100,
-                "reposts": 1200,
-                "replies": 234,
-            },
-        ]
-    }
-
+# ─── Headlines ────────────────────────────────────────────────────
 
 @router.get("/headlines")
-async def get_headlines(count: int = Query(10, ge=1, le=50)):
-    """Top headlines only."""
-    articles = await _fetch_all_news(limit=count)
+async def get_headlines(
+    count: int = Query(10, ge=1, le=50),
+    category: Optional[str] = Query(None),
+):
+    """Top headlines only — fast, lightweight."""
+    feed = await get_news_feed(limit=count, category=category, include_reddit=False)
     return {
         "headlines": [
             {
-                "title": a.get("title", ""),
-                "url": a.get("url", ""),
-                "source": a.get("source", ""),
-                "published_at": a.get("published_at", ""),
-                "category": a.get("category", ""),
-                "kind": "external" if a.get("source") != "RMI Intel" else "internal",
-                "highlight": a.get("ai_score", 0) >= 9.0,
+                "title": a.title,
+                "url": a.url,
+                "source": a.source,
+                "published_at": a.published_at,
+                "category": a.category,
+                "sentiment": a.sentiment,
+                "kind": a.kind,
             }
-            for a in articles[:count]
+            for a in feed.articles[:count]
         ],
-        "count": len(articles[:count]),
+        "count": len(feed.articles[:count]),
     }
+
+
+# ─── Sources ──────────────────────────────────────────────────────
+
+@router.get("/sources")
+async def get_news_sources():
+    """Get all active news sources."""
+    feed = await get_news_feed(limit=200, refresh=False)
+    sources = {}
+    for a in feed.articles:
+        src = a.source
+        sources[src] = sources.get(src, 0) + 1
+
+    return {
+        "sources": [
+            {"name": name, "article_count": count, "tier": a.tier if hasattr(a, 'tier') else "unknown"}
+            for name, count in sorted(sources.items(), key=lambda x: -x[1])
+            for a in [next((art for art in feed.articles if art.source == name), None)]
+        ],
+        "total_sources": len(sources),
+    }
+
+
+# ─── Sentiment ────────────────────────────────────────────────────
+
+@router.get("/sentiment")
+async def get_sentiment():
+    """Real-time sentiment overview from current news feed."""
+    feed = await get_news_feed(limit=200, refresh=False)
+    return {
+        "sentiment": feed.sentiment_summary,
+        "sample_size": feed.total,
+        "fetched_at": feed.fetched_at,
+        "trending": [
+            a.title for a in feed.articles[:5]
+            if a.sentiment in ("bullish", "bearish")
+        ],
+    }
+
+
+# ─── Categories ───────────────────────────────────────────────────
+
+@router.get("/categories")
+async def get_categories():
+    """Get all news categories with counts."""
+    feed = await get_news_feed(limit=200, refresh=False)
+    cats = {}
+    for a in feed.articles:
+        cat = a.category or "general"
+        cats[cat] = cats.get(cat, 0) + 1
+    return {
+        "categories": [{"name": n, "count": c} for n, c in sorted(cats.items(), key=lambda x: -x[1])],
+    }
+
+
+# ─── Stats ────────────────────────────────────────────────────────
+
+@router.get("/stats")
+async def get_stats():
+    """Aggregate statistics about the news pipeline."""
+    feed = await get_news_feed(limit=200, refresh=False)
+    source_counts = {}
+    tier_counts = {}
+    for a in feed.articles:
+        src = a.source or "unknown"
+        source_counts[src] = source_counts.get(src, 0) + 1
+        t = a.tier or "unknown"
+        tier_counts[t] = tier_counts.get(t, 0) + 1
+
+    return {
+        "total_articles": feed.total,
+        "total_sources": feed.source_count,
+        "sentiment": feed.sentiment_summary,
+        "source_breakdown": dict(sorted(source_counts.items(), key=lambda x: -x[1])[:20]),
+        "tier_breakdown": tier_counts,
+        "fetched_at": feed.fetched_at,
+    }
+
+
+# ─── Comments / Social ────────────────────────────────────────────
+
+@router.post("/comment", response_model=CommentResponse)
+async def post_comment(req: CommentRequest):
+    """Post a comment on any news article."""
+    if not req.article_id or not req.content.strip():
+        raise HTTPException(status_code=400, detail="article_id and content required")
+
+    comment = {
+        "id": _make_comment_id(req.article_id, req.content),
+        "article_id": req.article_id,
+        "author": req.author[:50] or "anon",
+        "content": req.content[:2000],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "parent_id": req.parent_id,
+        "likes": 0,
+    }
+
+    if req.article_id not in _COMMENTS:
+        _COMMENTS[req.article_id] = []
+    _COMMENTS[req.article_id].append(comment)
+
+    return CommentResponse(**comment)
+
+
+@router.get("/comments/{article_id}", response_model=List[CommentResponse])
+async def get_comments(article_id: str):
+    """Get comments for a specific article."""
+    comments = _COMMENTS.get(article_id, [])
+    return [CommentResponse(**c) for c in sorted(comments, key=lambda x: x["created_at"])]
+
+
+# ─── Internal: for cron jobs to post scanner findings as news ─────
+
+@router.post("/internal/scanner-alert")
+async def post_scanner_alert(token_name: str, chain: str, risk_score: float,
+                              address: str, flags: str = ""):
+    """Internal endpoint for cron jobs to inject scanner findings into news feed."""
+    global _NEWS_CACHE
+    content_hash = hashlib.md5(f"internal:{address}:{chain}".encode()).hexdigest()
+    article = {
+        "id": f"rmi-{content_hash[:12]}",
+        "title": f"RMI Scanner: {token_name} ({chain.upper()}) — Risk {risk_score}/100",
+        "url": f"https://rugmunch.io/scanner?address={address}&chain={chain}",
+        "description": f"Scanner detected {token_name} on {chain}. Risk: {risk_score}/100. Flags: {flags}. Address: {address}",
+        "source": "RMI Scanner",
+        "published_at": datetime.now(timezone.utc).isoformat(),
+        "category": "security",
+        "sentiment": "bearish" if risk_score > 50 else "neutral",
+        "kind": "internal",
+        "tier": "rmi",
+        "risk_score": risk_score,
+        "token_address": address,
+        "chain": chain,
+    }
+    # Prepend to cache
+    if _NEWS_CACHE:
+        _NEWS_CACHE["articles"] = [article] + _NEWS_CACHE.get("articles", [])
+        _NEWS_CACHE["total"] = len(_NEWS_CACHE["articles"])
+    return {"status": "injected", "id": article["id"]}

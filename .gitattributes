@@ -8,3 +8,7 @@
 data/etherscan_combined_labels.csv filter=lfs diff=lfs merge=lfs -text
 data/wallet-labels/*.csv filter=lfs diff=lfs merge=lfs -text
 data/wallet-labels-clean/**/*.csv filter=lfs diff=lfs merge=lfs -text
+data/wallet-labels/** filter=lfs diff=lfs merge=lfs -text
+data/wallet-labels-clean/** filter=lfs diff=lfs merge=lfs -text
+data/models/** filter=lfs diff=lfs merge=lfs -text
+data/wallet_labels_master.json filter=lfs diff=lfs merge=lfs -text
