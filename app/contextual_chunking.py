@@ -84,6 +84,18 @@ class ChunkedDocument:
 # CHUNKING
 # ══════════════════════════════════════════════════════════════════════
 
+def _is_solidity(text: str) -> bool:
+    """Detect if text is a Solidity smart contract."""
+    indicators = [
+        "pragma solidity",
+        "contract ",
+        "function ",
+        "// SPDX-License-Identifier",
+    ]
+    head = text[:500].lower()
+    return any(ind in head for ind in indicators)
+
+
 def chunk_document(
     text: str,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
@@ -95,9 +107,28 @@ def chunk_document(
     Split document into overlapping chunks.
     When respect_boundaries=True, splits at paragraph/sentence boundaries
     near the target chunk_size instead of cutting mid-sentence.
+
+    For Solidity smart contracts, uses AST-aware chunking (function/contract
+    boundaries) instead of character-level splits. Critical for code security
+    analysis where splitting a function breaks its logic.
     """
     if not text or len(text) <= chunk_size:
         return [Chunk(index=0, content=text)]
+
+    # ── Solidity AST-aware chunking ──
+    if _is_solidity(text):
+        try:
+            from app.solidity_chunker import chunk_solidity_ast
+            ast_chunks = chunk_solidity_ast(text)
+            if ast_chunks:
+                return [
+                    Chunk(index=i, content=c)
+                    for i, c in enumerate(ast_chunks[:max_chunks])
+                ]
+        except ImportError:
+            pass
+        except Exception:
+            pass
 
     chunks = []
     start = 0

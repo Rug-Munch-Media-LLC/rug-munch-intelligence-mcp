@@ -2,28 +2,27 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# System deps + solc (Solidity compiler for slither)
+# System deps + solc + Foundry (consolidated for smaller layer)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc libpq-dev curl git && \
-    rm -rf /var/lib/apt/lists/*
+    gcc libpq-dev curl git ca-certificates && \
+    rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
-# Install solc (Solidity compiler)
-RUN curl -L https://github.com/ethereum/solidity/releases/download/v0.8.26/solc-static-linux -o /usr/local/bin/solc && \
+# Solidity compiler (kept — used by contract scanners)
+RUN curl -sL https://github.com/ethereum/solidity/releases/download/v0.8.26/solc-static-linux -o /usr/local/bin/solc && \
     chmod +x /usr/local/bin/solc
 
-# Install Foundry (cast, forge)
-RUN curl -L https://foundry.paradigm.xyz | bash && \
+# Foundry (cast, forge) — EVM contract analysis
+RUN curl -sL https://foundry.paradigm.xyz | bash && \
     export PATH="$HOME/.foundry/bin:$PATH" && \
     foundryup
 
-# Python deps
+# Python deps (ordered for layer caching: requirements first, then app)
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir slither-analyzer && \
+    rm -rf /root/.cache/pip
 
-# Install slither
-RUN pip install --no-cache-dir slither-analyzer
-
-# Copy app
+# Copy app (HF models excluded via .dockerignore — they download at runtime)
 COPY . .
 
 # Health check

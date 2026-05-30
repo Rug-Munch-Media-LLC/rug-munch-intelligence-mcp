@@ -311,10 +311,8 @@ class ScamIngestionPipeline:
             return {"status": "skipped", "reason": "rate limited", "last_run": self._last_run.isoformat()}
 
         from app.crypto_embeddings import get_embedder
-        from app.supabase_vector import get_vector_store
 
         embedder = await get_embedder()
-        vector_store = await get_vector_store()
 
         stats = {"sources": {}, "total": 0, "errors": 0}
 
@@ -322,7 +320,21 @@ class ScamIngestionPipeline:
             try:
                 docs = await ingest_fn(embedder)
                 if docs:
-                    count = await vector_store.insert_batch(docs)
+                    # Ingest via Redis + FAISS (pgvector removed)
+                    from app.rag_service import ingest_document
+                    count = 0
+                    for doc in docs:
+                        try:
+                            meta = doc.get("metadata", {})
+                            meta["source"] = doc.get("source", source_name)
+                            await ingest_document(
+                                collection=doc.get("collection", "known_scams"),
+                                content=doc.get("content", ""),
+                                metadata=meta,
+                            )
+                            count += 1
+                        except Exception:
+                            pass
                     stats["sources"][source_name] = count
                     stats["total"] += count
                     logger.info(f"Ingested {count} docs from {source_name}")
@@ -334,12 +346,8 @@ class ScamIngestionPipeline:
         self._last_run = datetime.now(timezone.utc)
         self._total_ingested += stats["total"]
 
-        # Build index after bulk ingestion
-        if stats["total"] > 50:
-            try:
-                await vector_store.build_index()
-            except Exception:
-                pass
+        # FAISS indexes are built from Redis automatically
+        # when first search hits each collection — no manual build needed.
 
         return {
             "status": "completed",

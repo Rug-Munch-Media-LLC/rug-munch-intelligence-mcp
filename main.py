@@ -184,6 +184,20 @@ async def _startup():
     except Exception as e:
         print(f"[WARN] RAG model warmup failed: {e}")
 
+    # Pre-warm FAISS indexes from disk
+    try:
+        from app.ann_index import get_ann_index
+        ann = get_ann_index()
+        _loaded = 0
+        for coll in ["known_scams", "wallet_profiles", "forensic_reports",
+                      "scam_patterns", "token_analysis", "contract_audits", "market_intel"]:
+            if ann._load_from_disk(coll):
+                _loaded += 1
+        if _loaded > 0:
+            print(f"[INFO] FAISS indexes pre-loaded: {_loaded} collections from disk")
+    except Exception as e:
+        print(f"[WARN] FAISS pre-load skipped: {e}")
+
     # Pre-warm Knowledge Graph for high-value collections (Pillar 3)
     try:
         from app.knowledge_graph import build_graph_from_rag
@@ -218,6 +232,10 @@ async def _startup():
 
 from app.email_router import router as email_router
 app.include_router(email_router)
+from app.rag_endpoints import router as rag_router
+app.include_router(rag_router)
+from app.content_router import router as content_router
+app.include_router(content_router)
 from app.mail_dashboard import router as mail_router
 app.include_router(mail_router)
 

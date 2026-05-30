@@ -64,8 +64,11 @@ class CrossEncoderReranker:
         # Do NOT call _load_model here — lazy-load on first use.
         self._model: Optional[CrossEncoder] = None
         self._model_loaded: bool = False
+        self._model_type: str = "none"  # "onnx", "fp32", or "none"
         self._load_time_secs: Optional[float] = None
         self._memory_estimate_mb: Optional[float] = None
+        self._tokenizer = None  # for ONNX path
+        self._onnx_session = None  # for ONNX path
 
     # -----------------------------------------------------------------------
     # Singleton accessor
@@ -89,17 +92,60 @@ class CrossEncoderReranker:
     def _load_model(self) -> None:
         """Synchronously load the cross-encoder model into memory.
 
-        Called lazily on first inference or eagerly via ``warm_up()``.
+        Prefers ONNX INT8 quantized model if available (~500MB, 2-3x faster).
+        Falls back to fp32 CrossEncoder from sentence-transformers.
         """
         if self._model_loaded:
             return
 
-        logger.info("Loading cross-encoder model '%s' (CPU) …", _MODEL_NAME)
+        # Check for quantized ONNX model first
+        import os as _os
+        _onnx_path = "/app/data/models/bge-reranker-v2-m3-onnx"
+        _onnx_model = _os.path.join(_onnx_path, "model.onnx")
+
+        if _os.path.exists(_onnx_model):
+            logger.info("Loading quantized ONNX reranker from %s …", _onnx_path)
+            start = time.perf_counter()
+            try:
+                from optimum.onnxruntime import ORTModelForSequenceClassification
+                from transformers import AutoTokenizer
+                import onnxruntime as ort
+
+                # Use CPU execution provider
+                self._tokenizer = AutoTokenizer.from_pretrained(_onnx_path)
+                self._onnx_session = ort.InferenceSession(
+                    _onnx_model,
+                    providers=["CPUExecutionProvider"],
+                )
+                self._model_type = "onnx"
+            except ImportError:
+                logger.warning("ONNX model found but optimum not installed. Falling back to fp32.")
+                self._load_fp32_model()
+                return
+
+            elapsed = time.perf_counter() - start
+            self._load_time_secs = round(elapsed, 2)
+            self._model_loaded = True
+            self._memory_estimate_mb = 500.0  # approximate for INT8 quantized
+
+            logger.info(
+                "ONNX reranker loaded in %.2fs (~500 MB INT8)",
+                elapsed,
+            )
+            return
+
+        # Fallback: load full fp32 model
+        self._load_fp32_model()
+
+    def _load_fp32_model(self) -> None:
+        """Load the full fp32 cross-encoder (2.1 GB, ~45s)."""
+        logger.info("Loading cross-encoder model '%s' (CPU, fp32) …", _MODEL_NAME)
         start = time.perf_counter()
         self._model = CrossEncoder(_MODEL_NAME, device="cpu")
         elapsed = time.perf_counter() - start
         self._load_time_secs = round(elapsed, 2)
         self._model_loaded = True
+        self._model_type = "fp32"
 
         # Rough memory estimate: parameter count * 4 bytes (fp32)
         try:
@@ -108,7 +154,7 @@ class CrossEncoderReranker:
             )
             self._memory_estimate_mb = round(total_params * 4 / (1024 * 1024), 1)
         except Exception:
-            self._memory_estimate_mb = 420.0  # known approximate size for bge-reranker-v2-m3
+            self._memory_estimate_mb = 420.0
 
         logger.info(
             "Cross-encoder model loaded in %.2fs (~%.0f MB parameters in fp32)",
@@ -155,8 +201,36 @@ class CrossEncoderReranker:
     def _score_pairs(self, query: str, texts: List[str]) -> List[float]:
         """Score (query, text) pairs via the cross-encoder in one forward pass.
 
+        Uses ONNX Runtime if quantized model is loaded, else sentence-transformers.
         Returns raw cross-encoder scores (one per text).
         """
+        if self._model_type == "onnx" and self._onnx_session:
+            import numpy as np
+            scores = []
+            for text in texts:
+                inputs = self._tokenizer(
+                    query, text,
+                    return_tensors="np",
+                    truncation=True,
+                    max_length=512,
+                    padding=True,
+                )
+                ort_inputs = {
+                    "input_ids": inputs["input_ids"],
+                    "attention_mask": inputs["attention_mask"],
+                }
+                # Some ONNX models also expect token_type_ids
+                if "token_type_ids" in inputs:
+                    ort_inputs["token_type_ids"] = inputs["token_type_ids"]
+
+                outputs = self._onnx_session.run(None, ort_inputs)
+                logits = outputs[0]
+                # Cross-encoder output: logit for positive class
+                score = float(logits[0][0]) if logits.ndim > 1 else float(logits[0])
+                scores.append(score)
+            return scores
+
+        # Fallback: sentence-transformers
         pairs = [(query, t) for t in texts]
         scores: List[float] = self._model.predict(pairs, batch_size=len(pairs)).tolist()
         return scores

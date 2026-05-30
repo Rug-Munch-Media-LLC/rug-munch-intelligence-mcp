@@ -33,3 +33,6 @@ n8n-data/
 !*.example.json
 !actor.json
 !package*.jsondata/faiss/
+data/bm25_index.pkl
+data/faiss/
+data/models/

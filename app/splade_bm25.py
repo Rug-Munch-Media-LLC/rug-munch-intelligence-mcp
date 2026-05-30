@@ -198,6 +198,49 @@ class BM25Index:
             total_len = sum(self.doc_lengths.values())
             self.avg_dl = total_len / self.doc_count if self.doc_count else 1.0
         self._built = True
+
+    def save(self, path: str):
+        """Persist BM25 index to disk via pickle."""
+        import pickle, os
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as f:
+            pickle.dump({
+                "k1": self.k1, "b": self.b, "epsilon": self.epsilon,
+                "doc_count": self.doc_count, "avg_dl": self.avg_dl,
+                "doc_lengths": self.doc_lengths,
+                "doc_tokens": dict(self.doc_tokens),
+                "df": dict(self.df),
+                "_built": self._built,
+                "_metadata": getattr(self, "_metadata", {}),
+                "_raw_content": getattr(self, "_raw_content", {}),
+            }, f)
+        logger.info(f"BM25 index persisted to {path} ({os.path.getsize(path)/1024/1024:.1f}MB)")
+
+    @classmethod
+    def load(cls, path: str) -> Optional["BM25Index"]:
+        """Load BM25 index from disk."""
+        import pickle, os
+        if not os.path.exists(path):
+            return None
+        try:
+            with open(path, "rb") as f:
+                data = pickle.load(f)
+            idx = cls(k1=data["k1"], b=data["b"], epsilon=data["epsilon"])
+            idx.doc_count = data["doc_count"]
+            idx.avg_dl = data["avg_dl"]
+            idx.doc_lengths = data["doc_lengths"]
+            idx.doc_tokens = data["doc_tokens"]
+            idx.df = Counter(data["df"])
+            idx._built = data["_built"]
+            if data.get("_metadata"):
+                idx._metadata = data["_metadata"]
+            if data.get("_raw_content"):
+                idx._raw_content = data["_raw_content"]
+            logger.info(f"BM25 index loaded from disk: {idx.doc_count} docs, {len(idx.df)} terms")
+            return idx
+        except Exception as e:
+            logger.warning(f"Failed to load BM25 from disk: {e}")
+            return None
     
     def idf(self, token: str) -> float:
         """Compute IDF for a token."""
@@ -425,21 +468,49 @@ _BM25_TTL = 3600  # Rebuild every hour
 _bm25_lock = asyncio.Lock()
 
 async def get_bm25_index(force_rebuild: bool = False) -> BM25Index:
-    """Get or build the BM25 index (cached for 1 hour)."""
+    """Get or build the BM25 index (persisted to disk, 1h TTL in memory)."""
     global _bm25_index, _bm25_built_at
-    import time
-    
+    import time, os
+
+    BM25_PATH = "/app/data/bm25_index.pkl"
+
     now = time.time()
     if _bm25_index and not force_rebuild and (now - _bm25_built_at) < _BM25_TTL:
         return _bm25_index
-    
+
     async with _bm25_lock:
-        # Double-check after acquiring lock (another coroutine may have built it)
         if _bm25_index and not force_rebuild and (time.time() - _bm25_built_at) < _BM25_TTL:
             return _bm25_index
+
+        # Try loading from disk first
+        if os.path.exists(BM25_PATH) and not force_rebuild:
+            loaded = await asyncio.get_running_loop().run_in_executor(
+                None, BM25Index.load, BM25_PATH
+            )
+            if loaded and loaded.doc_count > 0:
+                _bm25_index = loaded
+                _bm25_built_at = time.time()
+                logger.info(f"BM25 loaded from disk: {loaded.doc_count} docs (skipped {time.time()-now:.1f}s rebuild)")
+                return _bm25_index
+
+        # Build from Redis and persist
         _bm25_index = await build_bm25_from_redis()
         _bm25_built_at = time.time()
+
+        # Persist to disk in background
+        if _bm25_index.doc_count > 0:
+            asyncio.create_task(_save_bm25_async(BM25_PATH))
+
         return _bm25_index
+
+
+async def _save_bm25_async(path: str):
+    """Save BM25 index to disk in executor thread."""
+    try:
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, _bm25_index.save, path)
+    except Exception as e:
+        logger.debug(f"BM25 disk save failed (non-critical): {e}")
 
 
 async def bm25_search(

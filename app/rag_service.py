@@ -232,17 +232,10 @@ async def ingest_document(
     except Exception as e:
         logger.debug(f"KG edge creation skipped: {e}")
 
-    # pgvector upsert
-    try:
-        from app.supabase_vector import get_vector_store
-        store = await get_vector_store()
-        await store.insert(
-            doc_id=doc_id, collection=collection, embedding=result.vector,
-            content=content, metadata=metadata,
-        )
-        logger.debug("pgvector upsert complete")
-    except Exception as e:
-        logger.debug(f"pgvector upsert skipped: {e}")
+    # pgvector disabled — FAISS + Redis are the primary vector stores.
+    # Supabase pgvector was a migration artifact consuming 500MB of free-tier quota.
+    # All vector search goes through FAISS ANN → Redis hydration.
+    logger.debug("pgvector upsert skipped (FAISS primary)")
 
     logger.info(f"Ingested {collection}/{doc_id}: {content[:60]}...")
     return {"id": doc_id, "dims": result.dims, "collection": collection}
@@ -343,26 +336,14 @@ async def search_similar(
                 enriched = await _enrich_ann_results(collection, needs_enrich) if needs_enrich else []
                 results = [r for r in ann_results if "content" in r] + enriched
         else:
-            # FAISS not built — try pgvector as primary ANN store
-            from app.supabase_vector import get_vector_store
-            store = await get_vector_store()
-            if store._table_ready:
-                pg_results = await store.search(
-                    query_embedding=query_vec,
-                    collection=collection,
-                    limit=limit,
-                    min_similarity=min_similarity,
-                )
-                if pg_results:
-                    # Enrich pgvector results that lack content
-                    needs_enrich = [r for r in pg_results if "content" not in r or not r.get("content")]
-                    if needs_enrich:
-                        enriched = await _enrich_ann_results(collection, needs_enrich)
-                        enriched_ids = {r.get("id") for r in enriched}
-                        results = [r for r in pg_results if r.get("id") not in enriched_ids] + enriched
-                    else:
-                        results = pg_results
-                    logger.info(f"pgvector search: {len(results)} results from {collection}")
+            # FAISS not built — fall back to embedder brute-force search
+            logger.info(f"FAISS not built for {collection}, using brute-force fallback")
+            results = await embedder.search(
+                query=query,
+                collection=collection,
+                limit=limit,
+                min_similarity=min_similarity,
+            )
     except Exception as e:
         logger.warning(f"ANN/pgvector search failed, falling back to brute-force: {e}")
         # 3. Fallback to embedder brute-force search
@@ -746,6 +727,17 @@ async def three_pillar_search(
     # Final trim
     final_results = fused[:limit]
 
+    # ── Confidence scoring ──
+    confidence = None
+    try:
+        from app.confidence import score_confidence
+        entity_list = list(entity_doc_ids)[:5] if entity_doc_ids else []
+        confidence = score_confidence(final_results, query=query, entity_matches=entity_list)
+    except ImportError:
+        logger.debug("Confidence module not available")
+    except Exception as e:
+        logger.debug(f"Confidence scoring failed (non-critical): {e}")
+
     return {
         "results": final_results,
         "pillar_summary": {
@@ -767,6 +759,7 @@ async def three_pillar_search(
         "query_type": query_type,
         "fusion_weights": {"dense": w_dense, "sparse": w_sparse, "entity": w_entity},
         "collections": collections,
+        "confidence": confidence,
     }
 
 
