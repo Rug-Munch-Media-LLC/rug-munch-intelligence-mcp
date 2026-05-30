@@ -36,3 +36,7 @@ n8n-data/
 data/bm25_index.pkl
 data/faiss/
 data/models/
+data/faiss/
+data/bm25_index.pkl
+data/models/
+.env.bak
