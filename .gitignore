@@ -32,4 +32,4 @@ n8n-data/
 *.json
 !*.example.json
 !actor.json
-!package*.json
+!package*.jsondata/faiss/
