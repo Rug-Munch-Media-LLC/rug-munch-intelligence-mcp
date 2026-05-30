@@ -1,0 +1,55 @@
+{
+  "generated_at": "2026-05-30T17:08:40.742117",
+  "total_labels": 154320,
+  "chains": {
+    "solana": 103260,
+    "ethereum": 58385
+  },
+  "sources": {
+    "solana_cex": 100000,
+    "solana_dapp": 1787,
+    "solana_defi": 1472,
+    "etherscan_combined": 43583,
+    "etherscan_malicious": 7259,
+    "exchange": 218,
+    "dex": 18,
+    "icowallets": 74,
+    "mining": 62,
+    "walletapp": 5,
+    "exchanges_cluster": 243,
+    "phishing_scams": 6205,
+    "malicious_smart_contracts": 719
+  },
+  "entity_types": {
+    "exchange": 100633,
+    "dapp": 1840,
+    "defi": 1718,
+    "unknown": 36519,
+    "liquidity_pool": 1082,
+    "exploiter": 3204,
+    "wrapped_token": 224,
+    "bridge": 268,
+    "nft": 355,
+    "ico_wallet": 196,
+    "dex": 394,
+    "mining_pool": 140,
+    "router": 115,
+    "oracle": 112,
+    "yield_farm": 193,
+    "staking": 196,
+    "lending": 36,
+    "governance": 110,
+    "stablecoin": 49,
+    "gaming": 20,
+    "scam": 14,
+    "phishing_scam": 6244,
+    "malicious": 7978,
+    "wallet_app": 5
+  },
+  "dupes_resolved": 7325,
+  "files": [
+    "wallet_labels_solana.csv",
+    "wallet_labels_ethereum.csv",
+    "wallet_labels_master.json"
+  ]
+}

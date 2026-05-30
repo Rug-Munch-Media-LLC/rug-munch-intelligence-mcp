@@ -40,10 +40,4 @@ data/faiss/
 data/bm25_index.pkl
 data/models/
 .env.bak
-data/wallet-labels-clean/
 # Large data files (excluded from HF mirror — 10+ MB each)
-data/wallet-labels/
-data/wallet-labels-clean/
-data/etherscan_combined_labels.csv
-data/wallet-labels-clean/
-data/papers/
