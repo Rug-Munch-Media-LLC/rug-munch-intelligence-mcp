@@ -1920,8 +1920,10 @@ async def _check_chainaware(token_address: str, chain: str) -> Optional[Dict[str
     68% accuracy detecting rug pulls from behavioral patterns alone.
     Complements contract-analysis approaches by catching scammers who
     obfuscate code but can't fake 3 years of legitimate activity.
-    Free tier: 20 API calls/day. API key: CHAINAWARE_API_KEY env var.
-    Cost: $0 (free tier).
+    Free tier: 20 API calls/day → currently on 2-week Business trial (3500 checks each: fraud/audit/rug-pull).
+    API key: CHAIN_AWARE_API_KEY env var.
+    Endpoint: business.api.chainaware.ai/rug/pull-check (REST).
+    Cost: $0 (trial).
     """
     api_key = os.getenv("CHAIN_AWARE_API_KEY", "")
     if not api_key:
@@ -1933,57 +1935,55 @@ async def _check_chainaware(token_address: str, chain: str) -> Optional[Dict[str
                 "ethereum": "ETH", "bsc": "BNB", "base": "BASE",
                 "polygon": "POLYGON", "tron": "TRON", "haqq": "HAQQ",
             }
-            cw_chain = chain_map.get(chain, "ETH") if chain not in ("ETH", "BNB", "BASE", "HAQQ") else chain.upper()
-            if cw_chain not in ("ETH", "BNB", "BASE", "HAQQ"):
+            cw_chain = chain_map.get(chain.lower(), chain.upper() if chain.upper() in ("ETH", "BNB", "BASE", "HAQQ", "POLYGON", "TRON") else None)
+            if not cw_chain:
                 return None  # Chain not supported
             
-            # Try MCP SSE endpoint for predictive_rug_pull
-            # Falls back to REST if MCP unavailable
             result = await asyncio.wait_for(
                 client.post(
-                    "https://prediction.mcp.chainaware.ai/sse",
+                    "https://business.api.chainaware.ai/rug/pull-check",
                     headers={
-                        "Content-Type": "application/json",
                         "X-API-Key": api_key,
+                        "Content-Type": "application/json",
                     },
                     json={
-                        "jsonrpc": "2.0",
-                        "method": "tools/call",
-                        "params": {
-                            "name": "predictive_rug_pull",
-                            "arguments": {
-                                "apiKey": api_key,
-                                "network": cw_chain,
-                                "walletAddress": token_address,
-                            }
-                        },
-                        "id": 1,
+                        "network": cw_chain,
+                        "walletAddress": token_address,
                     },
                 ),
                 timeout=12.0,
             )
-            if result.status_code == 200:
-                data = result.json()
-                content = data.get("result", {}).get("content", [])
-                text_result = ""
-                for item in content:
-                    if isinstance(item, dict) and item.get("type") == "text":
-                        text_result = item.get("text", "")
-                        break
-                if text_result:
-                    import json as _j
-                    try:
-                        parsed = _j.loads(text_result)
-                        return {
-                            "status": parsed.get("status", "Unknown"),
-                            "probability_fraud": parsed.get("probabilityFraud"),
-                            "contract_address": parsed.get("contractAddress"),
-                            "last_checked": parsed.get("lastChecked"),
-                            "data_source": "chainaware_ai",
-                        }
-                    except _j.JSONDecodeError:
-                        return {"raw_response": text_result[:500], "data_source": "chainaware_ai"}
-            return None
+            
+            if result.status_code != 200:
+                logger.debug(f"ChainAware: {result.status_code}")
+                return None
+            
+            data = result.json()
+            if data.get("message") != "Success":
+                return None
+            
+            risk_indicators = data.get("risk_indicators", {})
+            
+            return {
+                "risk_score": data.get("risk_score"),
+                "risk_status": data.get("risk_status", "Unknown"),
+                "probability_fraud": data.get("probabilityFraud"),
+                "status": data.get("status", "Unknown"),
+                "is_honeypot": bool(risk_indicators.get("is_honeypot", 0)),
+                "is_mintable": bool(risk_indicators.get("is_mintable", 0)),
+                "hidden_owner": bool(risk_indicators.get("hidden_owner", 0)),
+                "is_proxy": bool(risk_indicators.get("is_proxy", 0)),
+                "is_open_source": bool(risk_indicators.get("is_open_source", 0)),
+                "buy_tax": risk_indicators.get("buy_tax", 0),
+                "sell_tax": risk_indicators.get("sell_tax", 0),
+                "holder_count": risk_indicators.get("holder_count"),
+                "lp_holder_count": risk_indicators.get("lp_holder_count"),
+                "creator_percent": risk_indicators.get("creator_percent", 0),
+                "contract_name": data.get("contractName", ""),
+                "contract_creator": data.get("contractCreatorAddress", ""),
+                "last_checked": data.get("lastChecked"),
+                "data_source": "chainaware_rest",
+            }
     except (asyncio.TimeoutError, Exception) as e:
         logger.warning(f"ChainAware check failed for {token_address[:8]}...: {e}")
         return None
@@ -3029,7 +3029,10 @@ async def scan_token(
     if isinstance(chainaware_data, dict):
         scan.confidence = min(100, scan.confidence + 15)
         prob = chainaware_data.get("probability_fraud")
+        risk_score = chainaware_data.get("risk_score")
         status = chainaware_data.get("status", "")
+        
+        # Primary: probability_fraud (0-1 scale)
         if prob is not None:
             if prob >= 0.81:
                 safety = max(0, safety - 50)
@@ -3041,10 +3044,24 @@ async def scan_token(
                 safety = max(0, safety - 10)
                 scan.risk_flags.append("CHAINAWARE_MEDIUM_RUG_RISK")
             else:
-                scan.confidence = min(100, scan.confidence + 5)  # Low risk = higher confidence
+                scan.confidence = min(100, scan.confidence + 5)
         elif status == "Fraud":
             safety = max(0, safety - 25)
             scan.risk_flags.append("CHAINAWARE_FRAUD")
+        
+        # Secondary: risk indicators from REST API
+        if chainaware_data.get("is_honeypot"):
+            safety = max(0, safety - 35)
+            scan.risk_flags.append("CHAINAWARE_HONEYPOT")
+        if chainaware_data.get("is_mintable"):
+            safety = max(0, safety - 15)
+            scan.risk_flags.append("CHAINAWARE_MINTABLE")
+        if chainaware_data.get("hidden_owner"):
+            safety = max(0, safety - 20)
+            scan.risk_flags.append("CHAINAWARE_HIDDEN_OWNER")
+        if chainaware_data.get("creator_percent", 0) > 50:
+            safety = max(0, safety - 20)
+            scan.risk_flags.append("CHAINAWARE_HIGH_CREATOR_PCT")
     
     # Blowfish transaction simulation
     if isinstance(blowfish_data, dict):
