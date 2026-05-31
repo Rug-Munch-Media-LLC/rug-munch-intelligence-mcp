@@ -2284,6 +2284,58 @@ async def _check_fear_greed() -> Optional[Dict[str, Any]]:
 
 # ── Sourcify decentralized contract verification ──
 
+# ── Webacy blockchain risk intelligence ──
+
+async def _check_webacy(address: str, chain: str) -> Optional[Dict[str, Any]]:
+    """Webacy Risk Data Network — 15+ data providers, enterprise-grade risk scoring.
+    
+    Returns overallRisk (0-100), threat/sanction flags, contract analysis.
+    Covers 13 chains: ETH, SOL, BASE, BSC, POLYGON, ARB, OPT, TON, SUI, etc.
+    API key: WEBACY_API_KEY env var.
+    Cost: $0 (free tier via provided key).
+    """
+    api_key = os.getenv("WEBACY_API_KEY", "")
+    # File-based fallback (Docker env loading workaround)
+    if not api_key:
+        try:
+            with open("/tmp/webacy_key.txt", "r") as f:
+                api_key = f.read().strip()
+        except Exception:
+            pass
+    if not api_key:
+        return None
+    try:
+        import httpx
+        chain_map = {"ethereum": "eth", "bsc": "bsc", "polygon": "polygon",
+                     "arbitrum": "arb", "optimism": "opt", "avalanche": "avax",
+                     "base": "base", "solana": "sol", "fantom": "ftm"}
+        wc = chain_map.get(chain.lower(), "eth")
+        
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            result = await asyncio.wait_for(
+                client.get(
+                    f"https://api.webacy.com/addresses/{address}?chain={wc}",
+                    headers={"x-api-key": api_key},
+                ),
+                timeout=10.0,
+            )
+            if result.status_code != 200:
+                return None
+            
+            data = result.json()
+            return {
+                "overall_risk": data.get("overallRisk"),
+                "high_severity": data.get("high", 0),
+                "medium_severity": data.get("medium", 0),
+                "issue_count": data.get("count", 0),
+                "is_contract": data.get("isContract", False),
+                "issues": [i.get("name", i.get("type", "")) for i in (data.get("issues") or [])[:5]],
+                "data_source": "webacy",
+            }
+    except (asyncio.TimeoutError, Exception) as e:
+        logger.warning(f"Webacy check failed: {e}")
+        return None
+
 async def _check_sourcify(token_address: str, chain: str) -> Optional[Dict[str, Any]]:
     """Sourcify decentralized full-match verification. Free, no key, REST API.
     Stronger than Etherscan verification — cryptographically guarantees 
@@ -2610,9 +2662,10 @@ async def scan_token(
     sim_result, holder_data, deployer_info = None, None, None
     nansen_data, chainaware_data, blowfish_data, scamsniffer_data = None, None, None, None
     dune_data, arkham_data, thegraph_data = None, None, None
+    webacy_data = None
     fear_greed_data = None
     try:
-        sim_result, holder_data, deployer_info, price_consensus, birdeye_data, solscan_data, moralis_data, etherscan_data, qn_pumpfun, honeypot_is, chainpatrol_token, defi_scanner, blockscout_data, token_sniffer, trm_sanctions, chainabuse_reports, forta_alerts, defillama_ctx, coingecko_price, oneinch_swap, nansen_data, chainaware_data, blowfish_data, scamsniffer_data, dune_data, arkham_data, thegraph_data = await asyncio.gather(
+        sim_result, holder_data, deployer_info, price_consensus, birdeye_data, solscan_data, moralis_data, etherscan_data, qn_pumpfun, honeypot_is, chainpatrol_token, defi_scanner, blockscout_data, token_sniffer, trm_sanctions, chainabuse_reports, forta_alerts, defillama_ctx, coingecko_price, oneinch_swap, nansen_data, chainaware_data, blowfish_data, scamsniffer_data, webacy_data, dune_data, arkham_data, thegraph_data = await asyncio.gather(
             _simulate_trade(token_address, chain),
             _get_holder_data(token_address, chain),
             _get_deployer_info(token_address, chain),
@@ -2637,6 +2690,7 @@ async def scan_token(
             _check_chainaware(token_address, chain),
             _check_blowfish(token_address, chain),
             _check_scamsniffer_live(token_address, chain),
+            _check_webacy(token_address, chain),
             _check_dune(token_address, chain),
             _check_arkham(token_address, chain),
             _check_thegraph(token_address, chain),
@@ -2691,6 +2745,8 @@ async def scan_token(
             blowfish_data = None
         if isinstance(scamsniffer_data, BaseException):
             scamsniffer_data = None
+        if isinstance(webacy_data, BaseException):
+            webacy_data = None
         if isinstance(dune_data, BaseException):
             dune_data = None
         if isinstance(arkham_data, BaseException):
@@ -3226,6 +3282,20 @@ async def scan_token(
             safety = max(0, safety - 15)
             scan.risk_flags.append("SANTIMENT_HYPE_DETECTED")
     
+    # Webacy risk intelligence
+    if isinstance(webacy_data, dict):
+        scan.confidence = min(100, scan.confidence + 8)
+        wr = webacy_data.get("overall_risk", 0) or 0
+        if wr > 70:
+            safety = max(0, safety - 35)
+            scan.risk_flags.append("WEBACY_HIGH_RISK")
+        elif wr > 40:
+            safety = max(0, safety - 15)
+            scan.risk_flags.append("WEBACY_MEDIUM_RISK")
+        if webacy_data.get("high_severity", 0) > 0:
+            safety = max(0, safety - 20)
+            scan.risk_flags.append("WEBACY_HIGH_SEVERITY")
+    
     # ScamSniffer phishing blacklist
     if isinstance(scamsniffer_data, dict):
         if scamsniffer_data.get("is_phishing"):
@@ -3360,6 +3430,8 @@ async def scan_token(
         scan.free["fear_greed"] = fear_greed_data
     if isinstance(santiment_data, dict):
         scan.free["santiment"] = santiment_data
+    if isinstance(webacy_data, dict):
+        scan.free["webacy"] = webacy_data
     if isinstance(scamsniffer_data, dict):
         scan.free["scamsniffer"] = scamsniffer_data
     if isinstance(dune_data, dict):
