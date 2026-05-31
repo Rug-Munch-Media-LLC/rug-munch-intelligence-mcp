@@ -501,7 +501,7 @@ async def mcp_capabilities():
 async def mcp_jsonrpc(request: Request):
     """MCP Streamable HTTP transport — handle JSON-RPC requests.
 
-    Methods: initialize, tools/list, tools/call, ping
+    Methods: initialize, tools/list, tools/call, resources/list, prompts/list, ping
     """
     try:
         body = await request.json()
@@ -558,6 +558,22 @@ async def mcp_jsonrpc(request: Request):
             "jsonrpc": "2.0",
             "id": req_id,
             "result": {"tools": tools_list},
+        })
+
+    # ── resources/list ──────────────────────────────────────
+    if method == "resources/list":
+        return JSONResponse({
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "result": {"resources": []},
+        })
+
+    # ── prompts/list ───────────────────────────────────────
+    if method == "prompts/list":
+        return JSONResponse({
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "result": {"prompts": []},
         })
 
     # ── tools/call ──────────────────────────────────────────
