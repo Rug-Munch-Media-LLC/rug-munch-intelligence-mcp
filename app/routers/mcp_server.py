@@ -307,32 +307,6 @@ async def mcp_discovery():
     return _build_discovery()
 
 
-@router.get("/.well-known/mcp/server-card.json")
-async def smithery_server_card():
-    """Static server card for Smithery verification — bypasses WAF scanning issues."""
-    tools_data, cats, chains_data, fac_count = _build_tools_list()
-    return {
-        "serverInfo": {
-            "name": "Rug Munch Intelligence",
-            "version": "1.0.0",
-        },
-        "authentication": {
-            "required": False,
-            "schemes": [],
-        },
-        "tools": [
-            {
-                "name": info["name"],
-                "description": info["description"],
-                "inputSchema": info["inputSchema"],
-            }
-            for info in list(tools_data.values())[:10]  # First 10 as sample
-        ],
-        "resources": [],
-        "prompts": [],
-    }
-
-
 @router.get("/.well-known/ai-plugin.json")
 async def ai_plugin_manifest():
     data = _get_tools()
