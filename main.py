@@ -9,7 +9,7 @@ Wired to real external APIs: CoinGecko, DexScreener, Jupiter, Groq.
 """
 
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, Response, HTMLResponse, JSONResponse
+from fastapi.responses import StreamingResponse, Response, HTMLResponse, JSONResponse, FileResponse
 from fastapi import FastAPI, Header, HTTPException, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from slowapi import Limiter
@@ -88,10 +88,18 @@ from app.routers import admin_control
 from app.routers import alert_pipeline
 from app.routers import intelligence_panel
 from app.routers import security_intel
+from app.routers import darkroom_tokens
+from app.routers import darkroom_airdrop
+from app.routers import darkroom_multichain
 app.include_router(admin_control.router)
 app.include_router(alert_pipeline.router)
 app.include_router(intelligence_panel.router)
 app.include_router(security_intel.router)
+app.include_router(darkroom_tokens.router)
+app.include_router(darkroom_airdrop.router)
+app.include_router(darkroom_multichain.router)
+from app.routers import email_router
+app.include_router(email_router.router)
 from app.all_connectors import router as connectors_router
 app.include_router(connectors_router)
 from app.routers.x402_middleware import router as x402_middleware_router
@@ -111,6 +119,12 @@ app.include_router(x402_forensic_router)
 app.include_router(x402_tools_router)
 app.include_router(x402_dashboard_router)
 app.include_router(x402_token_watch_router)
+
+# ── Darkroom Admin UI (static) ─────────────────────────────────
+@app.get("/darkroom")
+async def darkroom_dashboard():
+    """Serve the Darkroom admin token deployer UI."""
+    return FileResponse("/root/backend/static/darkroom.html")
 
 # ── security.txt (RFC 9116) ──
 SECURITY_TXT = """Contact: admin@rugmunch.io
@@ -319,6 +333,7 @@ PUBLIC_WRITE_PREFIXES = [
     "/api/v1/x402/",       # x402 payments, receipts, catalog
     "/api/v1/x402-tools/", # x402 tool execution (trial + paid)
     "/api/v1/alerts/",     # public alert subscriptions
+    "/api/v1/admin/",      # darkroom admin (uses X-Admin-Key separately)
 ]
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -2720,8 +2735,41 @@ async def investigation_list(request: Request, limit: int = 20, status: str = No
 
 @app.get("/api/v1/stats")
 async def platform_stats(request: Request):
-    """Platform statistics."""
-    return {"total_scans": 0, "rugs_detected": 0, "wallets_analyzed": 0, "active_cases": 0, "uptime_hours": 0}
+    """Platform statistics from live services."""
+    from app.rag_service import get_stats as rag_stats_fn
+    
+    stats = {
+        "total_scans": 0,
+        "rugs_detected": 0,
+        "wallets_analyzed": 0,
+        "active_cases": 0,
+        "uptime_hours": 0,
+        "active_chains": 9,
+        "news_articles_24h": 0,
+        "scam_school_lessons": 48,
+        "rag_documents": 0,
+    }
+    
+    # Try to get real counts from services
+    try:
+        rag = await rag_stats_fn()
+        stats["rag_documents"] = rag.get("total_documents", 0)
+    except: pass
+    
+    try:
+        from app.redis_client import get_redis
+        r = get_redis()
+        if r:
+            # Count scans in last 24h
+            scan_count = r.get("rmi:stats:scans_24h")
+            if scan_count: stats["total_scans"] = int(scan_count)
+            rug_count = r.get("rmi:stats:rugs_detected")
+            if rug_count: stats["rugs_detected"] = int(rug_count)
+            wallet_count = r.get("rmi:stats:wallets_analyzed")
+            if wallet_count: stats["wallets_analyzed"] = int(wallet_count)
+    except: pass
+    
+    return stats
 
 @app.post("/api/v1/analytics/network-graph")
 async def network_graph(request: Request, data: dict):
