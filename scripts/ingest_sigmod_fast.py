@@ -40,7 +40,7 @@ async def ingest():
         doc_id = hashlib.sha256(f"sigmod_{channel}_{date}".encode()).hexdigest()[:16]
         
         # Generate embedding
-        vec = await embedder.embed(content)
+        vec = await embedder.embed_query(content)
         
         key = f"rag:known_scams:{doc_id}"
         doc = json.dumps({
