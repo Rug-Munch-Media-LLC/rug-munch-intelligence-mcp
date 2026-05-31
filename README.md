@@ -1,6 +1,6 @@
 <p align="center">
   <img src="https://img.shields.io/badge/MCP-Compatible-6E40C9?logo=modelcontextprotocol&logoColor=white" alt="MCP Compatible" />
-  <img src="https://img.shields.io/badge/Tools-221-00D4AA" alt="210 Tools" />
+  <img src="https://img.shields.io/badge/Tools-221-00D4AA" alt="221 Tools" />
   <img src="https://img.shields.io/badge/Chains-13-F7931A" alt="13 Chains" />
   <img src="https://img.shields.io/badge/x402-Payments-FF6900" alt="x402 Payments" />
   <img src="https://img.shields.io/badge/Price-Free_Trials-22C55E" alt="Free Trials" />
@@ -9,7 +9,7 @@
 </p>
 
 <h1 align="center">🛡️ Rug Munch Intelligence — MCP Server</h1>
-<h3 align="center">210 AI-Powered Crypto Intelligence Tools · 13 Blockchains · Don't Get Rugged.</h3>
+<h3 align="center">221 AI-Powered Crypto Intelligence Tools · 13 Blockchains · Don't Get Rugged.</h3>
 
 <p align="center">
   <strong>Crypto scam detection • Rug pull prevention • Wallet forensics • Whale tracking • Market intelligence • Sentiment analysis</strong><br/>
@@ -42,7 +42,7 @@ No API key needed. Free trials on every tool.
 
 ---
 
-## 📊 210 Tools Across 13 Blockchains
+## 📊 221 Tools Across 13 Blockchains
 
 | Category | Count | Top Tools |
 |----------|-------|-----------|
@@ -59,7 +59,7 @@ No API key needed. Free trials on every tool.
 | 🔌 API | 3 | `catalog`, `mcp-proxy`, `human-execute` |
 | 🔄 Variants | 80 | Per-chain overrides: Solana, Base, Ethereum, BSC, Arbitrum, Optimism, Polygon, Avalanche, Fantom, Gnosis, TRON, Bitcoin |
 
-**Total: 210 tools · 13 chains**
+**Total: 221 tools · 13 chains**
 
 ---
 
@@ -106,10 +106,10 @@ curl -X POST https://rugmunch.io/mcp \
 
 ## 🏗️ Architecture
 
-This is a thin MCP wrapper around the Rug Munch Intelligence x402 API. All 210 tools are served from our backend — this package translates MCP protocol into HTTP calls.
+This is a thin MCP wrapper around the Rug Munch Intelligence x402 API. All 221 tools are served from our backend — this package translates MCP protocol into HTTP calls.
 
 ```
-AI Agent → this MCP server → x402 API → RMI Backend (210 tools)
+AI Agent → this MCP server → x402 API → RMI Backend (221 tools)
 ```
 
 ---
