@@ -1764,6 +1764,11 @@ async def _get_moralis_data(token_address: str, chain: str) -> Optional[Dict[str
     try:
         api_key = os.getenv("MORALIS_API_KEY", "")
         if not api_key:
+            from app.key_loader import load_key
+            api_key = load_key("MORALIS_API_KEY")
+        if not api_key:
+            return None  # Rate-limited or not configured
+        if not api_key:
             return None
         
         chain_map = {
