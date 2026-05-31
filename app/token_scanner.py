@@ -2287,6 +2287,68 @@ async def _check_fear_greed() -> Optional[Dict[str, Any]]:
 
 # ── CoinGecko trending — social/search signal ──
 
+# ── Augmento granular sentiment (93 topics, replaces LunarCrush) ──
+
+async def _check_augmento(symbol: str) -> Optional[Dict[str, Any]]:
+    """Augmento granular sentiment — 93 topic categories across X/Reddit/Bitcointalk.
+    
+    FAR more granular than LunarCrush. Tracks specific topics like 'Hacks',
+    'Market_manipulation', 'Advice/Support', 'FOMO' — not just positive/negative.
+    Free tier: 5 req/min, 14-day lag, 28 coins. API key: AUGMENTO_API_KEY.
+    Cost: $0 (free tier).
+    """
+    api_key = os.getenv("AUGMENTO_API_KEY", "")
+    if not api_key or not symbol:
+        return None
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            headers = {"Authorization": f"Bearer {api_key}"}
+            asset = symbol.lower()
+            
+            # Sentiment score
+            result = await asyncio.wait_for(
+                client.get(f"https://augmento.ai/api/v1/sentiment-indicator/{asset}?source=combined&limit=1",
+                          headers=headers), timeout=10.0)
+            if result.status_code != 200:
+                if result.status_code == 404:
+                    return None  # Asset not tracked
+                return None
+            
+            data = result.json()
+            sentiment_data = data.get("data", [])
+            lag = data.get("lag_days", 0)
+            
+            score = None
+            score_pct = None
+            if sentiment_data:
+                latest = sentiment_data[-1]
+                score = latest.get("score")
+                score_pct = latest.get("score_pct")
+            
+            # Categorize sentiment
+            sentiment_label = "neutral"
+            if score is not None:
+                if score > 0.7: sentiment_label = "extremely_bullish"
+                elif score > 0.6: sentiment_label = "bullish"
+                elif score > 0.55: sentiment_label = "slightly_bullish"
+                elif score > 0.45: sentiment_label = "neutral"
+                elif score > 0.4: sentiment_label = "slightly_bearish"
+                elif score > 0.3: sentiment_label = "bearish"
+                else: sentiment_label = "extremely_bearish"
+            
+            return {
+                "symbol": asset,
+                "sentiment_score": score,
+                "sentiment_pct": score_pct,
+                "sentiment_label": sentiment_label,
+                "lag_days": lag,
+                "data_source": "augmento",
+            }
+    except (asyncio.TimeoutError, Exception) as e:
+        logger.warning(f"Augmento check failed for {symbol}: {e}")
+        return None
+
 async def _check_coingecko_trending() -> Optional[Dict[str, Any]]:
     """CoinGecko trending — top-15 most searched (retail social signal).
     Tracks what retail is actively searching — strong leading indicator
@@ -2848,6 +2910,7 @@ async def scan_token(
     )
     fear_greed_data = await _check_fear_greed()
     cg_trending = await _check_coingecko_trending()
+    augmento_data = await _check_augmento(scan.symbol)
     santiment_data = await _check_santiment(scan.symbol)
     
     # Run SENTINEL pipeline
@@ -3312,6 +3375,17 @@ async def scan_token(
             safety = max(0, safety - 15)
             scan.risk_flags.append("SANTIMENT_HYPE_DETECTED")
     
+    # Augmento granular sentiment
+    if isinstance(augmento_data, dict):
+        scan.confidence = min(100, scan.confidence + 5)
+        sl = augmento_data.get("sentiment_label", "")
+        if sl in ("extremely_bearish", "bearish"):
+            safety = max(0, safety - 8)
+            scan.risk_flags.append("AUGMENTO_BEARISH")
+        elif sl in ("extremely_bullish", "bullish"):
+            safety = max(0, safety - 3)
+            scan.risk_flags.append("AUGMENTO_BULLISH")
+    
     # Webacy risk intelligence
     if isinstance(webacy_data, dict):
         scan.confidence = min(100, scan.confidence + 8)
@@ -3460,6 +3534,8 @@ async def scan_token(
         scan.free["fear_greed"] = fear_greed_data
     if isinstance(santiment_data, dict):
         scan.free["santiment"] = santiment_data
+    if isinstance(augmento_data, dict):
+        scan.free["augmento"] = augmento_data
     if isinstance(webacy_data, dict):
         scan.free["webacy"] = webacy_data
     if isinstance(scamsniffer_data, dict):
