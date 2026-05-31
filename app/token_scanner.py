@@ -2138,70 +2138,59 @@ async def _check_santiment(symbol: str) -> Optional[Dict[str, Any]]:
         logger.warning(f"Santiment check failed for {symbol}: {e}")
         return None
 
-async def _check_lunarcrush(symbol: str) -> Optional[Dict[str, Any]]:
-    """LunarCrush social sentiment — social volume, Galaxy Score, influencer activity.
+async def _check_fear_greed() -> Optional[Dict[str, Any]]:
+    """Alternative.me Crypto Fear & Greed Index — market-wide sentiment context.
     
-    Catches bot campaigns: token with 10K social mentions but $5K volume.
-    Detects coordinated hype before pump-and-dumps.
-    Free tier with rate limits. API key: LUNARCRUSH_API_KEY env var.
-    API base: lunarcrush.com/api4/public/coins/{symbol}/v1
-    NOTE: Most REST endpoints require "Individual or higher" subscription.
-    MCP server available at lunarcrush.ai/sse for AI agent use.
-    Cost: $0 (free tier — limited to web dashboard + MCP; REST needs paid plan).
+    Free, no API key required. REST API at api.alternative.me/fng/
+    Provides 0-100 sentiment score and classification.
+    Scam context: Extreme Greed phases = more scam launches.
+    Used to adjust baseline safety scores based on market conditions.
+    Cost: $0 (completely free, no rate limits).
     """
-    api_key = os.getenv("LUNARCRUSH_API_KEY", "")
-    if not api_key or not symbol:
-        return None
     try:
         import httpx
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=8.0) as client:
             result = await asyncio.wait_for(
-                client.get(
-                    f"https://lunarcrush.com/api4/public/coins/{symbol.upper()}/v1",
-                    headers={"Authorization": f"Bearer {api_key}"},
-                ),
-                timeout=10.0,
+                client.get("https://api.alternative.me/fng/?limit=1"),
+                timeout=8.0,
             )
             if result.status_code != 200:
                 return None
             
             data = result.json()
-            coin_data = data.get("data", {})
-            if not coin_data:
+            items = data.get("data", [])
+            if not items:
                 return None
             
-            notice = data.get("config", {}).get("notice", "")
-            is_limited = "Limited" in notice
+            item = items[0]
+            value = int(item.get("value", 50))
+            classification = item.get("value_classification", "Neutral")
+            
+            # Market condition context
+            if value <= 25:
+                market_condition = "extreme_fear"
+            elif value <= 45:
+                market_condition = "fear"
+            elif value <= 55:
+                market_condition = "neutral"
+            elif value <= 75:
+                market_condition = "greed"
+            else:
+                market_condition = "extreme_greed"
             
             return {
-                "symbol": coin_data.get("symbol", symbol),
-                "name": coin_data.get("name", ""),
-                "galaxy_score": coin_data.get("galaxy_score"),
-                "alt_rank": coin_data.get("alt_rank"),
-                "social_volume_24h": coin_data.get("social_volume_24h"),
-                "social_dominance": coin_data.get("social_dominance"),
-                "interactions_24h": coin_data.get("interactions_24h"),
-                "sentiment": coin_data.get("sentiment"),
-                "volatility": coin_data.get("volatility"),
-                "market_cap": coin_data.get("market_cap"),
-                "price": coin_data.get("price"),
-                "percent_change_24h": coin_data.get("percent_change_24h"),
-                "free_tier_limited": is_limited,
-                "data_source": "lunarcrush_api4",
+                "fear_greed_value": value,
+                "classification": classification,
+                "market_condition": market_condition,
+                "timestamp": item.get("timestamp"),
+                "data_source": "alternative_me_fng",
             }
     except (asyncio.TimeoutError, Exception) as e:
-        logger.warning(f"LunarCrush check failed for {symbol}: {e}")
+        logger.warning(f"Fear & Greed check failed: {e}")
         return None
 
 
-# ── ScamSniffer live phishing domain check (static GitHub refresh) ──
-
-# In-memory cache of phishing domains, refreshed periodically
-_scamsniffer_domains_cache: Optional[set] = None
-_scamsniffer_cache_ts: float = 0.0
-_SCAMSNIFFER_CACHE_TTL = 3600  # 1 hour
-
-
+# Replaced LunarCrush with Fear & Greed (free, no key needed, REST works)
 async def _check_scamsniffer_live(token_address: str, chain: str) -> Optional[Dict[str, Any]]:
     """ScamSniffer phishing domain check against static GitHub blacklist.
     
@@ -2498,7 +2487,7 @@ async def scan_token(
     sim_result, holder_data, deployer_info = None, None, None
     nansen_data, chainaware_data, blowfish_data, scamsniffer_data = None, None, None, None
     dune_data, arkham_data, thegraph_data = None, None, None
-    lunarcrush_data = None
+    fear_greed_data = None
     try:
         sim_result, holder_data, deployer_info, price_consensus, birdeye_data, solscan_data, moralis_data, etherscan_data, qn_pumpfun, honeypot_is, chainpatrol_token, defi_scanner, blockscout_data, token_sniffer, trm_sanctions, chainabuse_reports, forta_alerts, defillama_ctx, coingecko_price, oneinch_swap, nansen_data, chainaware_data, blowfish_data, scamsniffer_data, dune_data, arkham_data, thegraph_data = await asyncio.gather(
             _simulate_trade(token_address, chain),
@@ -2641,7 +2630,7 @@ async def scan_token(
     except Exception as e:
         logger.warning(f"Secondary enrichment gather failed: {e}")
     
-    # ── Copycat + Volume anomaly + LunarCrush + Santiment (CPU-only, uses existing market data) ──
+    # ── Copycat + Volume anomaly + FearGreed + Santiment (CPU-only, uses existing market data) ──
     copycat_result = await _check_copycat(scan.symbol, scan.name)
     volume_anomaly = await _check_volume_anomaly(
         volume_24h=market.get("volume_24h", 0),
@@ -2649,7 +2638,7 @@ async def scan_token(
         age_hours=market.get("age_hours"),
         fdv=market.get("fdv", 0),
     )
-    lunarcrush_data = await _check_lunarcrush(scan.symbol)
+    fear_greed_data = await _check_fear_greed()
     santiment_data = await _check_santiment(scan.symbol)
     
     # Run SENTINEL pipeline
@@ -3086,38 +3075,19 @@ async def scan_token(
                     scan.risk_flags.append("BLOWFISH_APPROVAL_RISK")
                     break
     
-    # LunarCrush social sentiment
-    if isinstance(lunarcrush_data, dict):
-        scan.confidence = min(100, scan.confidence + 5)
-        galaxy = lunarcrush_data.get("galaxy_score")
-        alt_rank = lunarcrush_data.get("alt_rank")
-        soc_vol = lunarcrush_data.get("social_volume_24h")
-        sentiment = lunarcrush_data.get("sentiment")
-        market_vol = market.get("volume_24h", 0) or 0
+    # Fear & Greed Index — market-wide sentiment context
+    if isinstance(fear_greed_data, dict):
+        scan.confidence = min(100, scan.confidence + 3)
+        fg_value = fear_greed_data.get("fear_greed_value", 50)
+        market_cond = fear_greed_data.get("market_condition", "neutral")
         
-        # Galaxy Score: low score (<20) = negative sentiment/social activity
-        if galaxy is not None and galaxy < 20:
-            safety = max(0, safety - 10)
-            scan.risk_flags.append("LUNARCRUSH_LOW_GALAXY")
-        
-        # AltRank: high rank (>500) = low relative strength
-        if alt_rank is not None and alt_rank > 500:
+        # Extreme Greed = scam launching season
+        if market_cond == "extreme_greed":
             safety = max(0, safety - 5)
-            scan.risk_flags.append("LUNARCRUSH_LOW_RANK")
-        
-        # Bot campaign detection: high social volume + low on-chain volume
-        if soc_vol is not None and soc_vol > 500 and market_vol < 10000:
-            safety = max(0, safety - 20)
-            scan.risk_flags.append("LUNARCRUSH_BOT_CAMPAIGN")
-        
-        # Negative sentiment
-        if sentiment is not None and sentiment < 0.3:
-            safety = max(0, safety - 5)
-            scan.risk_flags.append("LUNARCRUSH_NEGATIVE_SENTIMENT")
-        
-        # Free tier limitations noted
-        if lunarcrush_data.get("free_tier_limited"):
-            scan.risk_flags.append("LUNARCRUSH_LIMITED_DATA")
+            scan.risk_flags.append("FEARGREED_EXTREME_GREED")
+        elif market_cond == "extreme_fear":
+            scan.confidence = min(100, scan.confidence + 2)
+            scan.risk_flags.append("FEARGREED_EXTREME_FEAR")
     
     # Santiment social + on-chain metrics
     if isinstance(santiment_data, dict):
@@ -3263,8 +3233,8 @@ async def scan_token(
         scan.free["chainaware_ai"] = chainaware_data
     if isinstance(blowfish_data, dict):
         scan.free["blowfish"] = blowfish_data
-    if isinstance(lunarcrush_data, dict):
-        scan.free["lunarcrush"] = lunarcrush_data
+    if isinstance(fear_greed_data, dict):
+        scan.free["fear_greed"] = fear_greed_data
     if isinstance(santiment_data, dict):
         scan.free["santiment"] = santiment_data
     if isinstance(scamsniffer_data, dict):
