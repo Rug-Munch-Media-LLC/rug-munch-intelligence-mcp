@@ -547,7 +547,40 @@ async def mcp_jsonrpc(request: Request):
                 "name": info["name"],
                 "description": info["description"],
                 "inputSchema": info["inputSchema"],
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "result": {
+                            "type": "object",
+                            "description": "Tool-specific result data — varies by tool. Contains analysis, scores, metrics, or fetched data."
+                        },
+                        "status": {
+                            "type": "string",
+                            "enum": ["ok", "error", "no_data"],
+                            "description": "Result status: ok (success), error (failure), no_data (no results found — eligible for refund)"
+                        },
+                        "error": {
+                            "type": "string",
+                            "description": "Error message if status is error"
+                        },
+                        "metadata": {
+                            "type": "object",
+                            "properties": {
+                                "tool": {"type": "string", "description": "Tool name executed"},
+                                "chain": {"type": "string", "description": "Blockchain used"},
+                                "elapsed_ms": {"type": "number", "description": "Execution time in milliseconds"},
+                                "trial_used": {"type": "boolean", "description": "Whether a free trial was consumed"}
+                            }
+                        }
+                    },
+                    "required": ["result", "status"]
+                },
                 "annotations": {
+                    "title": info.get("display_name", info["name"].replace("_", " ").title()),
+                    "readOnlyHint": True,
+                    "destructiveHint": False,
+                    "idempotentHint": True,
+                    "openWorldHint": True,
                     "category": info["category"],
                     "price_usd": info["price_usd"],
                     "trial_free": info["trial_free"],
