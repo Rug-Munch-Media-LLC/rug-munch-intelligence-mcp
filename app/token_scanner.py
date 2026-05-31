@@ -8,7 +8,9 @@ PRO tier:    SENTINEL Tier 1+2 (17 modules) + wallet intelligence
 ELITE tier:  SENTINEL Tier 1+2+3+4 (all 21+ modules) + deep analysis
 """
 
+import os
 import asyncio
+from datetime import datetime
 import logging
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
@@ -841,6 +843,336 @@ async def _check_volume_anomaly(
 # UNIFIED SCAN — Powered by SENTINEL
 # ═══════════════════════════════════════════
 
+# ═══════════════════════════════════════════════════════════════
+# ENRICHMENT 11: Price Consensus (multi-source MAD outlier filter)
+# ═══════════════════════════════════════════════════════════════
+
+async def _get_price_consensus(token_address: str, chain: str, market_price: float = 0) -> Optional[Dict[str, Any]]:
+    """Cross-check price across DexScreener, Jupiter, Birdeye, CoinGecko.
+    Uses MAD outlier filtering to detect manipulated single-source prices."""
+    try:
+        from app.price_consensus import get_price_consensus
+        engine = get_price_consensus()
+        result = await asyncio.wait_for(engine.get_consensus_price(token_address, chain), timeout=8.0)
+        if not result or not result.is_reliable():
+            return None
+        
+        # Compare consensus price vs single-source (DexScreener)
+        consensus_price = result.weighted_mean
+        price_diff_pct = 0
+        if market_price > 0 and consensus_price > 0:
+            price_diff_pct = abs(market_price - consensus_price) / market_price * 100
+        
+        return {
+            "consensus_price": round(consensus_price, 8),
+            "dex_price": round(market_price, 8),
+            "price_diff_pct": round(price_diff_pct, 1),
+            "sources_used": result.source_count,
+            "outliers_removed": result.outlier_count,
+            "reliability": round(result.reliability_score * 100),
+            "is_manipulated": price_diff_pct > 15 or result.outlier_count >= 2,
+        }
+    except Exception as e:
+        logger.warning(f"Price consensus failed for {token_address}: {e}")
+        return None
+
+
+# ═══════════════════════════════════════════════════════════════
+# ENRICHMENT 12: Birdeye API (holder distribution, security, market)
+# ═══════════════════════════════════════════════════════════════
+
+async def _get_birdeye_data(token_address: str, chain: str) -> Optional[Dict[str, Any]]:
+    """Pull Birdeye security scan + token overview for second opinion."""
+    try:
+        from app.birdeye_client import BirdeyeClient
+        client = BirdeyeClient()
+        security, overview = await asyncio.wait_for(asyncio.gather(
+            client.security_scan(token_address),
+            client.get_token_overview(token_address),
+            return_exceptions=True,
+        ), timeout=8.0)
+        if isinstance(security, BaseException):
+            security = None
+        if isinstance(overview, BaseException):
+            overview = None
+        
+        result = {}
+        if isinstance(security, dict):
+            result["security"] = {
+                "is_honeypot": security.get("is_honeypot", False),
+                "is_rugpull": security.get("is_rugpull", False),
+                "risk_score": security.get("risk_score", 0),
+                "owner_balance_pct": security.get("owner_balance_pct"),
+            }
+        if isinstance(overview, dict):
+            result["overview"] = {
+                "market_cap": overview.get("mc"),
+                "holders": overview.get("holder"),
+                "liquidity": overview.get("liquidity"),
+                "price_change_24h": overview.get("priceChange24h"),
+            }
+        return result if result else None
+    except Exception as e:
+        logger.warning(f"Birdeye enrichment failed for {token_address}: {e}")
+        return None
+
+
+# ═══════════════════════════════════════════════════════════════
+# ENRICHMENT 13: Multi-RPC Mint Authority Consensus (Solana)
+# ═══════════════════════════════════════════════════════════════
+
+async def _verify_mint_consensus(token_address: str, chain: str) -> Optional[Dict[str, Any]]:
+    """Cross-verify mint/freeze authority across 3+ RPCs. Single RPC can lie."""
+    if chain.lower() != "solana":
+        return None  # EVM uses etherscan-family which is single-source for now
+    try:
+        from app.consensus_rpc import get_consensus_rpc
+        rpc = get_consensus_rpc()
+        # Query mint authority from multiple RPCs
+        result = await asyncio.wait_for(rpc.solana_query_with_consensus(
+            "getAccountInfo",
+            [token_address, {"encoding": "jsonParsed"}],
+        ), timeout=8.0)
+        if not result or not result.is_reliable():
+            return None
+        
+        # Parse mint authority from the parsed data
+        data = result.agreed_value
+        if isinstance(data, dict):
+            parsed = data.get("result", {}).get("value", {}).get("data", {}).get("parsed", {})
+            mint_info = parsed.get("info", {})
+            mint_authority = mint_info.get("mintAuthority")
+            freeze_authority = mint_info.get("freezeAuthority")
+            
+            return {
+                "mint_authority": mint_authority,
+                "freeze_authority": freeze_authority,
+                "rpc_sources": result.source_count,
+                "agreeing_rpcs": result.agreeing_count,
+                "total_rpcs": result.total_count,
+                "is_reliable": result.is_reliable(),
+                "has_mint_authority": mint_authority is not None,
+                "has_freeze_authority": freeze_authority is not None,
+            }
+        return None
+    except Exception as e:
+        logger.warning(f"Multi-RPC mint consensus failed for {token_address}: {e}")
+        return None
+
+
+# ═══════════════════════════════════════════════════════════════
+# ENRICHMENT 14: Auto-ingest scan results to RAG (data flywheel)
+# ═══════════════════════════════════════════════════════════════
+
+async def _ingest_scan_to_rag(scan_result) -> None:
+    """Feed every scan back into RAG knowledge base. Fire-and-forget."""
+    try:
+        from app.rag_service import get_rag_service
+        rag = get_rag_service()
+        doc = {
+            "collection": "token_analysis",
+            "content": (
+                f"Token: {scan_result.name} ({scan_result.symbol}) on {scan_result.chain}\n"
+                f"Address: {scan_result.token_address}\n"
+                f"Safety Score: {scan_result.safety_score}/100\n"
+                f"Risk Flags: {', '.join(scan_result.risk_flags) if scan_result.risk_flags else 'none'}\n"
+                f"Confidence: {scan_result.confidence}%\n"
+                f"Price: ${getattr(scan_result, 'price_usd', 'N/A')}\n"
+            ),
+            "metadata": {
+                "token_address": scan_result.token_address,
+                "chain": scan_result.chain,
+                "symbol": scan_result.symbol,
+                "safety_score": scan_result.safety_score,
+                "risk_flags": scan_result.risk_flags,
+                "scanned_at": datetime.utcnow().isoformat(),
+            },
+        }
+        await rag.ingest_document(**doc)
+    except Exception as e:
+        logger.warning(f"Auto-ingest to RAG failed for {scan_result.token_address}: {e}")
+
+
+# ═══════════════════════════════════════════════════════════════
+# ENRICHMENT 15: Solscan Token Data (holder counts, metadata)
+# ═══════════════════════════════════════════════════════════════
+
+async def _get_solscan_data(token_address: str, chain: str) -> Optional[Dict[str, Any]]:
+    """Pull Solscan token holder data, metadata, and DeFi activities."""
+    if chain.lower() != "solana":
+        return None
+    try:
+        api_key = os.getenv("SOLSCAN_API_KEY", "")
+        if not api_key:
+            return None
+        
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            headers = {"accept": "application/json", "token": api_key}
+            
+            # Fetch token meta + holders in parallel
+            meta_resp = await client.get(
+                f"https://public-api.solscan.io/token/meta?tokenAddress={token_address}",
+                headers=headers)
+            holders_resp = await client.get(
+                f"https://public-api.solscan.io/token/holders?tokenAddress={token_address}&limit=20&offset=0",
+                headers=headers)
+            
+            result = {}
+            if meta_resp.status_code == 200:
+                meta = meta_resp.json()
+                if meta.get("success"):
+                    d = meta.get("data", {})
+                    result["name"] = d.get("name", "")
+                    result["symbol"] = d.get("symbol", "")
+                    result["decimals"] = d.get("decimals")
+                    result["total_supply"] = d.get("supply")
+                    result["holder_count_est"] = d.get("holder")
+                    result["icon"] = d.get("icon", "")
+            
+            if holders_resp.status_code == 200:
+                holders_data = holders_resp.json()
+                if holders_data.get("success"):
+                    holders = holders_data.get("data", [])
+                    result["top_holders"] = [{
+                        "address": h.get("address", "")[:8],
+                        "amount": h.get("amount"),
+                        "pct": h.get("percentage"),
+                    } for h in holders[:10]]
+                    if holders:
+                        total_pct = sum(h.get("percentage", 0) or 0 for h in holders)
+                        result["top10_concentration"] = round(total_pct, 1)
+            
+            return result if result else None
+    except Exception as e:
+        logger.warning(f"Solscan enrichment failed for {token_address}: {e}")
+        return None
+
+
+# ═══════════════════════════════════════════════════════════════
+# ENRICHMENT 16: Moralis Token/Chain Data (multi-chain)
+# ═══════════════════════════════════════════════════════════════
+
+async def _get_moralis_data(token_address: str, chain: str) -> Optional[Dict[str, Any]]:
+    """Pull Moralis token metadata, price, and chain-specific data."""
+    try:
+        api_key = os.getenv("MORALIS_API_KEY", "")
+        if not api_key:
+            return None
+        
+        chain_map = {
+            "ethereum": "eth", "bsc": "bsc", "polygon": "polygon",
+            "arbitrum": "arbitrum", "optimism": "optimism", "avalanche": "avalanche",
+            "fantom": "fantom", "base": "base", "solana": "solana",
+        }
+        moralis_chain = chain_map.get(chain.lower(), chain.lower())
+        
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            headers = {"accept": "application/json", "X-API-Key": api_key}
+            
+            # Token metadata + price
+            meta_resp = await client.get(
+                f"https://deep-index.moralis.io/api/v2.2/erc20/metadata",
+                params={"chain": moralis_chain, "addresses": [token_address]},
+                headers=headers)
+            
+            price_resp = await client.get(
+                f"https://deep-index.moralis.io/api/v2.2/erc20/{token_address}/price",
+                params={"chain": moralis_chain},
+                headers=headers)
+            
+            result = {}
+            if meta_resp.status_code == 200:
+                meta = meta_resp.json()
+                if isinstance(meta, list) and meta:
+                    m = meta[0]
+                    result["token_name"] = m.get("name")
+                    result["symbol"] = m.get("symbol")
+                    result["decimals"] = m.get("decimals")
+                    result["verified_contract"] = m.get("verified_contract")
+                    result["possible_spam"] = m.get("possible_spam", False)
+            
+            if price_resp.status_code == 200:
+                price_data = price_resp.json()
+                result["price_usd"] = price_data.get("usdPrice")
+                result["price_change_24h"] = price_data.get("usdPrice24hrPercentChange")
+                result["exchange_name"] = price_data.get("exchangeName")
+            
+            return result if result else None
+    except Exception as e:
+        logger.warning(f"Moralis enrichment failed for {token_address}: {e}")
+        return None
+
+
+# ═══════════════════════════════════════════════════════════════
+# ENRICHMENT 17: Etherscan Enhanced Contract Verification (9 EVM chains)
+# ═══════════════════════════════════════════════════════════════
+
+async def _get_etherscan_enhanced(token_address: str, chain: str) -> Optional[Dict[str, Any]]:
+    """Enhanced EVM contract check using real Etherscan API key.
+    Verifies contract, gets ABI, creator, tx count, and source code status."""
+    if chain.lower() == "solana":
+        return None  # Solana handled by Solscan
+    
+    try:
+        api_key = os.getenv("ETHERSCAN_API_KEY", "")
+        if not api_key:
+            return None
+        
+        # Map chain to etherscan-family explorer
+        explorer_map = {
+            "ethereum": "https://api.etherscan.io",
+            "bsc": "https://api.bscscan.com",
+            "polygon": "https://api.polygonscan.com",
+            "arbitrum": "https://api.arbiscan.io",
+            "optimism": "https://api-optimistic.etherscan.io",
+            "avalanche": "https://api.snowtrace.io",
+            "fantom": "https://api.ftmscan.com",
+            "base": "https://api.basescan.org",
+            "gnosis": "https://api.gnosisscan.io",
+        }
+        base_url = explorer_map.get(chain.lower())
+        if not base_url:
+            return None
+        
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            # Get contract source code (verification status + source)
+            source_resp = await client.get(f"{base_url}/api", params={
+                "module": "contract", "action": "getsourcecode",
+                "address": token_address, "apikey": api_key,
+            })
+            
+            # Get contract creator + creation tx
+            creation_resp = await client.get(f"{base_url}/api", params={
+                "module": "contract", "action": "getcontractcreation",
+                "contractaddresses": token_address, "apikey": api_key,
+            })
+            
+            result = {}
+            if source_resp.status_code == 200:
+                src_data = source_resp.json()
+                if src_data.get("status") == "1" and src_data.get("result"):
+                    src = src_data["result"][0]
+                    result["verified"] = src.get("SourceCode", "") != ""
+                    result["contract_name"] = src.get("ContractName", "")
+                    result["compiler_version"] = src.get("CompilerVersion", "")
+                    result["optimization_used"] = src.get("OptimizationUsed") == "1"
+                    result["has_proxy"] = src.get("Proxy") == "1"
+                    result["proxy_type"] = src.get("Implementation", "")
+            
+            if creation_resp.status_code == 200:
+                creation_data = creation_resp.json()
+                if creation_data.get("status") == "1" and creation_data.get("result"):
+                    cr = creation_data["result"][0]
+                    result["creator"] = cr.get("contractCreator", "")
+                    result["creation_tx"] = cr.get("txHash", "")
+            
+            return result if result else None
+    except Exception as e:
+        logger.warning(f"Etherscan enrichment failed for {token_address}: {e}")
+        return None
+
+
+
 async def scan_token(
     token_address: str,
     chain: str = "solana",
@@ -859,10 +1191,18 @@ async def scan_token(
     # ── Run all FREE enrichments in parallel ──
     sim_result, holder_data, deployer_info = None, None, None
     try:
-        sim_result, holder_data, deployer_info = await asyncio.gather(
+        sim_result, holder_data, deployer_info, price_consensus, birdeye_data, solscan_data, moralis_data, etherscan_data = await asyncio.gather(
             _simulate_trade(token_address, chain),
             _get_holder_data(token_address, chain),
             _get_deployer_info(token_address, chain),
+            _get_price_consensus(token_address, chain, market.get("price_usd", 0)),
+            _get_birdeye_data(token_address, chain),
+            _get_solscan_data(token_address, chain),
+            _get_moralis_data(token_address, chain),
+            _get_etherscan_enhanced(token_address, chain),
+            _get_solscan_data(token_address, chain),
+            _get_moralis_data(token_address, chain),
+            _get_etherscan_enhanced(token_address, chain),
             return_exceptions=True,
         )
         # unwrap exceptions
@@ -872,6 +1212,16 @@ async def scan_token(
             holder_data = None
         if isinstance(deployer_info, BaseException):
             deployer_info = None
+        if isinstance(price_consensus, BaseException):
+            price_consensus = None
+        if isinstance(birdeye_data, BaseException):
+            birdeye_data = None
+        if isinstance(solscan_data, BaseException):
+            solscan_data = None
+        if isinstance(moralis_data, BaseException):
+            moralis_data = None
+        if isinstance(etherscan_data, BaseException):
+            etherscan_data = None
     except Exception as e:
         logger.warning(f"Enrichment gather failed: {e}")
     
@@ -901,15 +1251,18 @@ async def scan_token(
                 cross_chain = None
         
         # Contract verification + LP lock (run in parallel)
-        contract_verify, lp_lock_multi = await asyncio.gather(
+        contract_verify, lp_lock_multi, mint_consensus = await asyncio.gather(
             _check_contract_verification(token_address, chain),
             _check_liquidity_lock_multi(token_address, chain, market.get("pair_address", "")),
+            _verify_mint_consensus(token_address, chain),
             return_exceptions=True,
         )
         if isinstance(contract_verify, BaseException):
             contract_verify = None
         if isinstance(lp_lock_multi, BaseException):
             lp_lock_multi = None
+        if isinstance(mint_consensus, BaseException):
+            mint_consensus = None
     except Exception as e:
         logger.warning(f"Secondary enrichment gather failed: {e}")
     
@@ -986,6 +1339,66 @@ async def scan_token(
     if market.get("liquidity_usd", 0) < 1000:
         safety = max(0, safety - 10)
         scan.risk_flags.append("LOW_LIQUIDITY")
+    
+    # Price manipulation via consensus check
+    if isinstance(price_consensus, dict):
+        if price_consensus.get("is_manipulated"):
+            safety = max(0, safety - 25)
+            scan.risk_flags.append("PRICE_MANIPULATION_SUSPECTED")
+            scan.confidence = min(100, scan.confidence + 10)
+        elif price_consensus.get("reliability", 0) >= 70:
+            scan.confidence = min(100, scan.confidence + 5)
+    
+    # Birdeye second opinion
+    if isinstance(birdeye_data, dict):
+        birdeye_sec = birdeye_data.get("security", {})
+        if isinstance(birdeye_sec, dict):
+            if birdeye_sec.get("is_honeypot"):
+                safety = max(0, safety - 30)
+                scan.risk_flags.append("BIRDEYE_HONEYPOT")
+                scan.confidence = min(100, scan.confidence + 15)
+            if birdeye_sec.get("is_rugpull"):
+                safety = max(0, safety - 30)
+                scan.risk_flags.append("BIRDEYE_RUGPULL")
+        birdeye_overview = birdeye_data.get("overview", {})
+        if isinstance(birdeye_overview, dict) and birdeye_overview.get("holders"):
+            scan.confidence = min(100, scan.confidence + 3)
+    
+    # Multi-RPC mint authority consensus
+    if isinstance(mint_consensus, dict) and mint_consensus.get("is_reliable"):
+        scan.confidence = min(100, scan.confidence + 5)
+        if mint_consensus.get("has_mint_authority"):
+            safety = max(0, safety - 10)
+            if "MINTABLE_CONSENSUS" not in scan.risk_flags:
+                scan.risk_flags.append("MINTABLE_CONSENSUS")
+    
+    # Solscan data
+    if isinstance(solscan_data, dict):
+        scan.confidence = min(100, scan.confidence + 5)
+        if solscan_data.get("top10_concentration", 0) > 80:
+            safety = max(0, safety - 15)
+            scan.risk_flags.append("SOLSCAN_HOLDER_CONCENTRATION")
+    
+    # Moralis data
+    if isinstance(moralis_data, dict):
+        scan.confidence = min(100, scan.confidence + 5)
+        if moralis_data.get("possible_spam"):
+            safety = max(0, safety - 30)
+            scan.risk_flags.append("MORALIS_SPAM_TOKEN")
+        if moralis_data.get("verified_contract") is False:
+            safety = max(0, safety - 10)
+            scan.risk_flags.append("MORALIS_UNVERIFIED")
+    
+    # Etherscan enhanced
+    if isinstance(etherscan_data, dict):
+        scan.confidence = min(100, scan.confidence + 8)
+        if etherscan_data.get("verified") is False:
+            safety = max(0, safety - 15)
+            if "ETHERSCAN_UNVERIFIED" not in scan.risk_flags:
+                scan.risk_flags.append("ETHERSCAN_UNVERIFIED")
+        if etherscan_data.get("has_proxy"):
+            safety = max(0, safety - 10)
+            scan.risk_flags.append("PROXY_CONTRACT_DETECTED")
     
     age = market.get("age_hours")
     if age is not None and age < 1:
@@ -1132,6 +1545,18 @@ async def scan_token(
         scan.free["copycat_check"] = copycat_result
     if isinstance(volume_anomaly, dict):
         scan.free["volume_anomaly"] = volume_anomaly
+    if isinstance(price_consensus, dict):
+        scan.free["price_consensus"] = price_consensus
+    if isinstance(birdeye_data, dict):
+        scan.free["birdeye"] = birdeye_data
+    if isinstance(mint_consensus, dict):
+        scan.free["mint_consensus"] = mint_consensus
+    if isinstance(solscan_data, dict):
+        scan.free["solscan"] = solscan_data
+    if isinstance(moralis_data, dict):
+        scan.free["moralis"] = moralis_data
+    if isinstance(etherscan_data, dict):
+        scan.free["etherscan"] = etherscan_data
     
     # PRO: Tier 1+2 module results
     if tier in ("pro", "elite"):
@@ -1169,6 +1594,9 @@ async def scan_token(
                 "contract_diff": sentinel_dict.get("contract_diff"),
                 "composite_risk_score": sentinel.composite_risk_score,
             }
+    
+    # Auto-ingest scan to RAG (fire-and-forget — don't block response)
+    asyncio.create_task(_ingest_scan_to_rag(scan))
     
     return scan
 
