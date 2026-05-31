@@ -205,11 +205,11 @@ def _build_discovery():
         "vendor": {
             "name": "Rug Munch Intelligence",
             "url": "https://rugmunch.io",
-            "github": "https://github.com/cryptorugmuncher",
+            "github": "https://github.com/Rug-Munch-Media-LLC",
         },
         "homepage": "https://rugmunch.io",
         "documentation": "https://mcp.rugmunch.io/docs/mcp",
-        "repository": "https://github.com/cryptorugmuncher/rug-munch-intelligence",
+        "repository": "https://github.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp",
         "endpoint": "https://mcp.rugmunch.io/mcp",
         "icon": "https://rugmunch.io/logo.png",
         "transports": ["http"],
@@ -250,7 +250,7 @@ def _build_discovery():
             "smithery": "https://smithery.ai/server/@cryptorugmuncher/rug-munch-intelligence",
             "glama": "https://glama.ai/mcp/servers/@cryptorugmuncher/rug-munch-intelligence",
             "mcp_so": "https://mcp.so/server/rug-munch-intelligence",
-            "github": "https://github.com/Rug-Munch-Media-LLC/rug-munch-intelligence",
+            "github": "https://github.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp",
             "huggingface": "https://huggingface.co/cryptorugmunch/rug-munch-intelligence",
         },
         "integrations": {
