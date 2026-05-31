@@ -2055,6 +2055,89 @@ async def _check_blowfish(token_address: str, chain: str, user_address: str = ""
 
 # ── LunarCrush social sentiment ──
 
+
+# ── Santiment on-chain + social metrics ──
+
+async def _check_santiment(symbol: str) -> Optional[Dict[str, Any]]:
+    """Santiment social + on-chain metrics — social volume, dev activity, sentiment.
+    
+    Combines on-chain metrics with social sentiment data for a comprehensive 
+    view of market activity. Detects botted social volume vs real on-chain usage.
+    Free tier: 1,000 API calls/month. API key: SANTIMENT_API_KEY env var.
+    Cost: $0 (free tier).
+    """
+    api_key = os.getenv("SANTIMENT_API_KEY", "")
+    if not api_key or not symbol:
+        return None
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            headers = {"Authorization": f"Apikey {api_key}", "Content-Type": "application/json"}
+            
+            # Query social volume for this token
+            query = {
+                "query": """
+                {
+                  socialVolumeProjects(
+                    selector: {slugs: [\"""" + symbol.lower() + """"]}
+                    from: "utc_now-1d"
+                    to: "utc_now"
+                    interval: "1d"
+                  ) {
+                    datetime
+                    projects {
+                      slug
+                      mentionsCount
+                    }
+                  }
+                }
+                """.strip()
+            }
+            
+            result = await asyncio.wait_for(
+                client.post(
+                    "https://api.santiment.net/graphql",
+                    headers=headers,
+                    json=query,
+                ),
+                timeout=10.0,
+            )
+            
+            if result.status_code == 200:
+                data = result.json()
+                sv_data = data.get("data", {}).get("socialVolumeProjects", [])
+                if sv_data and sv_data[0].get("projects"):
+                    projects = sv_data[0]["projects"]
+                    if projects:
+                        project = projects[0]
+                        mentions = project.get("mentionsCount", 0)
+                        
+                        # High mentions = social hype signal
+                        social_risk = None
+                        if mentions > 5000:
+                            social_risk = "viral"
+                        elif mentions > 1000:
+                            social_risk = "trending"
+                        elif mentions > 100:
+                            social_risk = "active"
+                        
+                        return {
+                            "symbol": symbol,
+                            "social_mentions_24h": mentions,
+                            "social_risk": social_risk,
+                            "data_source": "santiment",
+                        }
+                # Check for rate limit
+                if data.get("errors"):
+                    for e in data["errors"]:
+                        if "limit" in str(e).lower() or "quota" in str(e).lower():
+                            logger.debug("Santiment: rate limit reached")
+                            return None
+            return None
+    except (asyncio.TimeoutError, Exception) as e:
+        logger.warning(f"Santiment check failed for {symbol}: {e}")
+        return None
+
 async def _check_lunarcrush(symbol: str) -> Optional[Dict[str, Any]]:
     """LunarCrush social sentiment — social volume, Galaxy Score, influencer activity.
     
@@ -2554,7 +2637,7 @@ async def scan_token(
     except Exception as e:
         logger.warning(f"Secondary enrichment gather failed: {e}")
     
-    # ── Copycat + Volume anomaly + LunarCrush (CPU-only, uses existing market data) ──
+    # ── Copycat + Volume anomaly + LunarCrush + Santiment (CPU-only, uses existing market data) ──
     copycat_result = await _check_copycat(scan.symbol, scan.name)
     volume_anomaly = await _check_volume_anomaly(
         volume_24h=market.get("volume_24h", 0),
@@ -2563,6 +2646,7 @@ async def scan_token(
         fdv=market.get("fdv", 0),
     )
     lunarcrush_data = await _check_lunarcrush(scan.symbol)
+    santiment_data = await _check_santiment(scan.symbol)
     
     # Run SENTINEL pipeline
     try:
@@ -2999,6 +3083,20 @@ async def scan_token(
             safety = max(0, safety - 5)
             scan.risk_flags.append("LUNARCRUSH_NEGATIVE_SENTIMENT")
     
+    # Santiment social + on-chain metrics
+    if isinstance(santiment_data, dict):
+        scan.confidence = min(100, scan.confidence + 5)
+        mentions = santiment_data.get("social_mentions_24h", 0) or 0
+        social_risk = santiment_data.get("social_risk", "")
+        market_vol = market.get("volume_24h", 0) or 0
+        # Viral social with low volume = bot campaign
+        if social_risk == "viral" and market_vol < 50000:
+            safety = max(0, safety - 25)
+            scan.risk_flags.append("SANTIMENT_VIRAL_LOW_VOLUME")
+        elif social_risk == "trending" and market_vol < 10000:
+            safety = max(0, safety - 15)
+            scan.risk_flags.append("SANTIMENT_HYPE_DETECTED")
+    
     # ScamSniffer phishing blacklist
     if isinstance(scamsniffer_data, dict):
         if scamsniffer_data.get("is_phishing"):
@@ -3131,6 +3229,8 @@ async def scan_token(
         scan.free["blowfish"] = blowfish_data
     if isinstance(lunarcrush_data, dict):
         scan.free["lunarcrush"] = lunarcrush_data
+    if isinstance(santiment_data, dict):
+        scan.free["santiment"] = santiment_data
     if isinstance(scamsniffer_data, dict):
         scan.free["scamsniffer"] = scamsniffer_data
     if isinstance(dune_data, dict):
