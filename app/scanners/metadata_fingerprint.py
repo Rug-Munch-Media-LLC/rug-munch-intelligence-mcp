@@ -351,6 +351,22 @@ class MetadataFingerprinter:
     # Warning generation
     # ------------------------------------------------------------------
 
+    # Known stablecoin / wrapped token symbols — these legitimately have no description
+    STABLECOIN_SYMBOLS = {
+        "USDC", "USDT", "DAI", "BUSD", "TUSD", "USDP", "GUSD", "HUSD",
+        "USDD", "FRAX", "LUSD", "SUSD", "USDS", "USDJ", "USDX", "EURS",
+        "USDC.E", "USDT.E", "DAI.E", "USDC.W", "USDT.W", "WUSDC", "WUSDT",
+        "WETH", "WBTC", "WBNB", "WMATIC", "WAVAX", "WFTM", "WGLMR",
+        "SOL", "WSOL", "BSOL", "MSOL", "JPSOL", "STSOL",
+    }
+
+    def _is_stablecoin_or_wrapped(self, symbol: str) -> bool:
+        """Check if token is a known stablecoin or wrapped asset."""
+        if not symbol:
+            return False
+        sym = symbol.upper().strip()
+        return sym in self.STABLECOIN_SYMBOLS or sym.startswith("W") or sym.startswith("ST")
+
     def _generate_warnings(
         self, meta: TokenMetadata, similar: List[Dict[str, object]]
     ) -> List[str]:
@@ -375,11 +391,15 @@ class MetadataFingerprinter:
                     f"(similarity {(overall):.0%})"
                 )
 
+        # Skip NO_DESCRIPTION for stablecoins/wrapped tokens — they don't need marketing copy
         if not meta.description:
-            warnings.append("NO_DESCRIPTION: token has no description text")
+            if not self._is_stablecoin_or_wrapped(meta.symbol):
+                warnings.append("NO_DESCRIPTION: token has no description text")
 
+        # Skip NO_SOCIALS for stablecoins/wrapped tokens
         if not meta.social_links:
-            warnings.append("NO_SOCIALS: token has no social links")
+            if not self._is_stablecoin_or_wrapped(meta.symbol):
+                warnings.append("NO_SOCIALS: token has no social links")
 
         # Check for identical html hashes across cached tokens
         html_hash = hash_html_structure(meta.website_html)

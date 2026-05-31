@@ -392,6 +392,241 @@ async def ingest_metamask_domains() -> Dict[str, int]:
     return {"ingested": ingested, "errors": errors}
 
 
+# ─── Source 6: ScamSniffer GitHub Repo (phishing domains + addresses) ────
+
+async def ingest_scamsniffer_github() -> Dict[str, int]:
+    """Ingest ScamSniffer GitHub scam-database repo.
+    
+    Contains blacklists of phishing domains and malicious wallet addresses.
+    7-day delay vs real-time but excellent for historical pattern analysis.
+    """
+    base_url = "https://raw.githubusercontent.com/scamsniffer/scam-database/main"
+    files_to_fetch = [
+        "blacklist/domains.json",
+        "blacklist/addresses.json",
+        "blacklist/urls.json",
+    ]
+    
+    ingested = 0
+    errors = 0
+    total_domains = 0
+    total_addresses = 0
+    
+    for file_path in files_to_fetch:
+        url = f"{base_url}/{file_path}"
+        try:
+            async with httpx.AsyncClient(timeout=60) as client:
+                resp = await client.get(url)
+                if resp.status_code != 200:
+                    logger.warning(f"ScamSniffer {file_path}: HTTP {resp.status_code}")
+                    continue
+                data = resp.json()
+        except Exception as e:
+            logger.warning(f"ScamSniffer {file_path} error: {e}")
+            continue
+        
+        if not isinstance(data, list):
+            logger.warning(f"ScamSniffer {file_path}: unexpected format {type(data)}")
+            continue
+        
+        item_type = file_path.split("/")[-1].replace(".json", "")
+        logger.info(f"ScamSniffer {item_type}: {len(data)} entries")
+        
+        # Batch ingest
+        batch_size = 50
+        total_batches = (len(data) + batch_size - 1) // batch_size
+        
+        for batch_idx in range(total_batches):
+            batch = data[batch_idx * batch_size:(batch_idx + 1) * batch_size]
+            
+            if item_type == "domains":
+                content = (
+                    f"ScamSniffer Confirmed Phishing Domains (Batch {batch_idx+1}/{total_batches}):\n"
+                    f"{chr(10).join(batch)}\n"
+                    f"Source: ScamSniffer scam-database GitHub. 7-day delayed but verified."
+                )
+                metadata = {
+                    "source": "scamsniffer_github",
+                    "item_type": "domain",
+                    "batch_index": batch_idx,
+                    "total_batches": total_batches,
+                    "item_count": len(batch),
+                    "category": "phishing_domain",
+                    "severity": "high",
+                }
+                total_domains += len(batch)
+            elif item_type == "addresses":
+                # Addresses may be dicts or strings
+                addr_list = []
+                for item in batch:
+                    if isinstance(item, dict):
+                        addr = item.get("address", item.get("addr", ""))
+                        chain = item.get("chain", "unknown")
+                        label = item.get("label", "")
+                        if addr:
+                            addr_list.append(f"{addr} ({chain}) {label}")
+                    elif isinstance(item, str):
+                        addr_list.append(item)
+                
+                content = (
+                    f"ScamSniffer Malicious Addresses (Batch {batch_idx+1}/{total_batches}):\n"
+                    f"{chr(10).join(addr_list)}\n"
+                    f"Source: ScamSniffer scam-database GitHub. Wallet drainer and phishing addresses."
+                )
+                metadata = {
+                    "source": "scamsniffer_github",
+                    "item_type": "address",
+                    "batch_index": batch_idx,
+                    "total_batches": total_batches,
+                    "item_count": len(batch),
+                    "category": "malicious_address",
+                    "severity": "critical",
+                }
+                total_addresses += len(batch)
+            else:  # urls
+                content = (
+                    f"ScamSniffer Malicious URLs (Batch {batch_idx+1}/{total_batches}):\n"
+                    f"{chr(10).join(batch)}\n"
+                    f"Source: ScamSniffer scam-database GitHub."
+                )
+                metadata = {
+                    "source": "scamsniffer_github",
+                    "item_type": "url",
+                    "batch_index": batch_idx,
+                    "total_batches": total_batches,
+                    "item_count": len(batch),
+                    "category": "malicious_url",
+                    "severity": "high",
+                }
+            
+            if await ingest_doc("known_scams", content, metadata):
+                ingested += 1
+            else:
+                errors += 1
+            
+            if (batch_idx + 1) % 50 == 0:
+                logger.info(f"  ScamSniffer {item_type}: {batch_idx+1}/{total_batches} batches | ingested: {ingested}")
+                await asyncio.sleep(0.05)
+    
+    logger.info(f"ScamSniffer total: {total_domains} domains, {total_addresses} addresses")
+    return {"ingested": ingested, "errors": errors, "domains": total_domains, "addresses": total_addresses}
+
+
+# ─── Source 7: PhishDestroy Destroylist (140K+ threats) ────
+
+async def ingest_phishdestroy() -> Dict[str, int]:
+    """Ingest PhishDestroy destroylist — 140K curated crypto/web3 scam domains.
+    
+    MIT licensed. Available as domains.txt, domains.csv, active_domains.json.
+    We fetch the plain text list and batch it.
+    """
+    urls = {
+        "domains_txt": "https://raw.githubusercontent.com/PhishDestroy/destroylist/main/domains.txt",
+        "active_json": "https://raw.githubusercontent.com/PhishDestroy/destroylist/main/active_domains.json",
+    }
+    
+    ingested = 0
+    errors = 0
+    total_domains = 0
+    
+    # Try active_domains.json first (structured)
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.get(urls["active_json"])
+            if resp.status_code == 200:
+                data = resp.json()
+                if isinstance(data, list):
+                    domains = data
+                elif isinstance(data, dict):
+                    domains = list(data.keys())
+                else:
+                    domains = []
+                
+                logger.info(f"PhishDestroy active_domains.json: {len(domains)} domains")
+                
+                batch_size = 50
+                total_batches = (len(domains) + batch_size - 1) // batch_size
+                
+                for batch_idx in range(total_batches):
+                    batch = domains[batch_idx * batch_size:(batch_idx + 1) * batch_size]
+                    domain_list = "\n".join(batch)
+                    doc_id = make_doc_id("known_scams", f"pd_active:{batch_idx}")
+                    content = (
+                        f"PhishDestroy Active Malicious Domains (Batch {batch_idx+1}/{total_batches}):\n"
+                        f"{domain_list}\n"
+                        f"Source: PhishDestroy destroylist (MIT License). DNS-validated active crypto/web3 scam domains."
+                    )
+                    metadata = {
+                        "source": "phishdestroy_destroylist",
+                        "batch_index": batch_idx,
+                        "total_batches": total_batches,
+                        "domain_count": len(batch),
+                        "category": "phishing_domain",
+                        "severity": "high",
+                        "license": "MIT",
+                        "doc_id": doc_id,
+                    }
+                    
+                    if await ingest_doc("known_scams", content, metadata):
+                        ingested += 1
+                        total_domains += len(batch)
+                    else:
+                        errors += 1
+                    
+                    if (batch_idx + 1) % 100 == 0:
+                        logger.info(f"  PhishDestroy: {batch_idx+1}/{total_batches} | ingested: {ingested}")
+                        await asyncio.sleep(0.05)
+    except Exception as e:
+        logger.warning(f"PhishDestroy active_domains.json failed: {e}")
+    
+    # Fallback to domains.txt
+    if total_domains == 0:
+        try:
+            async with httpx.AsyncClient(timeout=60) as client:
+                resp = await client.get(urls["domains_txt"])
+                if resp.status_code == 200:
+                    domains = [d.strip() for d in resp.text.splitlines() if d.strip()]
+                    logger.info(f"PhishDestroy domains.txt: {len(domains)} domains")
+                    
+                    batch_size = 50
+                    total_batches = (len(domains) + batch_size - 1) // batch_size
+                    
+                    for batch_idx in range(total_batches):
+                        batch = domains[batch_idx * batch_size:(batch_idx + 1) * batch_size]
+                        domain_list = "\n".join(batch)
+                        doc_id = make_doc_id("known_scams", f"pd_txt:{batch_idx}")
+                        content = (
+                            f"PhishDestroy Malicious Domains (Batch {batch_idx+1}/{total_batches}):\n"
+                            f"{domain_list}\n"
+                            f"Source: PhishDestroy destroylist (MIT License)."
+                        )
+                        metadata = {
+                            "source": "phishdestroy_destroylist",
+                            "batch_index": batch_idx,
+                            "total_batches": total_batches,
+                            "domain_count": len(batch),
+                            "category": "phishing_domain",
+                            "severity": "high",
+                            "license": "MIT",
+                            "doc_id": doc_id,
+                        }
+                        
+                        if await ingest_doc("known_scams", content, metadata):
+                            ingested += 1
+                            total_domains += len(batch)
+                        else:
+                            errors += 1
+                        
+                        if (batch_idx + 1) % 100 == 0:
+                            logger.info(f"  PhishDestroy: {batch_idx+1}/{total_batches} | ingested: {ingested}")
+                            await asyncio.sleep(0.05)
+        except Exception as e:
+            logger.warning(f"PhishDestroy domains.txt failed: {e}")
+    
+    logger.info(f"PhishDestroy total: {total_domains} domains ingested")
+    return {"ingested": ingested, "errors": errors, "domains": total_domains}
+
+
 # ─── Main ─────────────────────────────────────────────────────────────
 
 async def main():
@@ -451,6 +686,26 @@ async def main():
     total_stats["known_scams_added"] += r["ingested"]
     total_stats["errors"] += r["errors"]
     total_stats["sources"]["metamask_domains"] = r
+    logger.info(f"  Result: {r}")
+
+    # Source 6: ScamSniffer GitHub repo (phishing domains + addresses)
+    logger.info("=" * 60)
+    logger.info("SOURCE 6: ScamSniffer GitHub Scam Database")
+    logger.info("=" * 60)
+    r = await ingest_scamsniffer_github()
+    total_stats["known_scams_added"] += r["ingested"]
+    total_stats["errors"] += r["errors"]
+    total_stats["sources"]["scamsniffer_github"] = r
+    logger.info(f"  Result: {r}")
+
+    # Source 7: PhishDestroy destroylist (140K+ curated threats)
+    logger.info("=" * 60)
+    logger.info("SOURCE 7: PhishDestroy Destroylist")
+    logger.info("=" * 60)
+    r = await ingest_phishdestroy()
+    total_stats["known_scams_added"] += r["ingested"]
+    total_stats["errors"] += r["errors"]
+    total_stats["sources"]["phishdestroy"] = r
     logger.info(f"  Result: {r}")
 
     logger.info("=" * 60)

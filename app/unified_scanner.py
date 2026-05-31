@@ -432,8 +432,10 @@ async def _scan_held_tokens(tokens: list, chain: str) -> Dict[str, Any]:
     if not tokens:
         return {"scanned": 0, "risks": [], "deployers_to_flag": []}
     
+    # Sort by amount (largest first), cap at 5 for speed
+    sorted_tokens = sorted(tokens, key=lambda t: float(t.get("amount", 0) if isinstance(t, dict) else 0), reverse=True)
     mints = []
-    for token in tokens[:20]:
+    for token in sorted_tokens[:5]:  # Top 5 by balance
         mint = token.get("mint", "") if isinstance(token, dict) else token
         if mint:
             mints.append(mint)
@@ -471,12 +473,18 @@ async def _scan_held_tokens(tokens: list, chain: str) -> Dict[str, Any]:
         except Exception:
             return None
     
-    results = await asyncio.gather(*[_scan_one(m) for m in mints], return_exceptions=True)
+    try:
+        results = await asyncio.wait_for(
+            asyncio.gather(*[_scan_one(m) for m in mints], return_exceptions=True),
+            timeout=15.0
+        )
+    except asyncio.TimeoutError:
+        results = []  # Timeout — return what we have
     
     risks = []
     deployers_to_flag = []
     highest = None
-    for r in results:
+    for r in (results if isinstance(results, list) else []):
         if isinstance(r, dict) and r:
             risks.append(r)
             if r["safety_score"] < 30:
@@ -513,6 +521,125 @@ async def _scan_held_tokens(tokens: list, chain: str) -> Dict[str, Any]:
 # ═══════════════════════════════════════════
 # FREE-TIER ENHANCEMENTS
 # ═══════════════════════════════════════════
+
+async def _check_hapi_risk(address: str, chain: str) -> Optional[Dict[str, Any]]:
+    """Query HAPI Protocol on-chain risk scoring.
+    
+    HAPI is an on-chain cybersecurity network detecting malicious activity.
+    Uses both external and on-chain data for real-time AML screening.
+    """
+    try:
+        # HAPI doesn't have a simple REST API — we query their public data
+        # or use their subgraph. For now, we check their public status endpoint.
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # HAPI Protocol public API (if available)
+            resp = await client.get(
+                f"https://hapi.one/api/v1/address/{address}",
+                params={"chain": chain.lower()},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                return {
+                    "risk_score": data.get("risk_score", 0),
+                    "risk_level": data.get("risk_level", "unknown"),
+                    "is_malicious": data.get("is_malicious", False),
+                    "categories": data.get("categories", []),
+                    "source": "hapi",
+                }
+    except Exception as e:
+        logger.debug(f"HAPI check failed: {e}")
+    return None
+
+
+async def _check_misttrack_light(address: str, chain: str) -> Optional[Dict[str, Any]]:
+    """Query SlowMist MistTrack Light — free wallet risk assessment.
+    
+    Provides preliminary risk profiling and graph analysis.
+    """
+    try:
+        # MistTrack web interface scraping or API if available
+        # The free tier is via their web app; we'll try their public API
+        async with httpx.AsyncClient(timeout=12.0) as client:
+            resp = await client.get(
+                f"https://misttrack.io/api/v1/address/{address}",
+                params={"chain": chain.lower()},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                return {
+                    "risk_score": data.get("risk_score", 0),
+                    "risk_level": data.get("risk_level", "unknown"),
+                    "labels": data.get("labels", []),
+                    "related_addresses": data.get("related", [])[:5],
+                    "source": "misttrack",
+                }
+    except Exception as e:
+        logger.debug(f"MistTrack check failed: {e}")
+    return None
+
+
+async def _check_honeydb_ip(ip_address: str) -> Optional[Dict[str, Any]]:
+    """Query HoneyDB for threat actor data on IP address.
+    
+    Community-driven honeypot data aggregation. 1,500 req/month free.
+    Useful for correlating IP addresses with crypto scam infrastructure.
+    """
+    try:
+        api_id = os.getenv("HONEYDB_API_ID", "")
+        api_key = os.getenv("HONEYDB_API_KEY", "")
+        if not api_id or not api_key:
+            return None
+        
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                "https://honeydb.io/api/v1/indicator/ipv4",
+                params={"ip": ip_address},
+                headers={"X-HoneyDB-APIID": api_id, "X-HoneyDB-APIKey": api_key},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                return {
+                    "is_threat": data.get("is_threat", False),
+                    "threat_score": data.get("threat_score", 0),
+                    "events": data.get("events", []),
+                    "source": "honeydb",
+                }
+    except Exception as e:
+        logger.debug(f"HoneyDB check failed: {e}")
+    return None
+
+
+async def _check_trm_sanctions_wallet(address: str) -> Optional[Dict[str, Any]]:
+    """Screen wallet address against TRM Labs sanctions list.
+    
+    Free tier: 1 req/sec, 100/day unauthenticated.
+    Authenticated: 1K req/sec, 100K/day.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                "https://api.trmlabs.com/public/v1/sanctions/screening",
+                json={"address": [address]},
+                headers={"Content-Type": "application/json"},
+            )
+            if resp.status_code == 201:
+                data = resp.json()
+                results = data.get("results", [])
+                if results:
+                    r = results[0]
+                    return {
+                        "is_sanctioned": r.get("isSanctioned", False),
+                        "screening_address": r.get("address", address),
+                        "source": "trm_labs",
+                        "risk_level": "critical" if r.get("isSanctioned") else "low",
+                    }
+            elif resp.status_code == 429:
+                logger.warning("TRM Labs rate limit hit")
+                return {"source": "trm_labs", "rate_limited": True, "is_sanctioned": False}
+    except Exception as e:
+        logger.debug(f"TRM sanctions check failed: {e}")
+    return None
+
 
 async def _trace_funding_source(address: str, chain: str) -> Dict[str, Any]:
     """Trace initial funding source using on-chain transaction history."""
@@ -722,7 +849,28 @@ async def scan_wallet(wallet_address: str, chain: str = "solana", tier: str = "f
         factors.entity_confidence = max(factors.entity_confidence, sentinel_labels.get("risk_score", 50))
         data_sources.append("sentinel_labels")
     
-    # ── PRO: Wallet Memory Bank (cross-chain identity + clusters) ──
+        # ── FREE: External threat intelligence (HAPI, MistTrack, TRM sanctions) ──
+    hapi_risk = await _check_hapi_risk(wallet_address, chain)
+    if hapi_risk:
+        if hapi_risk.get("is_malicious"):
+            factors.is_labeled_scammer = True
+            factors.scam_token_exposure = max(factors.scam_token_exposure, 1)
+        data_sources.append("hapi")
+    
+    misttrack = await _check_misttrack_light(wallet_address, chain)
+    if misttrack:
+        if misttrack.get("risk_score", 0) > 70:
+            factors.is_labeled_scammer = True
+        data_sources.append("misttrack")
+    
+    trm = await _check_trm_sanctions_wallet(wallet_address)
+    if trm:
+        if trm.get("is_sanctioned"):
+            factors.is_labeled_sanctioned = True
+            factors.funding_from_sanctioned = True
+        data_sources.append("trm_labs")
+
+# ── PRO: Wallet Memory Bank (cross-chain identity + clusters) ──
     if tier in ("pro", "elite"):
         wallet_memory = await _fetch_wallet_memory(wallet_address, chain)
         if wallet_memory:

@@ -239,6 +239,21 @@ class LiquidityVerifier:
         chain_lockers = get_known_lockers(chain)
         return chain_lockers.get(address.lower() if not is_solana(chain) else address)
 
+    # Known stablecoin / wrapped token symbols — LP lock check is irrelevant
+    STABLECOIN_SYMBOLS = {
+        "USDC", "USDT", "DAI", "BUSD", "TUSD", "USDP", "GUSD", "HUSD",
+        "USDD", "FRAX", "LUSD", "SUSD", "USDS", "USDJ", "USDX", "EURS",
+        "WETH", "WBTC", "WBNB", "WMATIC", "WAVAX", "WFTM", "WGLMR",
+        "SOL", "WSOL", "BSOL", "MSOL",
+    }
+
+    def _is_stablecoin(self, symbol: str) -> bool:
+        """Check if token is a known stablecoin or wrapped asset."""
+        if not symbol:
+            return False
+        sym = symbol.upper().strip()
+        return sym in self.STABLECOIN_SYMBOLS or sym.startswith("W") or sym.startswith("ST")
+
     def is_dead_address(self, address: str, chain: str) -> bool:
         """Check if address is a known burn/dead address."""
         if is_solana(chain):
@@ -248,7 +263,7 @@ class LiquidityVerifier:
             "0x0000000000000000000000000000000000000000".lower(),
         }
 
-    async def verify_lock(self, token_address: str, chain: str, lp_token: str = "") -> LockReport:
+    async def verify_lock(self, token_address: str, chain: str, lp_token: str = "", symbol: str = "") -> LockReport:
         """Full liquidity verification for a token.
 
         Steps:
@@ -259,7 +274,28 @@ class LiquidityVerifier:
         5. Check lock expiry dates
         6. Detect split-lock scams
         7. For Solana: check LP burn
+        
+        NOTE: Stablecoins and wrapped tokens are skipped — LP lock is irrelevant.
         """
+        # Skip stablecoins/wrapped tokens — they don't need LP locks
+        if self._is_stablecoin(symbol):
+            return LockReport(
+                token_address=token_address, chain=chain,
+                status=LockStatus.LOCKED,
+                total_locked_percentage=100.0,
+                lock_details=[LockDetail(
+                    locker_address="stablecoin", platform="N/A",
+                    percentage_locked=100.0, is_legit=True
+                )],
+                is_legitimate_locker=True,
+                has_split_lock=False,
+                upcoming_unlocks=[],
+                fake_lock_detected=False,
+                lp_burned=False,
+                risk_score=0, risk_level="LOW",
+                warnings=["Stablecoin/wrapped token — LP lock check not applicable"]
+            )
+
         lock_details = []
         upcoming_unlocks = []
         total_locked_pct = 0.0
