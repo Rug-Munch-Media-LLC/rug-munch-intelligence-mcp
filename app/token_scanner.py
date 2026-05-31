@@ -324,13 +324,9 @@ async def _check_defi_scanner(token_address: str, chain: str) -> Optional[Dict[s
     Cost: 20 credits per scannerProject + 5 for holderAnalysis.
     """
     api_key = os.getenv("DEFI_API_KEY", "")
-    # Fallback: read from file if env var not set (Docker env loading issue)
     if not api_key:
-        try:
-            with open("/tmp/defi_api_key.txt", "r") as f:
-                api_key = f.read().strip()
-        except Exception:
-            pass
+        from app.key_loader import load_key
+        api_key = load_key("DEFI_API_KEY")
     if not api_key:
         return None
     try:
@@ -2295,13 +2291,9 @@ async def _check_webacy(address: str, chain: str) -> Optional[Dict[str, Any]]:
     Cost: $0 (free tier via provided key).
     """
     api_key = os.getenv("WEBACY_API_KEY", "")
-    # File-based fallback (Docker env loading workaround)
     if not api_key:
-        try:
-            with open("/tmp/webacy_key.txt", "r") as f:
-                api_key = f.read().strip()
-        except Exception:
-            pass
+        from app.key_loader import load_key
+        api_key = load_key("WEBACY_API_KEY")
     if not api_key:
         return None
     try:
