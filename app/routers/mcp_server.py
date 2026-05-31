@@ -1,7 +1,7 @@
 """
 Rug Munch Intelligence MCP Server v3.1 (Spec Compliant)
 
-MCP protocol version: 2025-11-05
+MCP protocol version: 2024-11-05
 Transport: Streamable HTTP (POST /mcp)
 Discovery: /.well-known/mcp | /.well-known/mcp.json | /llms.txt
 Tool listing: GET /mcp/tools | POST /mcp (tools/list)
@@ -27,7 +27,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 logger = logging.getLogger("rmi_mcp_v3")
 router = APIRouter(tags=["mcp"])
 
-MCP_PROTOCOL_VERSION = "2025-11-05"
+MCP_PROTOCOL_VERSION = "2024-11-05"
 SERVER_NAME = "Rug Munch Intelligence"
 SERVER_VERSION = "3.2.0"
 
