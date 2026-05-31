@@ -1,6 +1,6 @@
 <p align="center">
   <img src="https://img.shields.io/badge/MCP-Compatible-6E40C9?logo=modelcontextprotocol&logoColor=white" alt="MCP Compatible" />
-  <img src="https://img.shields.io/badge/Tools-210-00D4AA" alt="210 Tools" />
+  <img src="https://img.shields.io/badge/Tools-221-00D4AA" alt="210 Tools" />
   <img src="https://img.shields.io/badge/Chains-13-F7931A" alt="13 Chains" />
   <img src="https://img.shields.io/badge/x402-Payments-FF6900" alt="x402 Payments" />
   <img src="https://img.shields.io/badge/Price-Free_Trials-22C55E" alt="Free Trials" />
@@ -122,6 +122,8 @@ AI Agent → this MCP server → x402 API → RMI Backend (210 tools)
 | MCP Docs | https://rugmunch.io/docs/mcp |
 | x402 Discovery | https://rugmunch.io/.well-known/x402 |
 | Smithery | https://smithery.ai/server/@cryptorugmuncher/rug-munch-intelligence |
+  <a href="https://glama.ai/mcp/servers?q=rug+munch"><img src="https://img.shields.io/badge/Listed-Glama-7C3AED" alt="Glama"/></a>
+  <a href="https://mcp.so/server/rug-munch-intelligence"><img src="https://img.shields.io/badge/Listed-mcp.so-06D6A0" alt="mcp.so"/></a>
 | Backend Repo | https://github.com/Rug-Munch-Media-LLC/rugmuncher-backend |
 | x402 Gateway (Base) | https://github.com/Rug-Munch-Media-LLC/x402-gateway-base |
 | x402 Gateway (Solana) | https://github.com/Rug-Munch-Media-LLC/x402-gateway-solana |
