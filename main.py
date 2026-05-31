@@ -91,6 +91,9 @@ from app.routers import security_intel
 from app.routers import darkroom_tokens
 from app.routers import darkroom_airdrop
 from app.routers import darkroom_multichain
+from app.routers import admin_backend
+from app.routers import bulletin_board
+from app.routers import wallet_manager_v2
 app.include_router(admin_control.router)
 app.include_router(alert_pipeline.router)
 app.include_router(intelligence_panel.router)
@@ -98,6 +101,9 @@ app.include_router(security_intel.router)
 app.include_router(darkroom_tokens.router)
 app.include_router(darkroom_airdrop.router)
 app.include_router(darkroom_multichain.router)
+app.include_router(admin_backend.router)
+app.include_router(bulletin_board.router)
+app.include_router(wallet_manager_v2.router)
 from app.routers import email_router
 app.include_router(email_router.router)
 from app.all_connectors import router as connectors_router
@@ -125,6 +131,11 @@ app.include_router(x402_token_watch_router)
 async def darkroom_dashboard():
     """Serve the Darkroom admin token deployer UI."""
     return FileResponse("/root/backend/static/darkroom.html")
+
+@app.get("/admin", include_in_schema=False)
+async def admin_dashboard():
+    """Serve the main admin control panel SPA."""
+    return FileResponse("/root/backend/static/admin.html")
 
 # ── security.txt (RFC 9116) ──
 SECURITY_TXT = """Contact: admin@rugmunch.io
@@ -1403,6 +1414,52 @@ async def get_markets_airdrops(request: Request):
 async def get_markets_newsletter_v0(request: Request):
     """V0 alias for MarketsPage (no /v1 prefix)."""
     return await get_latest_newsletter()
+
+@app.get("/api/v1/markets/breakdown")
+async def get_markets_breakdown(request: Request):
+    """Market breakdown — trending tokens from live data."""
+    # Get trending tokens from existing endpoint
+    trending_data = await get_markets_trending(request)
+    
+    # Scam alerts come from news service
+    scam_alerts = []
+    
+    # Build trending with risk scores
+    tokens = []
+    for t in (trending_data.get("tokens", []) or [])[:10]:
+        tokens.append({
+            "rank": len(tokens) + 1,
+            "symbol": t.get("symbol", "???"),
+            "name": t.get("name", ""),
+            "price": t.get("price_usd") or 0,
+            "change1h": 0,
+            "change24h": t.get("change_24h") or 0,
+            "volume": f"${(t.get('volume_h24') or 0):,.0f}" if t.get("volume_h24") else "N/A",
+            "liquidity": "N/A",
+            "holders": 0,
+            "age": "",
+            "aiScore": 50,
+            "risk": "medium",
+            "bundlerActivity": False,
+        })
+    
+    return {
+        "tokens": tokens,
+        "scam_alerts": scam_alerts,
+        "count": len(tokens),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+@app.get("/api/v1/alerts/count")
+async def get_alerts_count(request: Request):
+    """Live count of active threat alerts."""
+    try:
+        from app.alert_pipeline import get_active_alert_count
+        count = await get_active_alert_count()
+        return {"count": count}
+    except:
+        return {"count": 0}
+
 
 @app.get("/api/markets/trending")
 async def get_markets_trending_v0(request: Request):
