@@ -2145,7 +2145,9 @@ async def _check_lunarcrush(symbol: str) -> Optional[Dict[str, Any]]:
     Detects coordinated hype before pump-and-dumps.
     Free tier with rate limits. API key: LUNARCRUSH_API_KEY env var.
     API base: lunarcrush.com/api4/public/coins/{symbol}/v1
-    Cost: $0 (free tier — "Limited data mode" for unsubscribed).
+    NOTE: Most REST endpoints require "Individual or higher" subscription.
+    MCP server available at lunarcrush.ai/sse for AI agent use.
+    Cost: $0 (free tier — limited to web dashboard + MCP; REST needs paid plan).
     """
     api_key = os.getenv("LUNARCRUSH_API_KEY", "")
     if not api_key or not symbol:
