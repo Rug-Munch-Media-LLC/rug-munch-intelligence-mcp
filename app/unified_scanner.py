@@ -428,42 +428,209 @@ async def _fetch_wallet_memory(address: str, chain: str) -> Dict[str, Any]:
 
 
 async def _scan_held_tokens(tokens: list, chain: str) -> Dict[str, Any]:
-    """Quick-scan tokens the wallet holds using SENTINEL token scanner."""
+    """Scan held tokens using SENTINEL — parallel with full enrichments."""
     if not tokens:
-        return {"scanned": 0, "risks": []}
+        return {"scanned": 0, "risks": [], "deployers_to_flag": []}
     
-    risks = []
-    highest = None
-    for token in tokens[:20]:  # limit to 20 tokens
+    mints = []
+    for token in tokens[:20]:
         mint = token.get("mint", "") if isinstance(token, dict) else token
-        if not mint:
-            continue
+        if mint:
+            mints.append(mint)
+    
+    if not mints:
+        return {"scanned": 0, "risks": [], "deployers_to_flag": []}
+    
+    # Parallel scan all tokens
+    async def _scan_one(mint: str) -> Optional[Dict]:
         try:
             from app.token_scanner import scan_token
             scan = await scan_token(mint, chain, tier="free")
-            entry = {
+            enrich = {}
+            if hasattr(scan, 'free') and isinstance(scan.free, dict):
+                # Pull key enrichments for wallet context
+                e = scan.free
+                enrich = {
+                    "simulation": e.get("simulation"),
+                    "holders": e.get("holders"),
+                    "deployer": e.get("deployer"),
+                    "deep_deployer": e.get("deep_deployer"),
+                    "birdeye": e.get("birdeye"),
+                    "copycat_check": e.get("copycat_check"),
+                    "volume_anomaly": e.get("volume_anomaly"),
+                }
+            return {
                 "token": mint,
                 "symbol": scan.symbol,
                 "name": scan.name,
                 "safety_score": scan.safety_score,
-                "risk_flags": scan.risk_flags[:3],
+                "confidence": getattr(scan, 'confidence', 0),
+                "risk_flags": scan.risk_flags,
+                "enrichments": enrich,
             }
-            risks.append(entry)
-            if highest is None or scan.safety_score < highest.get("safety_score", 100):
-                highest = entry
         except Exception:
-            pass
+            return None
+    
+    results = await asyncio.gather(*[_scan_one(m) for m in mints], return_exceptions=True)
+    
+    risks = []
+    deployers_to_flag = []
+    highest = None
+    for r in results:
+        if isinstance(r, dict) and r:
+            risks.append(r)
+            if r["safety_score"] < 30:
+                # Flag deployer for data flywheel
+                enrich = r.get("enrichments", {})
+                deployer = enrich.get("deployer", {}) or {}
+                dev_addr = deployer.get("deployer") if isinstance(deployer, dict) else None
+                if dev_addr and r["safety_score"] < 20:
+                    deployers_to_flag.append({
+                        "deployer": dev_addr,
+                        "token": r["token"],
+                        "symbol": r["symbol"],
+                        "chain": chain,
+                        "risk_score": r["safety_score"],
+                        "flags": r["risk_flags"][:3],
+                    })
+            if highest is None or r["safety_score"] < highest.get("safety_score", 100):
+                highest = r
     
     return {
         "scanned": len(risks),
         "risks": risks,
         "highest_risk": highest,
+        "deployers_to_flag": deployers_to_flag,
+        "avg_safety": round(sum(r["safety_score"] for r in risks) / len(risks), 1) if risks else 0,
+        "high_risk_count": sum(1 for r in risks if r["safety_score"] < 30),
     }
 
 
 # ═══════════════════════════════════════════
 # UNIFIED WALLET SCAN
 # ═══════════════════════════════════════════
+
+# ═══════════════════════════════════════════
+# FREE-TIER ENHANCEMENTS
+# ═══════════════════════════════════════════
+
+async def _trace_funding_source(address: str, chain: str) -> Dict[str, Any]:
+    """Trace initial funding source using on-chain transaction history."""
+    try:
+        if chain == "solana":
+            key = _get_helius_key()
+            if not key:
+                return {}
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    f"https://api.helius.xyz/v0/addresses/{address}/transactions",
+                    params={"api-key": key, "limit": 10, "type": "TRANSFER"},
+                )
+                if resp.status_code != 200:
+                    return {}
+                txs = resp.json()
+                if not txs:
+                    return {"source": "unknown", "hops": 0}
+                
+                # Find first incoming transfer
+                first_in = None
+                for tx in txs:
+                    transfers = tx.get("tokenTransfers", []) + tx.get("nativeTransfers", [])
+                    for t in transfers:
+                        if t.get("toUserAccount") == address:
+                            first_in = t
+                            break
+                    if first_in:
+                        break
+                
+                source = first_in.get("fromUserAccount", "unknown") if first_in else "unknown"
+                source_label = await _resolve_entity_free(source, chain)
+                return {
+                    "source": source,
+                    "source_label": source_label.get("label", "unknown"),
+                    "is_cex": "exchange" in str(source_label).lower() or "cex" in str(source_label).lower(),
+                    "is_mixer": "mixer" in str(source_label).lower() or "tornado" in str(source_label).lower(),
+                    "hops": 1,
+                }
+        return {"source": "unknown", "hops": 0}
+    except Exception:
+        return {"source": "unknown", "hops": 0}
+
+
+async def _resolve_entity_free(address: str, chain: str) -> Dict[str, Any]:
+    """Basic cross-chain entity resolution — FREE tier (no Wallet Memory Bank)."""
+    try:
+        # Check SENTINEL labels first
+        from app.scanners.address_labeler import AddressLabeler
+        labeler = AddressLabeler()
+        labels = await labeler.analyze(address, chain)
+        if labels and labels.primary_label:
+            return {"label": labels.primary_label, "source": "sentinel", "chains": [chain]}
+        
+        # Check wallet_labels CSV
+        from app.wallet_memory.labels import get_label
+        label = get_label(address, chain)
+        if label:
+            return {"label": label, "source": "wallet_labels", "chains": [chain]}
+        
+        return {"label": "unknown", "source": "none", "chains": [chain]}
+    except Exception:
+        return {"label": "unknown", "source": "none", "chains": [chain]}
+
+
+async def _calculate_basic_pnl(address: str, chain: str, tokens: list, native_balance: float = 0) -> Dict[str, Any]:
+    """Basic PnL calculation — FREE tier (no GMGN)."""
+    try:
+        total_value = native_balance or 0
+        token_count = len(tokens)
+        
+        if tokens and chain == "solana":
+            # Try Jupiter price lookup for tokens
+            mints = [t.get("mint","") for t in tokens[:10] if t.get("mint")]
+            if mints:
+                async with httpx.AsyncClient(timeout=8.0) as client:
+                    resp = await client.get(
+                        "https://quote-api.jup.ag/v6/price",
+                        params={"ids": ",".join(mints[:5])}
+                    )
+                    if resp.status_code == 200:
+                        prices = resp.json().get("data", {})
+                        for mint, pdata in prices.items():
+                            price = float(pdata.get("price", 0))
+                            for t in tokens:
+                                if t.get("mint") == mint:
+                                    balance = float(t.get("amount", 0)) / (10 ** (t.get("decimals", 0) or 0))
+                                    total_value += balance * price
+        
+        return {
+            "estimated_value_usd": round(total_value, 2),
+            "token_count": token_count,
+            "priced_tokens": min(len(tokens), 5),
+            "method": "jupiter" if total_value > native_balance else "native_only",
+        }
+    except Exception:
+        return {"estimated_value_usd": round(native_balance, 2), "token_count": len(tokens), "method": "native_only"}
+
+
+async def _close_data_flywheel(deployers: list):
+    """Feed scam findings back to Wallet Memory Bank."""
+    if not deployers:
+        return
+    try:
+        from app.wallet_memory.engine import get_wallet_engine
+        engine = get_wallet_engine()
+        for d in deployers[:5]:  # Limit to 5
+            await engine.flag_deployer(
+                d["deployer"], d["chain"],
+                reason=f"scam_token_{d['symbol']}",
+                token=d["token"],
+                score=100 - d["risk_score"],
+            )
+        logger.info(f"Data flywheel: flagged {len(deployers[:5])} deployers")
+    except Exception as e:
+        logger.warning(f"Data flywheel failed: {e}")
+
+
 
 async def scan_wallet(wallet_address: str, chain: str = "solana", tier: str = "free") -> Dict[str, Any]:
     """Unified wallet scanner — SENTINEL + Helius/Moralis/Etherscan pool + Wallet Memory + Token Scanner."""
@@ -603,15 +770,49 @@ async def scan_wallet(wallet_address: str, chain: str = "solana", tier: str = "f
         except Exception:
             pass
     
-    # ── ELITE: Token portfolio risk scan + ML ──
+    # ── FREE: Token portfolio risk scan (parallel + enrichments) ──
+    token_scan = await _scan_held_tokens(token_list, chain)
+    if token_scan:
+        factors.held_token_risks = token_scan.get("risks", [])
+        factors.highest_risk_token = token_scan.get("highest_risk")
+        high_risk_count = token_scan.get("high_risk_count", 0)
+        factors.honeypot_tokens_owned = high_risk_count
+        factors.avg_held_token_safety = token_scan.get("avg_safety", 0)
+        
+        # Data flywheel: flag deployers of scam tokens
+        deployers = token_scan.get("deployers_to_flag", [])
+        if deployers:
+            asyncio.create_task(_close_data_flywheel(deployers))
+    
+    # ── FREE: Funding source tracing ──
+    funding = await _trace_funding_source(wallet_address, chain)
+    if funding:
+        factors.funding_source = funding.get("source", factors.funding_source)
+        factors.funding_source_label = funding.get("source_label", factors.funding_source_label)
+        factors.funding_source_is_cex = funding.get("is_cex", False)
+        factors.funding_source_is_mixer = funding.get("is_mixer", False)
+        factors.funding_hop_count = funding.get("hops", 0)
+        data_sources.append("funding_trace")
+    
+    # ── FREE: Basic cross-chain identity ──
+    free_entity = await _resolve_entity_free(wallet_address, chain)
+    if free_entity and free_entity.get("label") != "unknown":
+        if not factors.entity_label:
+            factors.entity_label = free_entity["label"]
+        if not factors.entity_confidence:
+            factors.entity_confidence = 60  # free-tier confidence
+        data_sources.append("free_entity")
+    
+    # ── FREE: Basic PnL ──
+    native_bal = onchain.get("sol_balance", onchain.get("native_balance", 0)) if onchain else 0
+    basic_pnl = await _calculate_basic_pnl(wallet_address, chain, token_list, native_bal)
+    if basic_pnl:
+        factors.current_balance_usd = max(factors.current_balance_usd or 0, basic_pnl.get("estimated_value_usd", 0))
+        factors.realized_pnl_usd = factors.realized_pnl_usd or 0  # keep if GMGN set it
+        data_sources.append("jupiter_pnl")
+    
+    # ── ELITE: ML anomaly + portfolio tracker ──
     if tier == "elite":
-        # Scan held tokens for risk
-        token_scan = await _scan_held_tokens(token_list, chain)
-        if token_scan:
-            factors.held_token_risks = token_scan.get("risks", [])
-            factors.highest_risk_token = token_scan.get("highest_risk")
-            high_risk = [t for t in token_scan.get("risks", []) if t.get("safety_score", 100) < 30]
-            factors.honeypot_tokens_owned = len(high_risk)
         
         # ML anomaly detection
         try:
@@ -660,7 +861,12 @@ async def scan_wallet(wallet_address: str, chain: str = "solana", tier: str = "f
         elif factors.wallet_age_days < 7 and factors.total_volume_usd > 100000:
             risk += 20; flags.append("NEW_WALLET_HIGH_VOLUME")
     elif factors.total_volume_usd > 50000:
-        risk += 10; flags.append("UNVERIFIED_HIGH_VOLUME")  # no age data but high vol
+        risk += 10; flags.append("UNVERIFIED_HIGH_VOLUME")
+    
+    # Held token risk (FREE tier — from parallel token scan)
+    if factors.honeypot_tokens_owned > 0: risk += 25; flags.append(f"HOLDS_SCAM_TOKENS_{factors.honeypot_tokens_owned}")
+    if factors.avg_held_token_safety and factors.avg_held_token_safety < 40:
+        risk += 15; flags.append("LOW_QUALITY_PORTFOLIO")
     
     # Token interaction
     if factors.rug_pull_launcher_count > 0: risk += 50; flags.append("RUG_PULL_LAUNCHER")

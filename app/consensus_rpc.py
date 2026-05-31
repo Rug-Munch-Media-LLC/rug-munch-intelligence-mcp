@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # Solana RPC endpoints (free + keyed, no cost for public tiers)
 SOLANA_RPC_ENDPOINTS = {
     "helius":     "https://mainnet.helius-rpc.com/?api-key={key}",
-    "quicknode":  "https://docs-demo.solana-mainnet.quiknode.pro/{key}/",
+    "quicknode":  "https://quiknode.pro/{key}/solana-mainnet/",
     "alchemy":    "https://solana-mainnet.g.alchemy.com/v2/{key}",
     "drpc":       "https://solana.drpc.org",
     "publicnode": "https://solana-rpc.publicnode.com",

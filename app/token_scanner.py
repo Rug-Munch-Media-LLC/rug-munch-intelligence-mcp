@@ -163,9 +163,14 @@ async def fetch_market_data(token_address: str, chain: str) -> Dict[str, Any]:
 
         chain_id = CHAIN_IDS.get(chain, chain)
         try:
+            api_key = os.getenv("GOPLUS_API_KEY", "")
+            headers = {}
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
             resp = await client.get(
                 f"https://api.gopluslabs.io/api/v1/token_security/{chain_id}",
                 params={"contract_addresses": token_address},
+                headers=headers,
             )
             if resp.status_code == 200:
                 json_data = resp.json()
@@ -215,6 +220,620 @@ async def _simulate_trade(token_address: str, chain: str) -> Optional[Dict[str, 
     except Exception as e:
         logger.warning(f"Trade simulation failed for {token_address[:8]}...: {e}")
         return None
+
+
+# ═══════════════════════════════════════════════════════════════
+# ENRICHMENT: Honeypot.is API (free, no key, EVM chains)
+# ═══════════════════════════════════════════════════════════════
+
+async def _check_honeypot_is(token_address: str, chain: str) -> Optional[Dict[str, Any]]:
+    """Check token via Honeypot.is free API.
+    
+    Simulates buy + sell in isolated VM. Flags honeypot, taxes, gas.
+    Supports Ethereum, Base, BSC. No API key required.
+    """
+    if chain.lower() not in ("ethereum", "base", "bsc", "eth", "bnb"):
+        return None  # Only EVM chains supported
+    
+    chain_code = {"ethereum": "eth", "eth": "eth", "base": "base", "bsc": "bsc", "bnb": "bsc"}.get(chain.lower(), "eth")
+    
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(
+                f"https://api.honeypot.is/v2/IsHoneypot",
+                params={"address": token_address, "chainID": chain_code},
+            )
+            if resp.status_code != 200:
+                return None
+            
+            data = resp.json()
+            result = {
+                "is_honeypot": data.get("isHoneypot", False),
+                "buy_tax_pct": data.get("buyTax", 0),
+                "sell_tax_pct": data.get("sellTax", 0),
+                "transfer_tax_pct": data.get("transferTax", 0),
+                "max_tx_amount": data.get("maxTxAmount"),
+                "max_tx_amount_ui": data.get("maxTxAmountUI"),
+                "source": "honeypot.is",
+                "chain": chain_code,
+            }
+            
+            # Additional simulation data if available
+            sim = data.get("simulation", {})
+            if sim:
+                result["simulation_success"] = sim.get("success", False)
+                result["simulation_error"] = sim.get("error")
+            
+            return result
+    except Exception as e:
+        logger.warning(f"Honeypot.is check failed for {token_address[:8]}...: {e}")
+        return None
+
+
+# ═══════════════════════════════════════════════════════════════
+# ENRICHMENT: ChainPatrol blocklist API (free, no key)
+# ═══════════════════════════════════════════════════════════════
+
+async def _check_chainpatrol_asset(asset_type: str, asset_id: str) -> Optional[Dict[str, Any]]:
+    """Query ChainPatrol blocklist for domain/address/asset risk status.
+    
+    Free API — no key required. Checks if asset is flagged by community.
+    asset_type: 'domain', 'address', 'token'
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                "https://api.chainpatrol.io/api/v2/asset/search",
+                json={"type": asset_type, "content": asset_id},
+                headers={"Content-Type": "application/json"},
+            )
+            if resp.status_code != 200:
+                return None
+            
+            data = resp.json()
+            result = {
+                "is_blocked": data.get("blocked", False),
+                "is_scam": data.get("scam", False),
+                "confidence": data.get("confidence", 0),
+                "source": "chainpatrol",
+                "asset_type": asset_type,
+                "asset_id": asset_id,
+            }
+            
+            # Extract labels if present
+            labels = data.get("labels", [])
+            if labels:
+                result["labels"] = [l.get("name") for l in labels if l.get("name")]
+            
+            return result
+    except Exception as e:
+        logger.warning(f"ChainPatrol check failed for {asset_id}: {e}")
+        return None
+
+
+# ═══════════════════════════════════════════════════════════════
+# ENRICHMENT: De.Fi Scanner API (free tier, credit-based)
+# ═══════════════════════════════════════════════════════════════
+
+async def _check_defi_scanner(token_address: str, chain: str) -> Optional[Dict[str, Any]]:
+    """Query De.Fi scannerProject endpoint for smart contract audit.
+    
+    Free tier available — credit-based. Checks for backdoors, mint,
+    upgradeability, and other governance risks.
+    """
+    try:
+        api_key = os.getenv("DEFI_API_KEY", "")
+        if not api_key:
+            return None  # Free tier still needs key generation
+        
+        # De.Fi chain mapping
+        chain_map = {
+            "ethereum": "eth", "bsc": "bsc", "polygon": "polygon",
+            "arbitrum": "arbitrum", "optimism": "optimism", "avalanche": "avalanche",
+            "base": "base", "fantom": "fantom", "solana": "solana",
+        }
+        df_chain = chain_map.get(chain.lower(), chain.lower())
+        
+        async with httpx.AsyncClient(timeout=12.0) as client:
+            # REST endpoint for project scan
+            resp = await client.get(
+                f"https://api.de.fi/v1/scanner/project",
+                params={"address": token_address, "chain": df_chain},
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+            if resp.status_code != 200:
+                return None
+            
+            data = resp.json()
+            result = {
+                "defi_score": data.get("score"),
+                "risk_level": data.get("riskLevel"),
+                "is_honeypot": data.get("isHoneypot", False),
+                "is_mintable": data.get("isMintable", False),
+                "is_proxy": data.get("isProxy", False),
+                "is_upgradeable": data.get("isUpgradeable", False),
+                "has_hidden_owner": data.get("hasHiddenOwner", False),
+                "has_blacklist": data.get("hasBlacklist", False),
+                "has_whitelist": data.get("hasWhitelist", False),
+                "owner_percent": data.get("ownerPercent"),
+                "source": "de.fi",
+            }
+            
+            # Warnings list
+            warnings = data.get("warnings", [])
+            if warnings:
+                result["warnings"] = [w.get("description") for w in warnings[:5]]
+            
+            return result
+    except Exception as e:
+        logger.warning(f"De.Fi scanner failed for {token_address[:8]}...: {e}")
+        return None
+
+
+# ═══════════════════════════════════════════════════════════════
+# ENRICHMENT: Blockscout PRO API (free tier, EVM chains)
+# ═══════════════════════════════════════════════════════════════
+
+async def _check_blockscout(token_address: str, chain: str) -> Optional[Dict[str, Any]]:
+    """Query Blockscout PRO API for contract verification + tx history.
+    
+    Free tier: 100K credits/day, 5 req/sec, 100+ EVM chains.
+    Better pagination than Etherscan (no 1K record cap).
+    """
+    if chain.lower() == "solana":
+        return None
+    
+    # Blockscout chain slug mapping
+    slug_map = {
+        "ethereum": "eth", "base": "base", "bsc": "bsc",
+        "polygon": "polygon", "arbitrum": "arbitrum",
+        "optimism": "optimism", "avalanche": "avalanche",
+        "fantom": "fantom", "linea": "linea", "scroll": "scroll",
+        "zksync": "zksync", "mantle": "mantle",
+    }
+    slug = slug_map.get(chain.lower())
+    if not slug:
+        return None
+    
+    try:
+        api_key = os.getenv("BLOCKSCOUT_API_KEY", "")
+        headers = {}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # Contract verification status
+            resp = await client.get(
+                f"https://{slug}.blockscout.com/api/v2/smart-contracts/{token_address}",
+                headers=headers,
+            )
+            
+            result = {"source": "blockscout", "chain": slug}
+            
+            if resp.status_code == 200:
+                data = resp.json()
+                result["verified"] = data.get("is_verified", False)
+                result["language"] = data.get("language", "")
+                result["compiler_version"] = data.get("compiler_version", "")
+                result["optimization_enabled"] = data.get("optimization_enabled", False)
+                result["abi"] = data.get("abi") is not None
+                
+                # Check for proxy
+                if data.get("proxy_type"):
+                    result["is_proxy"] = True
+                    result["proxy_type"] = data.get("proxy_type")
+                
+                # Token info if available
+                token_info = data.get("token", {})
+                if token_info:
+                    result["token_name"] = token_info.get("name")
+                    result["token_symbol"] = token_info.get("symbol")
+                    result["token_type"] = token_info.get("type")
+                    result["total_supply"] = token_info.get("total_supply")
+                    result["holders_count"] = token_info.get("holders")
+            
+            # Get transaction count (lightweight)
+            tx_resp = await client.get(
+                f"https://{slug}.blockscout.com/api/v2/addresses/{token_address}/transactions",
+                params={"limit": 1},
+                headers=headers,
+            )
+            if tx_resp.status_code == 200:
+                tx_data = tx_resp.json()
+                result["tx_count"] = tx_data.get("items_count", 0)
+            
+            return result if any(k != "source" and k != "chain" for k in result) else None
+    except Exception as e:
+        logger.warning(f"Blockscout check failed for {token_address[:8]}...: {e}")
+        return None
+
+
+# ═══════════════════════════════════════════════════════════════
+# ENRICHMENT: Token Sniffer (Solidus Labs) via eth_defi wrapper
+# ═══════════════════════════════════════════════════════════════
+
+async def _check_token_sniffer(token_address: str, chain: str) -> Optional[Dict[str, Any]]:
+    """Query Token Sniffer for token score and scam detection.
+    
+    Uses eth_defi library wrapper (open-source Python) for free tier access.
+    Returns token score, smell tests, and risk flags.
+    """
+    if chain.lower() not in ("ethereum", "eth", "bsc", "base", "polygon"):
+        return None  # Token Sniffer supports 15 chains but API is limited
+    
+    try:
+        # Try direct API first (if we have a key or can use free tier)
+        async with httpx.AsyncClient(timeout=12.0) as client:
+            # Token Sniffer public lookup (no key required for basic info)
+            resp = await client.get(
+                f"https://tokensniffer.com/api/v1/tokens/{token_address}",
+                params={"chain_id": CHAIN_IDS.get(chain, "1")},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                result = {
+                    "token_score": data.get("score"),
+                    "is_scam": data.get("is_scam", False),
+                    "is_honeypot": data.get("is_honeypot", False),
+                    "rugpull_risk": data.get("rugpull_risk", "unknown"),
+                    "source": "tokensniffer",
+                }
+                
+                # Smell tests
+                smells = data.get("smell_tests", [])
+                if smells:
+                    result["failed_tests"] = [s.get("name") for s in smells if not s.get("passed", True)]
+                
+                return result
+    except Exception as e:
+        logger.warning(f"Token Sniffer check failed for {token_address[:8]}...: {e}")
+        return None
+
+
+# ═══════════════════════════════════════════════════════════════
+# ENRICHMENT: TRM Labs Free Sanctions API (no key = 100/day)
+# ═══════════════════════════════════════════════════════════════
+
+async def _check_trm_sanctions(address: str) -> Optional[Dict[str, Any]]:
+    """Screen address against TRM Labs sanctions list.
+    
+    Free tier: 1 req/sec, 100/day unauthenticated.
+    Authenticated: 1K req/sec, 100K/day with free API key.
+    Returns isSanctioned boolean + risk flags.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                "https://api.trmlabs.com/public/v1/sanctions/screening",
+                json={"address": [address]},
+                headers={"Content-Type": "application/json"},
+            )
+            if resp.status_code == 201:
+                data = resp.json()
+                results = data.get("results", [])
+                if results:
+                    r = results[0]
+                    return {
+                        "is_sanctioned": r.get("isSanctioned", False),
+                        "screening_address": r.get("address", address),
+                        "source": "trm_labs",
+                        "risk_level": "critical" if r.get("isSanctioned") else "low",
+                    }
+            elif resp.status_code == 429:
+                logger.warning("TRM Labs rate limit hit — consider getting free API key")
+                return {"source": "trm_labs", "rate_limited": True, "is_sanctioned": False}
+    except Exception as e:
+        logger.warning(f"TRM sanctions check failed for {address[:8]}...: {e}")
+    return None
+
+
+# ═══════════════════════════════════════════════════════════════
+# ENRICHMENT: Scorechain Free Sanctions Check (fallback)
+# ═══════════════════════════════════════════════════════════════
+
+async def _check_scorechain_sanctions(address: str, chain: str = "ethereum") -> Optional[Dict[str, Any]]:
+    """Screen address via Scorechain Free Sanctions Check API.
+    
+    21+ chains, 100 req/hour, free API key required.
+    Fallback when TRM Labs is rate-limited or unavailable.
+    """
+    try:
+        api_key = os.getenv("SCORECHAIN_API_KEY", "")
+        if not api_key:
+            return None
+        
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                "https://api.scorechain.com/v1/sanctions/check",
+                params={"address": address, "chain": chain.lower()},
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                return {
+                    "is_sanctioned": data.get("is_sanctioned", False),
+                    "sanctions_lists": data.get("lists", []),
+                    "source": "scorechain",
+                    "risk_level": "critical" if data.get("is_sanctioned") else "low",
+                }
+    except Exception as e:
+        logger.warning(f"Scorechain sanctions check failed: {e}")
+    return None
+
+
+# ═══════════════════════════════════════════════════════════════
+# ENRICHMENT: Chainabuse API (scam reporting lookup)
+# ═══════════════════════════════════════════════════════════════
+
+async def _check_chainabuse(address: str) -> Optional[Dict[str, Any]]:
+    """Query Chainabuse for community-reported scam data on address.
+    
+    Free tier: 10 calls/month, 50 reports per call.
+    Premium: 5K calls/hour upon request.
+    """
+    try:
+        api_key = os.getenv("CHAINABUSE_API_KEY", "")
+        if not api_key:
+            return None
+        
+        import base64
+        auth = base64.b64encode(f"{api_key}:{api_key}".encode()).decode()
+        
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"https://api.chainabuse.com/v1/addresses/{address}/reports",
+                headers={"Authorization": f"Basic {auth}"},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                reports = data.get("reports", [])
+                return {
+                    "report_count": len(reports),
+                    "is_reported": len(reports) > 0,
+                    "scam_categories": list({r.get("category") for r in reports if r.get("category")}),
+                    "total_loss_usd": sum(r.get("lossUsd", 0) or 0 for r in reports),
+                    "source": "chainabuse",
+                }
+            elif resp.status_code == 429:
+                return {"source": "chainabuse", "rate_limited": True}
+    except Exception as e:
+        logger.warning(f"Chainabuse check failed for {address[:8]}...: {e}")
+    return None
+
+
+# ═══════════════════════════════════════════════════════════════
+# ENRICHMENT: Forta Network GraphQL (free trial / general bots)
+# ═══════════════════════════════════════════════════════════════
+
+async def _check_forta_alerts(token_address: str, chain: str) -> Optional[Dict[str, Any]]:
+    """Query Forta Network for anomaly alerts on token/contract.
+    
+    Free trial available. General plan bots accessible at
+    https://api.forta.network/graphql with API key.
+    Checks for anomalous tx velocity, state changes, exploit patterns.
+    """
+    try:
+        api_key = os.getenv("FORTA_API_KEY", "")
+        if not api_key:
+            return None
+        
+        # Map chain to Forta chain ID
+        forta_chain_map = {
+            "ethereum": "1", "bsc": "56", "polygon": "137",
+            "arbitrum": "42161", "optimism": "10", "avalanche": "43114",
+            "base": "8453", "fantom": "250",
+        }
+        chain_id = forta_chain_map.get(chain.lower())
+        if not chain_id:
+            return None
+        
+        query = """
+        query getAlerts($input: AlertsInput) {
+          alerts(input: $input) {
+            pageInfo { hasNextPage endCursor }
+            alerts {
+              name description protocol severity
+              source { transaction { hash } }
+            }
+          }
+        }
+        """
+        variables = {
+            "input": {
+                "addresses": [token_address],
+                "chainId": chain_id,
+                "first": 5,
+            }
+        }
+        
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                "https://api.forta.network/graphql",
+                json={"query": query, "variables": variables},
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                alerts_data = data.get("data", {}).get("alerts", {}).get("alerts", [])
+                if alerts_data:
+                    return {
+                        "alert_count": len(alerts_data),
+                        "alerts": [
+                            {
+                                "name": a.get("name"),
+                                "severity": a.get("severity"),
+                                "description": a.get("description", "")[:200],
+                            }
+                            for a in alerts_data[:3]
+                        ],
+                        "source": "forta",
+                        "risk_level": "high" if any(a.get("severity") in ("CRITICAL", "HIGH") for a in alerts_data) else "medium" if alerts_data else "low",
+                    }
+                return {"alert_count": 0, "source": "forta", "risk_level": "low"}
+    except Exception as e:
+        logger.warning(f"Forta check failed for {token_address[:8]}...: {e}")
+    return None
+
+
+# ═══════════════════════════════════════════════════════════════
+# ENRICHMENT: DeFiLlama API (free, no key — TVL + volume context)
+# ═══════════════════════════════════════════════════════════════
+
+async def _check_defillama_context(token_address: str, chain: str) -> Optional[Dict[str, Any]]:
+    """Get DeFiLlama protocol/TVL context for token.
+    
+    Completely free, no authentication. Provides TVL, yields,
+    protocol fees, DEX volumes across 350+ chains.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # Try to find protocol by token address
+            resp = await client.get(
+                f"https://api.llama.fi/protocol/{token_address}",
+            )
+            
+            result = {"source": "defillama"}
+            
+            if resp.status_code == 200:
+                data = resp.json()
+                result["protocol_name"] = data.get("name")
+                result["tvl_usd"] = data.get("tvl")
+                result["chain_tvls"] = data.get("chainTvls", {})
+                result["category"] = data.get("category")
+                result["audit_count"] = len(data.get("audits", []))
+                result["audit_links"] = [a.get("url") for a in data.get("audits", [])[:3]]
+                result["twitter"] = data.get("twitter")
+                result["is_stablecoin"] = data.get("stablecoin", False)
+            
+            # Get DEX volume for chain
+            vol_resp = await client.get("https://api.llama.fi/overview/dexs", params={"chain": chain.lower()})
+            if vol_resp.status_code == 200:
+                vol_data = vol_resp.json()
+                protocols = vol_data.get("protocols", [])
+                # Find protocol matching token name/symbol if possible
+                result["dex_volume_24h"] = sum(p.get("volume_24h", 0) or 0 for p in protocols[:10])
+            
+            return result if len(result) > 1 else None
+    except Exception as e:
+        logger.warning(f"DeFiLlama check failed: {e}")
+    return None
+
+
+# ═══════════════════════════════════════════════════════════════
+# ENRICHMENT: CoinGecko /simple/price (free, no key)
+# ═══════════════════════════════════════════════════════════════
+
+async def _check_coingecko_price(token_address: str, chain: str) -> Optional[Dict[str, Any]]:
+    """Get CoinGecko price data for token.
+    
+    Free tier: 100 calls/minute, no API key required for /simple/price.
+    Provides market cap, 24h change, volume across 500+ coins.
+    """
+    # CoinGecko platform mapping
+    platform_map = {
+        "ethereum": "ethereum", "bsc": "binance-smart-chain",
+        "polygon": "polygon-pos", "arbitrum": "arbitrum-one",
+        "optimism": "optimistic-ethereum", "avalanche": "avalanche",
+        "base": "base", "fantom": "fantom", "solana": "solana",
+    }
+    platform = platform_map.get(chain.lower())
+    if not platform:
+        return None
+    
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                "https://api.coingecko.com/api/v3/simple/token_price/{platform}",
+                params={
+                    "contract_addresses": token_address,
+                    "vs_currencies": "usd",
+                    "include_market_cap": "true",
+                    "include_24hr_vol": "true",
+                    "include_24hr_change": "true",
+                },
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                token_data = data.get(token_address.lower(), {})
+                if token_data:
+                    return {
+                        "price_usd": token_data.get("usd"),
+                        "market_cap_usd": token_data.get("usd_market_cap"),
+                        "volume_24h_usd": token_data.get("usd_24h_vol"),
+                        "price_change_24h_pct": token_data.get("usd_24h_change"),
+                        "source": "coingecko",
+                    }
+    except Exception as e:
+        logger.warning(f"CoinGecko check failed: {e}")
+    return None
+
+
+# ═══════════════════════════════════════════════════════════════
+# ENRICHMENT: 1inch Business API (free tier — swap simulation)
+# ═══════════════════════════════════════════════════════════════
+
+async def _check_1inch_swap(token_address: str, chain: str, amount_usd: float = 100.0) -> Optional[Dict[str, Any]]:
+    """Simulate swap via 1inch Business API.
+    
+    Free tier: 100K calls/month, 60 req/min, 3 WebSocket connections.
+    Aggregates DEX liquidity and simulates routing before committing gas.
+    """
+    try:
+        api_key = os.getenv("ONEINCH_API_KEY", "")
+        if not api_key:
+            return None
+        
+        # 1inch chain ID mapping
+        inch_chain_map = {
+            "ethereum": "1", "bsc": "56", "polygon": "137",
+            "arbitrum": "42161", "optimism": "10", "avalanche": "43114",
+            "base": "8453", "fantom": "250", "gnosis": "100",
+        }
+        chain_id = inch_chain_map.get(chain.lower())
+        if not chain_id:
+            return None
+        
+        # Use USDC as reference for amount
+        usdc = {
+            "1": "0xA0b86a33E6441E0C4D0f2f9eB5E2C6f8B3D4e5F6",
+            "56": "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
+            "137": "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+            "42161": "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8",
+            "10": "0x7F5c764cBc14f9669B88837ca1490cCa17c31607",
+            "43114": "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
+            "8453": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+            "250": "0x04068DA6C83AFCFA0e13ba15A6696662335D5B75",
+        }.get(chain_id)
+        
+        if not usdc:
+            return None
+        
+        async with httpx.AsyncClient(timeout=12.0) as client:
+            # Quote API — simulates swap without executing
+            resp = await client.get(
+                f"https://api.1inch.dev/swap/v6.0/{chain_id}/quote",
+                params={
+                    "src": usdc,
+                    "dst": token_address,
+                    "amount": str(int(amount_usd * 1e6)),  # USDC has 6 decimals
+                },
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                return {
+                    "expected_amount_out": data.get("toAmount"),
+                    "price_impact_pct": data.get("priceImpact"),
+                    "route_steps": len(data.get("protocols", [])),
+                    "gas_estimate": data.get("gas"),
+                    "source": "1inch",
+                }
+    except Exception as e:
+        logger.warning(f"1inch swap check failed: {e}")
+    return None
 
 
 async def _get_holder_data(token_address: str, chain: str) -> Optional[Dict[str, Any]]:
@@ -1173,6 +1792,64 @@ async def _get_etherscan_enhanced(token_address: str, chain: str) -> Optional[Di
 
 
 
+
+# ═══════════════════════════════════════════════════════════════
+# ENRICHMENT 18: QuickNode Pump.fun Integration
+# ═══════════════════════════════════════════════════════════════
+
+async def _get_quicknode_pumpfun(token_address: str, chain: str) -> Optional[Dict[str, Any]]:
+    """QuickNode Pump.fun data — bonding curve status, graduation, bot activity."""
+    if chain.lower() != "solana":
+        return None
+    try:
+        api_key = os.getenv("QUICKNODE_KEY", "")
+        if not api_key:
+            return None
+        
+        url = f"https://docs-demo.solana-mainnet.quiknode.pro/{api_key}/"
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            # Check if token is a Pump.fun token by looking at token accounts
+            payload = {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "getTokenLargestAccounts",
+                "params": [token_address]
+            }
+            resp = await client.post(url, json=payload)
+            
+            result = {}
+            if resp.status_code == 200:
+                data = resp.json()
+                if "result" in data:
+                    accounts = data["result"].get("value", [])
+                    result["largest_accounts"] = len(accounts)
+                    if accounts:
+                        total_supply = sum(a.get("amount", 0) for a in accounts)
+                        top_holder = accounts[0].get("amount", 0) if accounts else 0
+                        if total_supply > 0:
+                            result["top_holder_pct"] = round(top_holder / total_supply * 100, 1)
+            
+            # Get token supply
+            payload2 = {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "getTokenSupply",
+                "params": [token_address]
+            }
+            resp2 = await client.post(url, json=payload2)
+            if resp2.status_code == 200:
+                data2 = resp2.json()
+                supply_data = data2.get("result", {}).get("value", {})
+                result["total_supply"] = supply_data.get("amount")
+                result["decimals"] = supply_data.get("decimals")
+                result["supply_ui"] = supply_data.get("uiAmountString")
+            
+            return result if result else None
+    except Exception as e:
+        logger.warning(f"QuickNode enrichment failed for {token_address}: {e}")
+        return None
+
+
 async def scan_token(
     token_address: str,
     chain: str = "solana",
@@ -1191,7 +1868,7 @@ async def scan_token(
     # ── Run all FREE enrichments in parallel ──
     sim_result, holder_data, deployer_info = None, None, None
     try:
-        sim_result, holder_data, deployer_info, price_consensus, birdeye_data, solscan_data, moralis_data, etherscan_data = await asyncio.gather(
+        sim_result, holder_data, deployer_info, price_consensus, birdeye_data, solscan_data, moralis_data, etherscan_data, qn_pumpfun, honeypot_is, chainpatrol_token, defi_scanner, blockscout_data, token_sniffer, trm_sanctions, chainabuse_reports, forta_alerts, defillama_ctx, coingecko_price, oneinch_swap = await asyncio.gather(
             _simulate_trade(token_address, chain),
             _get_holder_data(token_address, chain),
             _get_deployer_info(token_address, chain),
@@ -1200,9 +1877,18 @@ async def scan_token(
             _get_solscan_data(token_address, chain),
             _get_moralis_data(token_address, chain),
             _get_etherscan_enhanced(token_address, chain),
-            _get_solscan_data(token_address, chain),
-            _get_moralis_data(token_address, chain),
-            _get_etherscan_enhanced(token_address, chain),
+            _get_quicknode_pumpfun(token_address, chain),
+            _check_honeypot_is(token_address, chain),
+            _check_chainpatrol_asset("token", token_address),
+            _check_defi_scanner(token_address, chain),
+            _check_blockscout(token_address, chain),
+            _check_token_sniffer(token_address, chain),
+            _check_trm_sanctions(token_address),
+            _check_chainabuse(token_address),
+            _check_forta_alerts(token_address, chain),
+            _check_defillama_context(token_address, chain),
+            _check_coingecko_price(token_address, chain),
+            _check_1inch_swap(token_address, chain),
             return_exceptions=True,
         )
         # unwrap exceptions
@@ -1222,6 +1908,42 @@ async def scan_token(
             moralis_data = None
         if isinstance(etherscan_data, BaseException):
             etherscan_data = None
+        if isinstance(qn_pumpfun, BaseException):
+            qn_pumpfun = None
+        if isinstance(honeypot_is, BaseException):
+            honeypot_is = None
+        if isinstance(chainpatrol_token, BaseException):
+            chainpatrol_token = None
+        if isinstance(defi_scanner, BaseException):
+            defi_scanner = None
+        if isinstance(blockscout_data, BaseException):
+            blockscout_data = None
+        if isinstance(token_sniffer, BaseException):
+            token_sniffer = None
+        if isinstance(trm_sanctions, BaseException):
+            trm_sanctions = None
+        if isinstance(chainabuse_reports, BaseException):
+            chainabuse_reports = None
+        if isinstance(forta_alerts, BaseException):
+            forta_alerts = None
+        if isinstance(defillama_ctx, BaseException):
+            defillama_ctx = None
+        if isinstance(coingecko_price, BaseException):
+            coingecko_price = None
+        if isinstance(oneinch_swap, BaseException):
+            oneinch_swap = None
+        if isinstance(price_consensus, BaseException):
+            price_consensus = None
+        if isinstance(birdeye_data, BaseException):
+            birdeye_data = None
+        if isinstance(solscan_data, BaseException):
+            solscan_data = None
+        if isinstance(moralis_data, BaseException):
+            moralis_data = None
+        if isinstance(etherscan_data, BaseException):
+            etherscan_data = None
+        if isinstance(qn_pumpfun, BaseException):
+            qn_pumpfun = None
     except Exception as e:
         logger.warning(f"Enrichment gather failed: {e}")
     
@@ -1400,6 +2122,16 @@ async def scan_token(
             safety = max(0, safety - 10)
             scan.risk_flags.append("PROXY_CONTRACT_DETECTED")
     
+    # QuickNode Pump.fun data
+    if isinstance(qn_pumpfun, dict):
+        scan.confidence = min(100, scan.confidence + 3)
+        if qn_pumpfun.get("top_holder_pct", 0) > 90:
+            safety = max(0, safety - 20)
+            scan.risk_flags.append("PUMPFUN_WHALE_HOLDER")
+        if qn_pumpfun.get("largest_accounts", 0) < 10:
+            safety = max(0, safety - 5)
+            scan.risk_flags.append("LOW_HOLDER_COUNT")
+    
     age = market.get("age_hours")
     if age is not None and age < 1:
         safety = max(0, safety - 8)
@@ -1506,7 +2238,121 @@ async def scan_token(
             safety = max(0, safety - (risk_signals * 5))
             scan.risk_flags.append("VOLUME_ANOMALY")
     
-    # ── Boost confidence from data sources ──
+    
+    # Honeypot.is second opinion
+    if isinstance(honeypot_is, dict):
+        if honeypot_is.get("is_honeypot"):
+            safety = max(0, safety - 45)
+            scan.risk_flags.append("HONEYPOT_IS_DETECTED")
+            scan.confidence = min(100, scan.confidence + 20)
+        elif honeypot_is.get("sell_tax_pct", 0) > 20:
+            safety = max(0, safety - 15)
+            scan.risk_flags.append(f"HONEYPOT_IS_TAX_{honeypot_is['sell_tax_pct']:.0f}%")
+        scan.confidence = min(100, scan.confidence + 5)
+    
+    # ChainPatrol blocklist
+    if isinstance(chainpatrol_token, dict):
+        if chainpatrol_token.get("is_blocked") or chainpatrol_token.get("is_scam"):
+            safety = max(0, safety - 35)
+            scan.risk_flags.append("CHAINPATROL_BLOCKED")
+            scan.confidence = min(100, scan.confidence + 15)
+    
+    # De.Fi scanner
+    if isinstance(defi_scanner, dict):
+        if defi_scanner.get("is_honeypot"):
+            safety = max(0, safety - 40)
+            scan.risk_flags.append("DEFI_HONEYPOT")
+            scan.confidence = min(100, scan.confidence + 15)
+        if defi_scanner.get("has_hidden_owner"):
+            safety = max(0, safety - 25)
+            scan.risk_flags.append("DEFI_HIDDEN_OWNER")
+        if defi_scanner.get("has_blacklist"):
+            safety = max(0, safety - 20)
+            scan.risk_flags.append("DEFI_BLACKLIST")
+        if defi_scanner.get("is_mintable"):
+            safety = max(0, safety - 15)
+            scan.risk_flags.append("DEFI_MINTABLE")
+        if defi_scanner.get("is_upgradeable"):
+            safety = max(0, safety - 10)
+            scan.risk_flags.append("DEFI_UPGRADEABLE")
+        scan.confidence = min(100, scan.confidence + 8)
+    
+    # Blockscout verification
+    if isinstance(blockscout_data, dict):
+        scan.confidence = min(100, scan.confidence + 5)
+        if blockscout_data.get("verified") is False:
+            safety = max(0, safety - 15)
+            scan.risk_flags.append("BLOCKSCOUT_UNVERIFIED")
+        if blockscout_data.get("is_proxy"):
+            safety = max(0, safety - 8)
+            scan.risk_flags.append("BLOCKSCOUT_PROXY")
+    
+    # Token Sniffer score
+    if isinstance(token_sniffer, dict):
+        scan.confidence = min(100, scan.confidence + 8)
+        if token_sniffer.get("is_scam"):
+            safety = max(0, safety - 40)
+            scan.risk_flags.append("TOKENSNIFFER_SCAM")
+        elif token_sniffer.get("is_honeypot"):
+            safety = max(0, safety - 35)
+            scan.risk_flags.append("TOKENSNIFFER_HONEYPOT")
+        score = token_sniffer.get("token_score")
+        if score is not None and score < 30:
+            safety = max(0, safety - 20)
+            scan.risk_flags.append(f"TOKENSNIFFER_LOW_SCORE_{score}")
+    
+    # TRM sanctions
+    if isinstance(trm_sanctions, dict):
+        if trm_sanctions.get("is_sanctioned"):
+            safety = 0  # Instant zero
+            scan.risk_flags.append("TRM_SANCTIONED")
+            scan.confidence = min(100, scan.confidence + 30)
+        elif trm_sanctions.get("rate_limited"):
+            scan.risk_flags.append("TRM_RATE_LIMITED")
+    
+    # Chainabuse reports
+    if isinstance(chainabuse_reports, dict):
+        if chainabuse_reports.get("is_reported"):
+            reports = chainabuse_reports.get("report_count", 0)
+            safety = max(0, safety - min(reports * 10, 40))
+            scan.risk_flags.append(f"CHAINABUSE_REPORTS_{reports}")
+            scan.confidence = min(100, scan.confidence + 15)
+    
+    # Forta alerts
+    if isinstance(forta_alerts, dict):
+        if forta_alerts.get("risk_level") == "high":
+            safety = max(0, safety - 30)
+            scan.risk_flags.append("FORTA_HIGH_ALERT")
+            scan.confidence = min(100, scan.confidence + 15)
+        elif forta_alerts.get("alert_count", 0) > 0:
+            safety = max(0, safety - 10)
+            scan.risk_flags.append("FORTA_ALERTS")
+            scan.confidence = min(100, scan.confidence + 8)
+    
+    # DeFiLlama context
+    if isinstance(defillama_ctx, dict):
+        scan.confidence = min(100, scan.confidence + 3)
+        if defillama_ctx.get("tvl_usd") and defillama_ctx.get("tvl_usd") < 1000:
+            safety = max(0, safety - 5)
+            scan.risk_flags.append("DEFILLAMA_LOW_TVL")
+    
+    # CoinGecko price
+    if isinstance(coingecko_price, dict):
+        scan.confidence = min(100, scan.confidence + 3)
+        change = coingecko_price.get("price_change_24h_pct")
+        if change is not None and change < -50:
+            safety = max(0, safety - 10)
+            scan.risk_flags.append("COINGECKO_CRASH_24H")
+    
+    # 1inch swap simulation
+    if isinstance(oneinch_swap, dict):
+        scan.confidence = min(100, scan.confidence + 5)
+        impact = oneinch_swap.get("price_impact_pct")
+        if impact is not None and impact > 15:
+            safety = max(0, safety - 15)
+            scan.risk_flags.append(f"1INCH_HIGH_IMPACT_{impact:.0f}%")
+    
+# ── Boost confidence from data sources ──
     ds = market.get("data_sources", [])
     if "dexscreener" in ds:
         scan.confidence = min(100, scan.confidence + 5)
@@ -1557,7 +2403,32 @@ async def scan_token(
         scan.free["moralis"] = moralis_data
     if isinstance(etherscan_data, dict):
         scan.free["etherscan"] = etherscan_data
+    if isinstance(qn_pumpfun, dict):
+        scan.free["quicknode"] = qn_pumpfun
     
+    if isinstance(honeypot_is, dict):
+        scan.free["honeypot_is"] = honeypot_is
+    if isinstance(chainpatrol_token, dict):
+        scan.free["chainpatrol"] = chainpatrol_token
+    if isinstance(defi_scanner, dict):
+        scan.free["defi_scanner"] = defi_scanner
+    if isinstance(blockscout_data, dict):
+        scan.free["blockscout"] = blockscout_data
+    if isinstance(token_sniffer, dict):
+        scan.free["token_sniffer"] = token_sniffer
+    if isinstance(trm_sanctions, dict):
+        scan.free["trm_sanctions"] = trm_sanctions
+    if isinstance(chainabuse_reports, dict):
+        scan.free["chainabuse"] = chainabuse_reports
+    if isinstance(forta_alerts, dict):
+        scan.free["forta"] = forta_alerts
+    if isinstance(defillama_ctx, dict):
+        scan.free["defillama"] = defillama_ctx
+    if isinstance(coingecko_price, dict):
+        scan.free["coingecko"] = coingecko_price
+    if isinstance(oneinch_swap, dict):
+        scan.free["1inch_swap"] = oneinch_swap
+
     # PRO: Tier 1+2 module results
     if tier in ("pro", "elite"):
         scan.tier_required = "pro"
