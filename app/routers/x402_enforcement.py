@@ -1288,7 +1288,7 @@ async def x402_enforcement_middleware(request: Request, call_next) -> Response:
     if any(bot in user_agent for bot in SCANNER_AGENTS):
         return JSONResponse(
             status_code=403,
-            content={"error": "Automated access requires x402 payment. Use x-pay header or a proper API client.", "docs": "https://mcp.rugmunch.io/docs"},
+            content={"error": "Automated access requires x402 payment. Use x-pay header or a proper API client.", "docs": "https://rugmunch.io/mcp-docs"},
             headers=SECURITY_HEADERS,
         )
     

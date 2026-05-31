@@ -208,7 +208,7 @@ def _build_discovery():
             "github": "https://github.com/Rug-Munch-Media-LLC",
         },
         "homepage": "https://rugmunch.io",
-        "documentation": "https://mcp.rugmunch.io/docs/mcp",
+        "documentation": "https://rugmunch.io/mcp-docs",
         "repository": "https://github.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp",
         "endpoint": "https://mcp.rugmunch.io/mcp",
         "icon": "https://rugmunch.io/logo.png",
@@ -345,7 +345,7 @@ async def llms_txt():
 - MCP Endpoint: https://mcp.rugmunch.io/mcp
 - Discovery: https://mcp.rugmunch.io/.well-known/mcp
 - Payment: https://mcp.rugmunch.io/.well-known/x402
-- Docs: https://mcp.rugmunch.io/docs/mcp
+- Docs: https://rugmunch.io/mcp-docs
 - GitHub: https://github.com/cryptorugmuncher/rug-munch-intelligence
 
 ## Directory Listings
