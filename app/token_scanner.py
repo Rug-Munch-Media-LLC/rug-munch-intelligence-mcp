@@ -2289,6 +2289,66 @@ async def _check_fear_greed() -> Optional[Dict[str, Any]]:
 
 # ── Augmento granular sentiment (93 topics, replaces LunarCrush) ──
 
+# ── Real-time news sentiment (self-hosted, CryptoPanic + RSS + keyword analysis) ──
+
+async def _check_news_sentiment(symbol: str) -> Optional[Dict[str, Any]]:
+    """Real-time news sentiment using our own NewsService.
+    
+    No data lag, no external API keys needed. Uses CryptoPanic free tier,
+    15+ RSS feeds, and keyword-based sentiment analysis already in our
+    news_service.py. Returns same-day sentiment signal.
+    Cost: $0 (existing infrastructure).
+    """
+    if not symbol:
+        return None
+    try:
+        from app.news_service import get_news_service, NewsService
+        ns = get_news_service()
+        
+        # Fetch latest news (filtered to this symbol)
+        all_news = await ns.fetch_all(limit=50)
+        
+        # Filter for this token
+        sym_lower = symbol.lower()
+        relevant = [
+            n for n in all_news if (
+                sym_lower in (n.get("title", "") or "").lower() or
+                sym_lower in (n.get("category", "") or "").lower() or
+                sym_lower in (n.get("summary", "") or "").lower()
+            )
+        ]
+        
+        if not relevant:
+            return None
+        
+        # Run keyword sentiment on each article
+        sentiments = []
+        bull_count = bear_count = 0
+        for article in relevant[:20]:
+            text = f"{article.get('title', '')} {article.get('summary', '')}"
+            s = ns._analyze_sentiment(text)
+            sentiments.append(s)
+            if s in ("bullish", "slightly_bullish"):
+                bull_count += 1
+            elif s in ("bearish", "slightly_bearish"):
+                bear_count += 1
+        
+        total = len(sentiments) or 1
+        net_sentiment = (bull_count - bear_count) / total
+        
+        return {
+            "symbol": symbol,
+            "articles_found": len(relevant),
+            "bullish_pct": round(bull_count / total * 100, 1),
+            "bearish_pct": round(bear_count / total * 100, 1),
+            "net_sentiment_score": round(net_sentiment, 2),
+            "label": "bullish" if net_sentiment > 0.3 else "bearish" if net_sentiment < -0.3 else "neutral",
+            "data_source": "news_service",
+        }
+    except Exception as e:
+        logger.warning(f"News sentiment failed for {symbol}: {e}")
+        return None
+
 async def _check_augmento(symbol: str) -> Optional[Dict[str, Any]]:
     """Augmento granular sentiment — 93 topic categories across X/Reddit/Bitcointalk.
     
@@ -2911,6 +2971,7 @@ async def scan_token(
     fear_greed_data = await _check_fear_greed()
     cg_trending = await _check_coingecko_trending()
     augmento_data = await _check_augmento(scan.symbol)
+    news_sentiment_data = await _check_news_sentiment(scan.symbol)
     santiment_data = await _check_santiment(scan.symbol)
     
     # Run SENTINEL pipeline
@@ -3386,6 +3447,20 @@ async def scan_token(
             safety = max(0, safety - 3)
             scan.risk_flags.append("AUGMENTO_BULLISH")
     
+    # News sentiment (real-time, self-hosted)
+    if isinstance(news_sentiment_data, dict):
+        scan.confidence = min(100, scan.confidence + 5)
+        ns_label = news_sentiment_data.get("label", "")
+        ns_score = news_sentiment_data.get("net_sentiment_score", 0) or 0
+        if ns_label == "bullish":
+            scan.risk_flags.append("NEWS_BULLISH")
+        elif ns_label == "bearish":
+            safety = max(0, safety - 10)
+            scan.risk_flags.append("NEWS_BEARISH")
+        if news_sentiment_data.get("articles_found", 0) > 10 and ns_score < -0.2:
+            safety = max(0, safety - 15)
+            scan.risk_flags.append("NEWS_FLOOD_NEGATIVE")
+    
     # Webacy risk intelligence
     if isinstance(webacy_data, dict):
         scan.confidence = min(100, scan.confidence + 8)
@@ -3536,6 +3611,8 @@ async def scan_token(
         scan.free["santiment"] = santiment_data
     if isinstance(augmento_data, dict):
         scan.free["augmento"] = augmento_data
+    if isinstance(news_sentiment_data, dict):
+        scan.free["news_sentiment"] = news_sentiment_data
     if isinstance(webacy_data, dict):
         scan.free["webacy"] = webacy_data
     if isinstance(scamsniffer_data, dict):
