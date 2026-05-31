@@ -543,8 +543,11 @@ async def mcp_jsonrpc(request: Request):
         tools_data, cats, chains_data, fac_count = _build_tools_list()
         tools_list = []
         for tool_id, info in tools_data.items():
+            # Dot-notation naming: category.tool_id for Smithery quality score
+            category = info.get("category", "analysis")
+            dot_name = f"{category}.{tool_id}" if category != "variant" else tool_id
             tools_list.append({
-                "name": info["name"],
+                "name": dot_name,
                 "description": info["description"],
                 "inputSchema": info["inputSchema"],
                 "outputSchema": {
@@ -614,9 +617,18 @@ async def mcp_jsonrpc(request: Request):
         tool_name = params.get("name", "")
         arguments = params.get("arguments", {})
 
+        # Resolve dot-notation names (category.tool_id) to internal tool_id
+        internal_name = tool_name
+        if "." in tool_name:
+            internal_name = tool_name.split(".", 1)[1]  # strip category prefix
+            # If the stripped name doesn't exist in prices, try the original
+            data_check = _get_tools()
+            if internal_name not in data_check["prices"] and tool_name in data_check["prices"]:
+                internal_name = tool_name  # fall back to original name
+
         # Validate tool exists
         data = _get_tools()
-        if tool_name not in data["prices"]:
+        if internal_name not in data["prices"]:
             return JSONResponse({
                 "jsonrpc": "2.0",
                 "id": req_id,
@@ -625,7 +637,7 @@ async def mcp_jsonrpc(request: Request):
 
         # Proxy to internal endpoint
         import httpx
-        url = f"http://localhost:8000/api/v1/x402-tools/{tool_name}"
+        url = f"http://localhost:8000/api/v1/x402-tools/{internal_name}"
         headers = {"Content-Type": "application/json", "User-Agent": "RMI-MCP-JSONRPC/3.1"}
         # Forward payment and identity headers from the original request
         for h in ("x-pay", "X-Pay", "X-Device-Id", "x-device-id", "Authorization",
