@@ -2139,7 +2139,13 @@ async def _check_scamsniffer_live(token_address: str, chain: str) -> Optional[Di
                 )
                 if r.status_code == 200:
                     addr_data = r.json()
-                    addresses = addr_data.get("address", addr_data.get("blacklist", []))
+                    # Handle both list and dict formats
+                    if isinstance(addr_data, list):
+                        addresses = addr_data
+                    elif isinstance(addr_data, dict):
+                        addresses = addr_data.get("address", addr_data.get("blacklist", []))
+                    else:
+                        addresses = []
                     if isinstance(addresses, list):
                         _scamsniffer_domains_cache = set(
                             a.lower() for a in addresses 
@@ -2161,6 +2167,231 @@ async def _check_scamsniffer_live(token_address: str, chain: str) -> Optional[Di
         return None
 
 
+# ── Dune Analytics SQL queries ──
+
+async def _check_dune(token_address: str, chain: str) -> Optional[Dict[str, Any]]:
+    """Dune Analytics SQL engine — custom on-chain analysis via SQL.
+    
+    Can query: holder concentration, deployment patterns, liquidity events,
+    scam contract templates, and any ad-hoc analysis.
+    Free tier: 40 RPM read, 32GB max result.
+    API key: DUNE_API_KEY env var.
+    Cost: $0 (free tier).
+    """
+    api_key = os.getenv("DUNE_API_KEY", "")
+    if not api_key:
+        return None
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            headers = {"X-DUNE-API-KEY": api_key, "Content-Type": "application/json"}
+            
+            # Query for holder concentration on Solana or token info on EVM
+            if chain == "solana":
+                sql = f"""
+                SELECT 
+                    token_address,
+                    holder_count,
+                    top_10_holder_pct
+                FROM tokens_solana.token_holders
+                WHERE token_address = '{token_address}'
+                LIMIT 1
+                """
+            else:
+                sql = f"""
+                SELECT 
+                    COUNT(*) as report_count
+                FROM labels.scam
+                WHERE address = '{token_address}'
+                LIMIT 5
+                """
+            
+            # Execute query
+            exec_resp = await asyncio.wait_for(
+                client.post(
+                    "https://api.dune.com/api/v1/sql/execute",
+                    headers=headers,
+                    json={"sql": sql, "performance": "medium"},
+                ),
+                timeout=15.0,
+            )
+            
+            if exec_resp.status_code != 200:
+                return None
+            
+            exec_id = exec_resp.json().get("execution_id")
+            if not exec_id:
+                return None
+            
+            # Poll for results (up to 6 seconds total)
+            for _ in range(3):
+                await asyncio.sleep(2)
+                result_resp = await asyncio.wait_for(
+                    client.get(
+                        f"https://api.dune.com/api/v1/execution/{exec_id}/results",
+                        headers=headers,
+                    ),
+                    timeout=8.0,
+                )
+                if result_resp.status_code != 200:
+                    continue
+                state = result_resp.json().get("state", "")
+                if state == "QUERY_STATE_COMPLETED":
+                    data = result_resp.json()
+                    rows = data.get("result", {}).get("rows", [])
+                    return {
+                        "query_executed": True,
+                        "rows_returned": len(rows),
+                        "execution_id": exec_id,
+                        "data_source": "dune_analytics",
+                        "flag_count": sum(
+                            r.get("report_count", 0) or 0 
+                            for r in rows
+                        ) if rows else 0,
+                    }
+                elif state == "QUERY_STATE_FAILED":
+                    logger.debug(f"Dune query failed ({exec_id}): {result_resp.json().get('error', {}).get('message', '')}")
+                    return None
+            
+            return None
+    except (asyncio.TimeoutError, Exception) as e:
+        logger.warning(f"Dune check failed: {e}")
+        return None
+
+
+# ── Arkham Intelligence entity de-anonymization ──
+
+async def _check_arkham(address: str, chain: str) -> Optional[Dict[str, Any]]:
+    """Arkham Intelligence — 800K+ named entities, wallet de-anonymization.
+    
+    Resolves raw addresses to named entities (exchanges, funds, scammers).
+    Visualizer and Tracer for fund flow analysis.
+    Free tier with rate limits.
+    API key: ARKHAM_API_KEY env var.
+    Cost: $0 (free tier).
+    """
+    api_key = os.getenv("ARKHAM_API_KEY", "")
+    if not api_key:
+        return None
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=12.0) as client:
+            headers = {"API-Key": api_key, "Content-Type": "application/json"}
+            
+            # Try to resolve the address to a named entity
+            result = await asyncio.wait_for(
+                client.get(
+                    "https://api.arkhamintelligence.com/v1/entities",
+                    headers=headers,
+                    params={"address": address, "limit": 3},
+                ),
+                timeout=12.0,
+            )
+            
+            if result.status_code == 200:
+                data = result.json()
+                entities = data.get("entities") or data.get("data") or []
+                if isinstance(entities, list) and entities:
+                    entity = entities[0]
+                    return {
+                        "entity_name": entity.get("name", ""),
+                        "entity_type": entity.get("type", ""),
+                        "entity_id": entity.get("id"),
+                        "labels": entity.get("labels", []),
+                        "total_matches": len(entities),
+                        "data_source": "arkham_intelligence",
+                    }
+            elif result.status_code == 402:
+                logger.debug("Arkham: free tier expired or payment required")
+            return None
+    except (asyncio.TimeoutError, Exception) as e:
+        logger.warning(f"Arkham check failed: {e}")
+        return None
+
+
+# ── The Graph subgraph queries ──
+
+async def _check_thegraph(token_address: str, chain: str) -> Optional[Dict[str, Any]]:
+    """The Graph — decentralized subgraph indexing for smart contract events.
+    
+    Can query custom indexes for: token mints, liquidity changes, 
+    ownership transfers, proxy upgrades, and scam-specific events.
+    Free tier: hosted service $0, GraphQL queries.
+    API key: THEGRAPH_API_KEY env var (from thegraph.com/studio).
+    Cost: $0 (free hosted tier).
+    """
+    api_key = os.getenv("THEGRAPH_API_KEY", "")
+    if not api_key:
+        return None
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=12.0) as client:
+            # Map chain to subgraph endpoint
+            # Using Uniswap subgraph as reference for token + liquidity events
+            subgraph_urls = {
+                "ethereum": f"https://gateway.thegraph.com/api/{api_key}/subgraphs/id/5zvRBaQfZoPGbyjABqJaGoneunRShHPbvRXKxjFLuG1x",
+                "polygon": f"https://gateway.thegraph.com/api/{api_key}/subgraphs/id/GACXMr3LDErUM5trgpe2QSYgGBa6pzvQoXRJB26FyS7Z",
+            }
+            
+            url = subgraph_urls.get(chain)
+            if not url:
+                return None
+            
+            # Query for recent liquidity events involving this token
+            query = """
+            query($token: String!) {
+                mints(where: {token0: $token}, first: 3, orderBy: timestamp, orderDirection: desc) {
+                    amount0
+                    amountUSD
+                    timestamp
+                }
+                burns(where: {token0: $token}, first: 3, orderBy: timestamp, orderDirection: desc) {
+                    amount0
+                    amountUSD
+                    timestamp
+                }
+            }
+            """
+            
+            result = await asyncio.wait_for(
+                client.post(
+                    url,
+                    headers={"Content-Type": "application/json"},
+                    json={"query": query, "variables": {"token": token_address.lower()}},
+                ),
+                timeout=12.0,
+            )
+            
+            if result.status_code == 200:
+                data = result.json().get("data", {})
+                mints = data.get("mints", [])
+                burns = data.get("burns", [])
+                
+                if not mints and not burns:
+                    return None
+                
+                # Calculate risk signals
+                recent_burn = False
+                total_burn_usd = 0
+                for b in burns:
+                    total_burn_usd += float(b.get("amountUSD", 0) or 0)
+                    ts = int(b.get("timestamp", 0) or 0)
+                    if ts > (int(__import__('time').time()) - 86400):
+                        recent_burn = True
+                
+                return {
+                    "mint_count": len(mints),
+                    "burn_count": len(burns),
+                    "total_burn_usd": total_burn_usd,
+                    "recent_liquidity_removal": recent_burn,
+                    "data_source": "thegraph",
+                }
+            return None
+    except (asyncio.TimeoutError, Exception) as e:
+        logger.warning(f"The Graph check failed: {e}")
+        return None
+
+
 async def scan_token(
     token_address: str,
     chain: str = "solana",
@@ -2179,9 +2410,10 @@ async def scan_token(
     # ── Run all FREE enrichments in parallel ──
     sim_result, holder_data, deployer_info = None, None, None
     nansen_data, chainaware_data, blowfish_data, scamsniffer_data = None, None, None, None
+    dune_data, arkham_data, thegraph_data = None, None, None
     lunarcrush_data = None
     try:
-        sim_result, holder_data, deployer_info, price_consensus, birdeye_data, solscan_data, moralis_data, etherscan_data, qn_pumpfun, honeypot_is, chainpatrol_token, defi_scanner, blockscout_data, token_sniffer, trm_sanctions, chainabuse_reports, forta_alerts, defillama_ctx, coingecko_price, oneinch_swap, nansen_data, chainaware_data, blowfish_data, scamsniffer_data = await asyncio.gather(
+        sim_result, holder_data, deployer_info, price_consensus, birdeye_data, solscan_data, moralis_data, etherscan_data, qn_pumpfun, honeypot_is, chainpatrol_token, defi_scanner, blockscout_data, token_sniffer, trm_sanctions, chainabuse_reports, forta_alerts, defillama_ctx, coingecko_price, oneinch_swap, nansen_data, chainaware_data, blowfish_data, scamsniffer_data, dune_data, arkham_data, thegraph_data = await asyncio.gather(
             _simulate_trade(token_address, chain),
             _get_holder_data(token_address, chain),
             _get_deployer_info(token_address, chain),
@@ -2206,6 +2438,9 @@ async def scan_token(
             _check_chainaware(token_address, chain),
             _check_blowfish(token_address, chain),
             _check_scamsniffer_live(token_address, chain),
+            _check_dune(token_address, chain),
+            _check_arkham(token_address, chain),
+            _check_thegraph(token_address, chain),
             return_exceptions=True,
         )
         # unwrap exceptions
@@ -2257,6 +2492,12 @@ async def scan_token(
             blowfish_data = None
         if isinstance(scamsniffer_data, BaseException):
             scamsniffer_data = None
+        if isinstance(dune_data, BaseException):
+            dune_data = None
+        if isinstance(arkham_data, BaseException):
+            arkham_data = None
+        if isinstance(thegraph_data, BaseException):
+            thegraph_data = None
         if isinstance(price_consensus, BaseException):
             price_consensus = None
         if isinstance(birdeye_data, BaseException):
@@ -2765,6 +3006,47 @@ async def scan_token(
             scan.risk_flags.append("SCAMSNIFFER_PHISHING")
             scan.confidence = min(100, scan.confidence + 20)
     
+    # Dune Analytics SQL intelligence
+    if isinstance(dune_data, dict):
+        scan.confidence = min(100, scan.confidence + 5)
+        # Dune flag count (scam labels)
+        if dune_data.get("flag_count", 0) > 0:
+            safety = max(0, safety - 20)
+            scan.risk_flags.append("DUNE_SCAM_LABEL_MATCH")
+            scan.confidence = min(100, scan.confidence + 10)
+        # Dune holder concentration
+        holders = dune_data.get("holder_count")
+        top10_pct = dune_data.get("top_10_holder_pct")
+        if holders is not None and holders < 50:
+            safety = max(0, safety - 10)
+            scan.risk_flags.append("DUNE_LOW_HOLDERS")
+        if top10_pct is not None and top10_pct > 80:
+            safety = max(0, safety - 15)
+            scan.risk_flags.append("DUNE_HIGH_CONCENTRATION")
+    
+    # Arkham Intelligence entity resolution
+    if isinstance(arkham_data, dict):
+        scan.confidence = min(100, scan.confidence + 10)
+        entity_type = arkham_data.get("entity_type", "")
+        entity_name = arkham_data.get("entity_name", "")
+        if entity_type in ("scam", "phishing", "hack", "exploit"):
+            safety = max(0, safety - 40)
+            scan.risk_flags.append(f"ARKHAM_{entity_type.upper()}")
+        elif entity_type in ("exchange", "fund", "market_maker"):
+            scan.confidence = min(100, scan.confidence + 5)  # Known entity = more confidence
+        if entity_name:
+            scan.risk_flags.append(f"ARKHAM_ENTITY_{entity_name[:20].upper().replace(' ', '_')}")
+    
+    # The Graph subgraph intelligence
+    if isinstance(thegraph_data, dict):
+        scan.confidence = min(100, scan.confidence + 5)
+        if thegraph_data.get("recent_liquidity_removal"):
+            safety = max(0, safety - 25)
+            scan.risk_flags.append("THEGRAPH_RECENT_LP_REMOVAL")
+        if thegraph_data.get("total_burn_usd", 0) > 100000:
+            safety = max(0, safety - 15)
+            scan.risk_flags.append("THEGRAPH_LARGE_LP_BURN")
+    
 # ── Boost confidence from data sources ──
     ds = market.get("data_sources", [])
     if "dexscreener" in ds:
@@ -2851,6 +3133,12 @@ async def scan_token(
         scan.free["lunarcrush"] = lunarcrush_data
     if isinstance(scamsniffer_data, dict):
         scan.free["scamsniffer"] = scamsniffer_data
+    if isinstance(dune_data, dict):
+        scan.free["dune"] = dune_data
+    if isinstance(arkham_data, dict):
+        scan.free["arkham"] = arkham_data
+    if isinstance(thegraph_data, dict):
+        scan.free["thegraph"] = thegraph_data
 
     # PRO: Tier 1+2 module results
     if tier in ("pro", "elite"):
