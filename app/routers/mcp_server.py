@@ -612,6 +612,14 @@ async def mcp_jsonrpc(request: Request):
             "result": {"prompts": []},
         })
 
+    # ── ai.smithery/events/list ─────────────────────────────
+    if method == "ai.smithery/events/list":
+        return JSONResponse({
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "result": {"events": []},
+        })
+
     # ── tools/call ──────────────────────────────────────────
     if method == "tools/call":
         tool_name = params.get("name", "")
