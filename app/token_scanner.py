@@ -2141,10 +2141,11 @@ async def _check_santiment(symbol: str) -> Optional[Dict[str, Any]]:
 async def _check_lunarcrush(symbol: str) -> Optional[Dict[str, Any]]:
     """LunarCrush social sentiment — social volume, Galaxy Score, influencer activity.
     
-    Catches bot campaigns: token with 10K Twitter mentions but $5K volume.
+    Catches bot campaigns: token with 10K social mentions but $5K volume.
     Detects coordinated hype before pump-and-dumps.
-    Free tier available. API key: LUNARCRUSH_API_KEY env var.
-    Cost: $0 (free tier).
+    Free tier with rate limits. API key: LUNARCRUSH_API_KEY env var.
+    API base: lunarcrush.com/api4/public/coins/{symbol}/v1
+    Cost: $0 (free tier — "Limited data mode" for unsubscribed).
     """
     api_key = os.getenv("LUNARCRUSH_API_KEY", "")
     if not api_key or not symbol:
@@ -2154,12 +2155,8 @@ async def _check_lunarcrush(symbol: str) -> Optional[Dict[str, Any]]:
         async with httpx.AsyncClient(timeout=10.0) as client:
             result = await asyncio.wait_for(
                 client.get(
-                    "https://lunarcrush.com/api/v4/assets",
+                    f"https://lunarcrush.com/api4/public/coins/{symbol.upper()}/v1",
                     headers={"Authorization": f"Bearer {api_key}"},
-                    params={
-                        "symbol": symbol.upper(),
-                        "data_points": 1,
-                    },
                 ),
                 timeout=10.0,
             )
@@ -2167,23 +2164,28 @@ async def _check_lunarcrush(symbol: str) -> Optional[Dict[str, Any]]:
                 return None
             
             data = result.json()
-            assets = data.get("data", [])
-            if not assets:
+            coin_data = data.get("data", {})
+            if not coin_data:
                 return None
             
-            asset = assets[0]
+            notice = data.get("config", {}).get("notice", "")
+            is_limited = "Limited" in notice
+            
             return {
-                "symbol": asset.get("symbol", symbol),
-                "name": asset.get("name", ""),
-                "galaxy_score": asset.get("galaxy_score"),
-                "alt_rank": asset.get("alt_rank"),
-                "social_volume_24h": asset.get("social_volume_24h"),
-                "social_score_24h": asset.get("social_score_24h"),
-                "social_contributors_24h": asset.get("social_contributors_24h"),
-                "tweet_spam_24h": asset.get("tweet_spam_24h"),
-                "average_sentiment_24h": asset.get("average_sentiment_24h"),
-                "social_dominance": asset.get("social_dominance"),
-                "data_source": "lunarcrush",
+                "symbol": coin_data.get("symbol", symbol),
+                "name": coin_data.get("name", ""),
+                "galaxy_score": coin_data.get("galaxy_score"),
+                "alt_rank": coin_data.get("alt_rank"),
+                "social_volume_24h": coin_data.get("social_volume_24h"),
+                "social_dominance": coin_data.get("social_dominance"),
+                "interactions_24h": coin_data.get("interactions_24h"),
+                "sentiment": coin_data.get("sentiment"),
+                "volatility": coin_data.get("volatility"),
+                "market_cap": coin_data.get("market_cap"),
+                "price": coin_data.get("price"),
+                "percent_change_24h": coin_data.get("percent_change_24h"),
+                "free_tier_limited": is_limited,
+                "data_source": "lunarcrush_api4",
             }
     except (asyncio.TimeoutError, Exception) as e:
         logger.warning(f"LunarCrush check failed for {symbol}: {e}")
@@ -3085,20 +3087,35 @@ async def scan_token(
     # LunarCrush social sentiment
     if isinstance(lunarcrush_data, dict):
         scan.confidence = min(100, scan.confidence + 5)
+        galaxy = lunarcrush_data.get("galaxy_score")
+        alt_rank = lunarcrush_data.get("alt_rank")
         soc_vol = lunarcrush_data.get("social_volume_24h")
-        spam = lunarcrush_data.get("tweet_spam_24h")
-        sentiment = lunarcrush_data.get("average_sentiment_24h")
-        # Bot campaign detection: high social volume + low on-chain volume
+        sentiment = lunarcrush_data.get("sentiment")
         market_vol = market.get("volume_24h", 0) or 0
+        
+        # Galaxy Score: low score (<20) = negative sentiment/social activity
+        if galaxy is not None and galaxy < 20:
+            safety = max(0, safety - 10)
+            scan.risk_flags.append("LUNARCRUSH_LOW_GALAXY")
+        
+        # AltRank: high rank (>500) = low relative strength
+        if alt_rank is not None and alt_rank > 500:
+            safety = max(0, safety - 5)
+            scan.risk_flags.append("LUNARCRUSH_LOW_RANK")
+        
+        # Bot campaign detection: high social volume + low on-chain volume
         if soc_vol is not None and soc_vol > 500 and market_vol < 10000:
             safety = max(0, safety - 20)
             scan.risk_flags.append("LUNARCRUSH_BOT_CAMPAIGN")
-        if spam is not None and spam > 100:
-            safety = max(0, safety - 15)
-            scan.risk_flags.append("LUNARCRUSH_SPAM_DETECTED")
-        if sentiment is not None and sentiment < 0.2:
+        
+        # Negative sentiment
+        if sentiment is not None and sentiment < 0.3:
             safety = max(0, safety - 5)
             scan.risk_flags.append("LUNARCRUSH_NEGATIVE_SENTIMENT")
+        
+        # Free tier limitations noted
+        if lunarcrush_data.get("free_tier_limited"):
+            scan.risk_flags.append("LUNARCRUSH_LIMITED_DATA")
     
     # Santiment social + on-chain metrics
     if isinstance(santiment_data, dict):
