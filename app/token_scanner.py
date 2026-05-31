@@ -2285,6 +2285,38 @@ async def _check_fear_greed() -> Optional[Dict[str, Any]]:
 
 # ── Sourcify decentralized contract verification ──
 
+# ── CoinGecko trending — social/search signal ──
+
+async def _check_coingecko_trending() -> Optional[Dict[str, Any]]:
+    """CoinGecko trending — top-15 most searched (retail social signal).
+    Tracks what retail is actively searching — strong leading indicator
+    of pump-and-dump targets. Uses existing COINGECKO_API_KEY.
+    Cost: $0 (existing CoinGecko free tier, 10K calls/month).
+    """
+    api_key = os.getenv("COINGECKO_API_KEY", "")
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            headers = {}
+            if api_key:
+                headers["x-cg-demo-api-key"] = api_key
+            result = await asyncio.wait_for(
+                client.get("https://api.coingecko.com/api/v3/search/trending", headers=headers),
+                timeout=10.0)
+            if result.status_code != 200:
+                return None
+            data = result.json()
+            coins = data.get("coins", [])[:15]
+            if coins:
+                trending = [{"name": c["item"]["name"], "symbol": c["item"]["symbol"],
+                            "mcap_rank": c["item"].get("market_cap_rank"),
+                            "score": c["item"].get("score")} for c in coins]
+                return {"trending_count": len(trending), "top_3": trending[:3],
+                        "data_source": "coingecko_trending"}
+    except (asyncio.TimeoutError, Exception) as e:
+        logger.warning(f"CoinGecko trending failed: {e}")
+    return None
+
 # ── Webacy blockchain risk intelligence ──
 
 async def _check_webacy(address: str, chain: str) -> Optional[Dict[str, Any]]:
@@ -2815,6 +2847,7 @@ async def scan_token(
         fdv=market.get("fdv", 0),
     )
     fear_greed_data = await _check_fear_greed()
+    cg_trending = await _check_coingecko_trending()
     santiment_data = await _check_santiment(scan.symbol)
     
     # Run SENTINEL pipeline
