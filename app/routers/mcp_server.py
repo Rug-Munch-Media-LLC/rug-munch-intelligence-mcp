@@ -545,7 +545,7 @@ async def mcp_jsonrpc(request: Request):
         for tool_id, info in tools_data.items():
             # Dot-notation naming: category.tool_id for Smithery quality score
             category = info.get("category", "analysis")
-            dot_name = f"{category}.{tool_id}" if category != "variant" else tool_id
+            dot_name = f"{category}.{tool_id}"
             tools_list.append({
                 "name": dot_name,
                 "description": info["description"],
