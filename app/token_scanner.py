@@ -2282,6 +2282,37 @@ async def _check_fear_greed() -> Optional[Dict[str, Any]]:
         return None
 
 
+# ── Sourcify decentralized contract verification ──
+
+async def _check_sourcify(token_address: str, chain: str) -> Optional[Dict[str, Any]]:
+    """Sourcify decentralized full-match verification. Free, no key, REST API.
+    Stronger than Etherscan verification — cryptographically guarantees 
+    source matches bytecode. 'perfect' match > Etherscan 'verified'.
+    """
+    try:
+        import httpx
+        chain_ids = {"ethereum": "1", "bsc": "56", "polygon": "137", "arbitrum": "42161",
+                     "optimism": "10", "avalanche": "43114", "base": "8453", "fantom": "250"}
+        chain_id = chain_ids.get(chain.lower(), "1")
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            result = await asyncio.wait_for(
+                client.get("https://sourcify.dev/server/check-by-addresses",
+                          params={"addresses": token_address, "chainIds": chain_id}),
+                timeout=8.0)
+            if result.status_code != 200:
+                return None
+            data = result.json()
+            items = data if isinstance(data, list) else [data]
+            if items:
+                item = items[0]
+                return {"full_match": item.get("status") == "perfect",
+                        "status": item.get("status", "unknown"),
+                        "data_source": "sourcify"}
+    except (asyncio.TimeoutError, Exception) as e:
+        logger.warning(f"Sourcify failed: {e}")
+        return None
+
+
 # Replaced LunarCrush with Fear & Greed (free, no key needed, REST works)
 async def _check_scamsniffer_live(token_address: str, chain: str) -> Optional[Dict[str, Any]]:
     """ScamSniffer phishing domain check against static GitHub blacklist.
