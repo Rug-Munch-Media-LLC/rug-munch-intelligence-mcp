@@ -1,7 +1,7 @@
 passlib>=1.7.4
 python-jose[cryptography]>=3.3.0
 faiss-cpu
-onnxruntime>=1.18.0
+onnxruntime>=1.24.3
 optimum[onnxruntime]>=1.20.0
  cf58e20fb8105c34731f6944118b8ba5bcac8f95
 supabase>=2.0.0
