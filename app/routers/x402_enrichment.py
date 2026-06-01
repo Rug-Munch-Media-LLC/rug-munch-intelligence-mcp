@@ -403,6 +403,18 @@ def enrich_tool_response(
     if enrichment.risk_summary and scam_flags:
         llm_summary = _synthesize_enrichment(enrichment.risk_summary, scam_flags, tool_name)
 
+    # 5d. Cron intel injection: recent RMI intelligence briefings
+    intel_context = _load_recent_intel(r)
+    if intel_context:
+        raw_result["_intel"] = intel_context
+
+    # 5e. Confidence scoring: quantify data quality for every response
+    try:
+        from app.routers.x402_advanced_tools import compute_confidence
+        raw_result["_confidence"] = compute_confidence(raw_result)
+    except Exception:
+        pass
+
     # 6. Merge into response
     raw_result["_enrichment"] = {
         "source": "wallet_memory_bank",
@@ -444,6 +456,36 @@ def enrich_tool_response(
         _fire_enrichment_alert(tool_name, "scam_pattern", [s["address"] for s in scam_flags], r)
 
     return raw_result
+
+
+# ── Cron Intel Injection ─────────────────────────────────────
+
+def _load_recent_intel(r=None) -> Optional[Dict]:
+    """Load the latest RMI intel briefing from Redis for injection into tool results.
+
+    Cron jobs (Daily Briefing, Intel Digest) write summaries to x402:intel:latest.
+    Returns None if no recent intel available (older than 12h).
+    """
+    try:
+        if not r:
+            r = _redis()
+        data = r.get("x402:intel:latest")
+        if not data:
+            return None
+        intel = json.loads(data)
+        age_h = (time.time() - intel.get("timestamp", 0)) / 3600
+        if age_h > 12:
+            return None  # Stale
+        return {
+            "source": "rmi_cron_intel",
+            "briefing": intel.get("summary", "")[:500],
+            "age_hours": round(age_h, 1),
+            "scanner_alerts": intel.get("alerts", 0),
+            "tokens_scanned": intel.get("tokens_scanned", 0),
+            "timestamp": intel.get("timestamp", 0),
+        }
+    except Exception:
+        return None
 
 
 # ── LLM Synthesis ────────────────────────────────────────────

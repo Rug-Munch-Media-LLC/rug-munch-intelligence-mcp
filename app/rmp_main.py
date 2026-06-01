@@ -390,11 +390,11 @@ async def auth_wallet(req: WalletAuthRequest):
 AGENTS = {
     "nexus": {"name": "NEXUS", "role": "Strategic Coordinator", "tier": "T0", "models": ["gemini-2.5-pro", "nvidia/nemotron-4-340b"], "triggers": ["strategize", "plan", "coordinate", "synthesize"]},
     "scout": {"name": "SCOUT", "role": "Alpha Hunter", "tier": "T3", "models": ["groq/llama-3.1-8b-instant", "gemini-2.5-flash"], "triggers": ["find", "scan", "hunt", "alpha"]},
-    "tracer": {"name": "TRACER", "role": "Forensic Investigator", "tier": "T1", "models": ["gemini-2.5-pro", "deepseek/deepseek-r1"], "triggers": ["trace", "investigate", "follow", "wallet"]},
-    "cipher": {"name": "CIPHER", "role": "Contract Auditor", "tier": "T1", "models": ["qwen/qwen2.5-coder-32b-instruct", "deepseek/deepseek-coder-v2"], "triggers": ["audit", "security", "contract", "code"]},
-    "sentinel": {"name": "SENTINEL", "role": "Rug Detector", "tier": "T2", "models": ["deepseek/deepseek-r1", "groq/llama-3.3-70b-versatile"], "triggers": ["monitor", "watch", "alert", "rug"]},
-    "chronicler": {"name": "CHRONICLER", "role": "Investigative Reporter", "tier": "T2", "models": ["deepseek/deepseek-r1", "gemini-2.5-flash"], "triggers": ["write", "document", "report", "evidence"]},
-    "forge": {"name": "FORGE", "role": "Implementation Architect", "tier": "T1", "models": ["qwen/qwen2.5-coder-32b-instruct", "deepseek/deepseek-coder-v2"], "triggers": ["code", "implement", "build", "script"]},
+    "tracer": {"name": "TRACER", "role": "Forensic Investigator", "tier": "T1", "models": ["gemini-2.5-pro", "deepseek/deepseek-v4-pro"], "triggers": ["trace", "investigate", "follow", "wallet"]},
+    "cipher": {"name": "CIPHER", "role": "Contract Auditor", "tier": "T1", "models": ["qwen/qwen2.5-coder-32b-instruct", "deepseek/deepseek-v4-flash"], "triggers": ["audit", "security", "contract", "code"]},
+    "sentinel": {"name": "SENTINEL", "role": "Rug Detector", "tier": "T2", "models": ["deepseek/deepseek-v4-pro", "groq/llama-3.3-70b-versatile"], "triggers": ["monitor", "watch", "alert", "rug"]},
+    "chronicler": {"name": "CHRONICLER", "role": "Investigative Reporter", "tier": "T2", "models": ["deepseek/deepseek-v4-pro", "gemini-2.5-flash"], "triggers": ["write", "document", "report", "evidence"]},
+    "forge": {"name": "FORGE", "role": "Implementation Architect", "tier": "T1", "models": ["qwen/qwen2.5-coder-32b-instruct", "deepseek/deepseek-v4-flash"], "triggers": ["code", "implement", "build", "script"]},
     "relay": {"name": "RELAY", "role": "Communications Coordinator", "tier": "T3", "models": ["groq/llama-3.1-8b-instant", "gemini-2.5-flash"], "triggers": ["format", "relay", "dispatch", "notify"]},
 }
 

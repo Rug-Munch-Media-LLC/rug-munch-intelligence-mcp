@@ -121,6 +121,7 @@ from app.routers.x402_dashboard import router as x402_dashboard_router
 from app.routers.x402_dashboard import on_startup as x402_dashboard_startup
 from app.routers.x402_token_watch import router as x402_token_watch_router
 from app.routers.x402_premium_tools import router as x402_premium_router
+from app.routers.x402_advanced_tools import router as x402_advanced_router
 from app.auth import router as auth_router
 app.include_router(x402_middleware_router)
 app.include_router(x402_enforcement_router)
@@ -131,6 +132,7 @@ app.include_router(x402_tools_router)
 app.include_router(x402_dashboard_router)
 app.include_router(x402_token_watch_router)
 app.include_router(x402_premium_router)
+app.include_router(x402_advanced_router)
 app.include_router(auth_router, prefix="/api/v1/auth")
 
 # ── Darkroom Admin UI (static) ─────────────────────────────────
@@ -356,6 +358,55 @@ app.add_middleware(
 # x402 payment enforcement middleware — intercepts /api/v1/x402-tools/* calls
 from app.routers.x402_enforcement import x402_enforcement_middleware
 app.add_middleware(BaseHTTPMiddleware, dispatch=x402_enforcement_middleware)
+
+# Response cache middleware — serves cached results for repeat queries (<50ms)
+CACHEABLE_TOOLS = {"audit","wallet","reputation_score","honeypot_check","rugshield",
+                    "forensics","whale","token_deep_dive","market_overview","chain_health",
+                    "sentiment","rug_pull_predictor","rug_probability","narrative","history"}
+
+@app.middleware("http")
+async def cache_middleware(request: Request, call_next):
+    """Check Redis cache before executing tool. Store result after."""
+    path = request.url.path
+    if not path.startswith("/api/v1/x402-tools/"):
+        return await call_next(request)
+    if request.method != "POST":
+        return await call_next(request)
+
+    tool = path.rstrip("/").split("/")[-1]
+    if tool not in CACHEABLE_TOOLS:
+        return await call_next(request)
+
+    # Build cache key from request body
+    try:
+        body = await request.body()
+        params = json.loads(body) if body else {}
+    except Exception:
+        return await call_next(request)
+
+    try:
+        from app.routers.x402_advanced_tools import get_cached, set_cached
+        cached = get_cached(tool, params)
+        if cached:
+            return JSONResponse(content=cached, headers={"X-Cache": "HIT", "X-Cache-TTL": "60"})
+    except Exception:
+        pass
+
+    # Execute and cache
+    response = await call_next(request)
+    if response.status_code == 200:
+        try:
+            # Read response body
+            resp_body = b""
+            async for chunk in response.body_iterator:
+                resp_body += chunk
+            result = json.loads(resp_body)
+            set_cached(tool, params, result)
+            return JSONResponse(content=result, status_code=response.status_code,
+                              headers={**dict(response.headers), "X-Cache": "MISS"})
+        except Exception:
+            pass
+    return response
 
 # Rate limiting
 

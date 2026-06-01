@@ -212,6 +212,15 @@ try:
         "meme_vibe_score": {"price_usd": 0.01, "price_atoms": "10000", "category": "social", "trial_free": 3, "description": "Meme token vibe scoring — sentiment, community strength, and virality analysis"},
         "mcp-proxy": {"price_usd": 0.01, "price_atoms": "10000", "category": "api", "trial_free": 5, "description": "MCP protocol proxy — route tool calls through the x402 payment layer"},
         "human-execute": {"price_usd": 0.02, "price_atoms": "20000", "category": "api", "trial_free": 2, "description": "Human-in-the-loop execution — wallet-based payment for manual crypto investigation tasks"},
+        # Premium standout tools
+        "reputation_score": {"price_usd": 0.10, "price_atoms": "100000", "category": "premium", "trial_free": 1, "description": "Comprehensive 0-100 trust score combining wallet labels, scam databases, deployer history, and RAG similarity matching"},
+        "webhook_register": {"price_usd": 0.02, "price_atoms": "20000", "category": "monitoring", "trial_free": 2, "description": "Register webhook URL for real-time monitoring alerts — rug pulls, whale moves, price crashes"},
+        "webhook_list": {"price_usd": 0.00, "price_atoms": "0", "category": "monitoring", "trial_free": 999, "description": "List registered webhooks for an address"},
+        "investigation_report": {"price_usd": 0.25, "price_atoms": "250000", "category": "premium", "trial_free": 1, "description": "AI-generated comprehensive investigation report — reputation, forensics, market context, recommendation"},
+        # Advanced standout tools
+        "rug_probability": {"price_usd": 0.15, "price_atoms": "150000", "category": "premium", "trial_free": 1, "description": "Predictive rug pull probability 0-100 — honeypot + liquidity + deployer + social signals"},
+        "history": {"price_usd": 0.08, "price_atoms": "80000", "category": "analysis", "trial_free": 2, "description": "Historical scanner time-series — risk/liquidity/volume/price trends over hours"},
+        "narrative": {"price_usd": 0.05, "price_atoms": "50000", "category": "social", "trial_free": 3, "description": "Market narrative engine — what is the market saying about this token RIGHT NOW"},
     }
     TOOL_PRICES.update(_NEW_TOOL_PRICES)
 except Exception as e:
@@ -1563,6 +1572,43 @@ def _build_discovery_response():
             "requirements": requirements,
         }
 
+    # Build spec-compliant supportedNetworks array
+    supported_networks = []
+    for ck, cv in CHAIN_USDC.items():
+        net = {
+            "network": cv["network"],
+            "name": CHAIN_NAMES.get(ck, ck),
+            "chainId": cv.get("chain_id"),
+            "currency": cv.get("name", "USD Coin"),
+            "facilitators": cv.get("facilitators", []),
+        }
+        if "tokens" in cv:
+            net["tokens"] = {
+                k: v for k, v in cv["tokens"].items()
+            }
+        supported_networks.append(net)
+
+    # Build spec-compliant paymentFacilitators array
+    facilitator_map = {
+        "coinbase_cdp": {"name": "Coinbase CDP", "description": "Fee-free Base + Solana USDC via Coinbase Developer Platform", "url": "https://cdp.coinbase.com"},
+        "payai": {"name": "PayAI", "description": "Base + Solana USDC, deferred settlement", "url": "https://payai.network"},
+        "primev": {"name": "Primev", "description": "Fee-free Ethereum via mev-commit preconfirmations", "url": "https://primev.xyz"},
+        "cloudflare_x402": {"name": "Cloudflare x402", "description": "Base Sepolia + Ethereum fallback", "url": "https://x402.org"},
+        "eip7702": {"name": "EIP-7702 Universal", "description": "Universal EVM — BSC, Polygon, Avalanche, Fantom, Gnosis, Arbitrum, Optimism, Base", "url": "https://eips.ethereum.org/EIPS/eip-7702"},
+        "tron_selfverify": {"name": "TRON Self-Verify", "description": "TRON USDT/USDC/USDD — self-verified via TronGrid (fee-free)", "url": "https://trongrid.io"},
+        "bitcoin_selfverify": {"name": "Bitcoin Self-Verify", "description": "Bitcoin BTC — self-verified via Mempool.space (fee-free, 1-conf)", "url": "https://mempool.space"},
+        "asterpay": {"name": "AsterPay", "description": "EUR/SEPA European off-ramp", "url": "https://asterpay.io"},
+    }
+    payment_facilitators = []
+    for fk, fv in facilitator_map.items():
+        fac_networks = [n["network"] for n in supported_networks if fk in n.get("facilitators", [])]
+        payment_facilitators.append({
+            "name": fv["name"],
+            "description": fv["description"],
+            "url": fv["url"],
+            "supportedNetworks": fac_networks,
+        })
+
     return {
         "x402": {
             "version": "2",
@@ -1585,8 +1631,10 @@ def _build_discovery_response():
         "gateway_url": "https://mcp.rugmunch.io",
         "payment_endpoint": "https://mcp.rugmunch.io/api/v1/x402-tools",
         "supported_chains": list(CHAIN_USDC.keys()),
+        "supportedNetworks": supported_networks,
+        "paymentFacilitators": payment_facilitators,
         "chain_count": len(CHAIN_USDC),
-        "facilitator_count": 8,  # dynamic: primev, coinbase_cdp, payai, cloudflare_x402, eip7702, asterpay, tron_selfverify, bitcoin_selfverify
+        "facilitator_count": len(payment_facilitators),
         "total_tools": len(tools),
         "tools": tools,
     }
@@ -1681,6 +1729,75 @@ async def get_trial_status(request: Request):
         "trials": trials,
         "tools_with_trials": len(trials),
     }
+
+
+# ── Revenue Read Endpoint ──
+@discovery_router.get("/api/v1/x402/revenue")
+async def get_revenue():
+    """Read cumulative x402 revenue stats from Redis counters.
+
+    Returns total revenue, daily breakdown, tool-level stats, and payment counts.
+    Revenue counters are incremented by POST /api/v1/x402/receipt on successful payments.
+    """
+    r = get_redis()
+    if not r:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "Redis unavailable, cannot read revenue"},
+            headers=SECURITY_HEADERS,
+        )
+
+    try:
+        total_revenue = float(r.get("x402:revenue:total") or 0)
+        total_calls = 0
+        tool_revenue = {}
+        tool_calls = {}
+
+        # Scan tool-level keys
+        for key in r.scan_iter("x402:tool_revenue:*"):
+            tool_id = key.decode().replace("x402:tool_revenue:", "")
+            tool_revenue[tool_id] = float(r.get(key) or 0)
+
+        for key in r.scan_iter("x402:tool_calls:*"):
+            tool_id = key.decode().replace("x402:tool_calls:", "")
+            count = int(r.get(key) or 0)
+            tool_calls[tool_id] = count
+            total_calls += count
+
+        # Daily breakdown (last 30 days)
+        daily = {}
+        from datetime import datetime, timedelta
+        for i in range(30):
+            day = (datetime.utcnow() - timedelta(days=i)).strftime("%Y-%m-%d")
+            val = float(r.get(f"x402:revenue:daily:{day}") or 0)
+            if val > 0:
+                daily[day] = val
+
+        return {
+            "total_revenue_usd": round(total_revenue, 2),
+            "total_tool_calls": total_calls,
+            "by_tool": {
+                tid: {
+                    "revenue_usd": round(tool_revenue.get(tid, 0), 2),
+                    "calls": tool_calls.get(tid, 0),
+                }
+                for tid in set(list(tool_revenue.keys()) + list(tool_calls.keys()))
+            },
+            "daily": daily,
+            "payment_wallets": {
+                "evm": EVM_PAY_TO,
+                "solana": SOL_PAY_TO,
+                "tron": os.getenv("X402_TRON_PAY_TO", ""),
+                "bitcoin": os.getenv("X402_BTC_PAY_TO", ""),
+            },
+        }
+    except Exception as e:
+        logger.error(f"Revenue read error: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to read revenue: {str(e)[:100]}"},
+            headers=SECURITY_HEADERS,
+        )
 
 
 # ── Refund Request Endpoint ──

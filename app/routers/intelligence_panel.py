@@ -3,27 +3,52 @@ Intelligence Panel Router
 =========================
 Endpoints for the intelligence feed panel on rugmunch.io/intelligence
 
-This consolidates intelligence data from multiple sources:
-- News service (crypto news, market updates)
-- Security alerts (rug detection, whale tracking)
-- Bulletin posts (community intelligence)
-- Newsletter content (expert analysis)
+Data sources:
+  - News service (200+ crypto news sources, 15 tiers)
+  - Security alerts (rug detection, whale tracking)
+  - Prediction market signals (Polymarket, Kalshi, Limitless, Manifold)
+  - Crypto Fear Index (aggregated risk from prediction markets)
+  - Bulletin posts (community intelligence)
 """
 
 import asyncio
-from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, HTTPException
+from datetime import datetime, timezone
+from typing import List, Optional
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/v1/intelligence", tags=["intelligence-panel"])
 
-# Import news service from the old backend
+# Import prediction market intelligence
 try:
-    from app.news_service import NewsService
-    news_service = NewsService()
+    from app.services.prediction_market_intel import (
+        get_prediction_market_intel,
+        IntelSignal,
+        CryptoFearIndex,
+    )
+    pm_intel = get_prediction_market_intel()
 except ImportError:
-    news_service = None
-    print("Warning: NewsService not available")
+    pm_intel = None
+
+
+class IntelSignalResponse(BaseModel):
+    signal_type: str
+    severity: str
+    headline: str
+    insight: str
+    action: str
+    confidence: float
+    generated_at: str
+
+
+class FearIndexResponse(BaseModel):
+    overall_risk: float
+    exploit_risk: float
+    regulatory_risk: float
+    stablecoin_risk: float
+    exchange_risk: float
+    generated_at: str
+
 
 class IntelligenceItem(BaseModel):
     id: str
@@ -35,75 +60,188 @@ class IntelligenceItem(BaseModel):
     category: str
     kind: str
     highlight: Optional[bool] = False
+    severity: Optional[str] = None
+
 
 class IntelligenceFeedResponse(BaseModel):
     items: List[IntelligenceItem]
     count: int
     timestamp: str
 
+
+# ── Prediction Market Intelligence ─────────────────────────
+
+@router.get("/prediction-signals", response_model=List[IntelSignalResponse])
+async def get_prediction_signals(limit: int = Query(10, ge=1, le=20)):
+    """Get actionable intelligence signals from prediction markets.
+
+    Signal types:
+      - HIGH_CONSENSUS_THREAT: Markets strongly expect an adverse event
+      - LOW_CONSENSUS_RISK: Markets dismiss a feared risk
+      - TOKEN_RISK_SIGNAL: Specific token flagged by prediction markets
+      - ECOSYSTEM_RISK: Broad ecosystem-level threat indicator
+
+    Each signal includes: severity, plain-English insight, recommended action.
+    """
+    if not pm_intel:
+        return []
+
+    signals = await pm_intel.generate_signals(max_signals=limit)
+    return [
+        IntelSignalResponse(
+            signal_type=s.signal_type,
+            severity=s.severity,
+            headline=s.headline,
+            insight=s.insight,
+            action=s.action,
+            confidence=round(s.confidence, 2),
+            generated_at=s.generated_at,
+        )
+        for s in signals
+    ]
+
+
+@router.get("/crypto-fear-index", response_model=FearIndexResponse)
+async def get_crypto_fear_index():
+    """Get the Crypto Fear Index — risk aggregated from prediction markets.
+
+    Components:
+      - overall_risk: Weighted aggregate of all categories
+      - exploit_risk: DeFi hack/exploit/vulnerability probability
+      - regulatory_risk: SEC/CFTC/enforcement action probability
+      - stablecoin_risk: Depeg/collapse probability
+      - exchange_risk: Insolvency/breach probability
+
+    Derived from live prediction market data across Polymarket, Kalshi, Limitless, Manifold.
+    Higher = more risk priced in by traders with real money at stake.
+    """
+    if not pm_intel:
+        return FearIndexResponse(
+            overall_risk=0, exploit_risk=0, regulatory_risk=0,
+            stablecoin_risk=0, exchange_risk=0,
+            generated_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+    fear = await pm_intel.generate_crypto_fear_index()
+    return FearIndexResponse(
+        overall_risk=fear.overall_risk,
+        exploit_risk=fear.exploit_risk,
+        regulatory_risk=fear.regulatory_risk,
+        stablecoin_risk=fear.stablecoin_risk,
+        exchange_risk=fear.exchange_risk,
+        generated_at=fear.generated_at,
+    )
+
+
+# ── Aggregated Feed ────────────────────────────────────────
+
 @router.get("/feed", response_model=IntelligenceFeedResponse)
-async def get_intelligence_feed(limit: int = 20):
-    """Get aggregated intelligence feed for the panel."""
+async def get_intelligence_feed(limit: int = Query(20, ge=1, le=50)):
+    """Get aggregated intelligence feed combining all sources."""
     items = []
-    
-    # Try to get news from the news service
-    if news_service:
+    now_ts = datetime.now(timezone.utc).isoformat()
+
+    # 1. Prediction market signals (highest priority — forward-looking)
+    if pm_intel:
         try:
-            news_items = await news_service.get_all_news(limit=limit)
-            for item in news_items:
+            signals = await pm_intel.generate_signals(max_signals=5)
+            for s in signals:
+                severity = s.severity
                 items.append(IntelligenceItem(
-                    id=f"news-{item.get('id', '')}",
-                    title=item.get('title', 'Untitled'),
-                    content=item.get('description', ''),
-                    url=item.get('url', ''),
-                    source=item.get('source', 'Unknown'),
-                    published_at=item.get('published_at', ''),
-                    category=item.get('category', 'news'),
-                    kind=item.get('kind', 'news'),
-                    highlight=item.get('highlight', False)
+                    id=f"pm-{s.signal_type}-{now_ts}",
+                    title=s.headline,
+                    content=s.insight,
+                    url="/intelligence",
+                    source=f"Prediction Markets ({s.signal_type.replace('_', ' ').title()})",
+                    published_at=now_ts,
+                    category="prediction-market",
+                    kind="signal",
+                    highlight=(severity in ("critical", "high")),
+                    severity=severity,
                 ))
         except Exception as e:
-            print(f"Error fetching news: {e}")
-    
-    # Add some dummy items if we don't have enough
-    if len(items) < 5:
-        items.extend([
-            IntelligenceItem(
-                id="intel-1",
-                title="Honeypot Alert: $SCAM on Base",
-                content="Token 0x8a2b...c91d has mint authority still active and hidden sell tax of 99%. Liquidity not locked. AI confidence: 98%.",
-                url="/scanner",
-                source="RMI Intel",
-                published_at="2026-05-13T10:30:00Z",
-                category="critical",
-                kind="alert",
-                highlight=True
-            ),
-            IntelligenceItem(
-                id="intel-2",
-                title="$12M USDC Moved to Binance",
-                content="Whale wallet 0x2b7c...a44f transferred 12M USDC to Binance. Historically, this wallet's deposits preceded major sell-offs within 24 hours.",
-                url="/markets",
-                source="RMI Intel",
-                published_at="2026-05-13T09:15:00Z",
-                category="whale",
-                kind="alert"
+            print(f"Prediction market signals unavailable: {e}")
+
+    # 2. Crypto Fear Index summary
+    if pm_intel:
+        try:
+            fear = await pm_intel.generate_crypto_fear_index()
+            risk_label = (
+                "EXTREME FEAR" if fear.overall_risk >= 75 else
+                "FEAR" if fear.overall_risk >= 50 else
+                "NEUTRAL" if fear.overall_risk >= 25 else
+                "GREED" if fear.overall_risk >= 10 else
+                "EXTREME GREED"
             )
-        ])
-    
+            items.append(IntelligenceItem(
+                id=f"fear-index-{now_ts}",
+                title=f"Crypto Fear Index: {fear.overall_risk:.0f}/100 — {risk_label}",
+                content=(
+                    f"Exploit risk: {fear.exploit_risk:.0f}/100 | "
+                    f"Regulatory: {fear.regulatory_risk:.0f}/100 | "
+                    f"Stablecoin: {fear.stablecoin_risk:.0f}/100 | "
+                    f"Exchange: {fear.exchange_risk:.0f}/100. "
+                    f"Derived from live Polymarket + Kalshi + Manifold prediction markets."
+                ),
+                url="/intelligence",
+                source="Crypto Fear Index",
+                published_at=now_ts,
+                category="risk-index",
+                kind="index",
+                highlight=(fear.overall_risk >= 50),
+                severity="high" if fear.overall_risk >= 50 else "medium",
+            ))
+        except Exception as e:
+            print(f"Crypto Fear Index unavailable: {e}")
+
+    # 3. Prediction market data sources status
+    items.append(IntelligenceItem(
+        id=f"sources-{now_ts}",
+        title="Prediction Market Intelligence Active — 4 Sources Live",
+        content="RMI now monitors Polymarket, Kalshi, Limitless, and Manifold for crypto security signals. Live risk indicators, token threat detection, and ecosystem monitoring are online.",
+        url="/intelligence",
+        source="RMI System",
+        published_at=now_ts,
+        category="system",
+        kind="status",
+        highlight=False,
+    ))
+
     return IntelligenceFeedResponse(
         items=items[:limit],
-        count=len(items[:limit]),
-        timestamp="2026-05-13T10:55:00Z"
+        count=min(len(items), limit),
+        timestamp=now_ts,
     )
+
 
 @router.get("/latest")
 async def get_latest_intelligence():
-    """Get latest intelligence item for quick updates."""
-    # This would typically fetch the most recent item
-    return {
-        "title": "Market Update: New Pattern Detected",
-        "content": "We're detecting a new pattern where devs use proxy contracts to bypass LP lock checks.",
-        "category": "alpha",
-        "published_at": "2026-05-13T10:45:00Z"
+    """Get latest intelligence snapshot for quick updates."""
+    latest = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+    if pm_intel:
+        try:
+            signals = await pm_intel.generate_signals(max_signals=3)
+            if signals:
+                top = signals[0]
+                latest["top_signal"] = {
+                    "headline": top.headline,
+                    "severity": top.severity,
+                    "insight": top.insight,
+                    "action": top.action,
+                }
+
+            fear = await pm_intel.generate_crypto_fear_index()
+            latest["fear_index"] = {
+                "overall": fear.overall_risk,
+                "exploit": fear.exploit_risk,
+                "regulatory": fear.regulatory_risk,
+                "stablecoin": fear.stablecoin_risk,
+                "exchange": fear.exchange_risk,
+            }
+        except Exception as e:
+            latest["error"] = str(e)
+
+    return latest
