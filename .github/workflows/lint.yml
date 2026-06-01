@@ -14,5 +14,5 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install ruff
-      - run: ruff check app/ --select E,F,W --ignore E501,E402,W503
+      - run: ruff check app/ --select E,F,W --ignore E501,E402,W504
       - run: python -m py_compile app/*.py 2>/dev/null; echo "Lint passed (or no Python files)"
