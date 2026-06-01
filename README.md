@@ -1,357 +1,262 @@
-<p align="center">
-  <img src="https://rugmunch.io/logo.png" alt="Rug Munch Intelligence" width="160" />
-</p>
+# Rug Munch Intelligence — Platform Documentation
 
-<h1 align="center">🛡️ Rug Munch Intelligence — MCP Server</h1>
+## The Bloomberg Terminal of Shitcoins
 
-<p align="center">
-  <strong>210 AI-Powered Crypto Intelligence Tools · 13 Blockchains · 8 Payment Rails</strong><br/>
-  <em>Don't get rugged. Let AI watch the chains so you don't have to.</em>
-</p>
+Rug Munch Intelligence (RMI) is a unified crypto intelligence platform providing 234 tools for token security, wallet forensics, whale tracking, market data, and blockchain queries. Every data call routes through a multi-layer caching shield with automatic provider fallback across 20+ data sources.
 
-<p align="center">
-  <img src="https://img.shields.io/badge/MCP-Protocol-Compatible-6E40C9?logo=modelcontextprotocol&logoColor=white&style=for-the-badge" alt="MCP Compatible" />
-  <img src="https://img.shields.io/badge/Tools-210-00D4AA?style=for-the-badge" alt="210 Tools" />
-  <img src="https://img.shields.io/badge/Chains-13-F7931A?style=for-the-badge" alt="13 Chains" />
-  <img src="https://img.shields.io/badge/Payments-x402-FF6900?style=for-the-badge" alt="x402 Payments" />
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/Free_Trials-Every_Tool-22C55E?style=for-the-badge" alt="Free Trials" />
-  <img src="https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white&style=for-the-badge" alt="Python 3.10+" />
-  <img src="https://img.shields.io/badge/License-Proprietary-DC2626?style=for-the-badge" alt="Proprietary" />
-  <img src="https://img.shields.io/badge/FastAPI-Powered-009688?logo=fastapi&logoColor=white&style=for-the-badge" alt="FastAPI" />
-</p>
-
-<p align="center">
-  <a href="https://smithery.ai/server/@cryptorugmuncher/rug-munch-intelligence">
-    <img src="https://smithery.ai/badge/@cryptorugmuncher/rug-munch-intelligence" alt="Smithery" />
-  </a>
-  <a href="https://glama.ai/mcp/servers/@cryptorugmuncher/rug-munch-intelligence">
-    <img src="https://glama.ai/badge?url=%2Fmcp%2Fservers%2F%40cryptorugmuncher%2Frug-munch-intelligence" alt="Glama MCP" />
-  </a>
-</p>
+**Access:** `https://mcp.rugmunch.io` | **Docs:** `https://rugmunch.io/docs`
 
 ---
 
-## ✨ What Is Rug Munch Intelligence?
-
-**Rug Munch Intelligence (RMI)** is the most comprehensive crypto security & intelligence MCP server ever built. With **210 tools** spanning **13 blockchains**, it gives any AI agent — Claude, Cursor, Windsurf, ChatGPT, or raw HTTP — superhuman ability to detect scams, track smart money, analyze wallets, monitor markets, and prevent rug pulls in real time.
-
-> 🧠 **One MCP endpoint. 210 tools. Zero API keys to start.**
-
-Every tool offers **free trials** (1–5 calls) with no signup. Connect a wallet for bonus calls, or pay per call for unlimited access via **8 payment facilitators** across 6+ chains.
-
-### 🎯 Why RMI?
-
-|| 🛡️ Security | 🧠 Intelligence | 📊 Market | 🔬 Analysis |
-||:---|:---|:---|:---|
-|| 29 core + 9 SENTINEL = 38 total | 27 tools | 15 tools | 14 tools |
-|| Honeypot detection, MEV alerts, SENTINEL scan | Whale tracking, KOL scoring, alpha feeds | Trending tokens, yield scanners, arb | PnL, portfolio, correlation, tax |
-
-|| 🐦 Social | 🚀 Launch | 💎 Premium | 💸 DeFi |
-||:---|:---|:---|:---|
-|| 11 tools | 7 tools | 7 tools | 4 tools |
-|| Spike detection, meme vibes, Discord/TG/Reddit | Presale intel, airdrop finder, IDO tracker | OSINT hunts, deep forensics, whale network | Yield aggregator, impermanent loss |
-
-Plus **80 per-chain variants** for multi-chain coverage and **4 bundle endpoints**.
-
----
-
-## 🗂️ Tool Categories at a Glance
-
-|| Category | Count | Highlights ||
-||:---|:---:|:---|
-|| 🔐 Security | 29 + 9 SENTINEL = 38 | `honeypot_check` · `rugshield` · `sniper_detect` · `rug_pull_predictor` · `bundler_detect` · `wash_trading` · `sentinel_scan` · `holder_analysis` · `bundle_detect` · `dev_reputation` |
-|| 🧠 Intelligence | 27 | `smartmoney` · `whale` · `whale_scan` · `insider` · `insider_network` · `syndicate_scan` · `copy_trade_finder` · `cross_chain_whale` · `wallet_label_registry` · `degen_score` |
-|| 📈 Market | 15 | `pulse` · `trending_tokens` · `liquidity_depth` · `yield_scanner` · `dex_activity` · `arbitrage_scan` · `chain_health` · `funding_rate` · `options_flow` · `liquidation_heatmap` |
-|| 🔬 Analysis | 14 | `wallet` · `wallet_pnl` · `portfolio_tracker` · `forensics` · `token_comparison` · `correlation_matrix` · `drawdown_analyzer` · `sharpe_ratio_calc` · `volume_profile` |
-|| 🐦 Social | 11 | `sentiment` · `sentiment_spike` · `tw_profile` · `tw_timeline` · `tw_search` · `meme_vibe_score` · `telegram_pump_detect` · `discord_alpha` · `reddit_sentiment` · `influencer_impact_score` |
-|| 🚀 Launchpad | 7 | `launch` · `launch_intel` · `airdrop_finder` · `presale_scanner` · `ido_tracker` · `fair_launch_detect` · `vesting_schedule_analyzer` |
-|| 💎 Premium | 7 | `forensic_valuation` · `osint_identity_hunt` · `investigation_report` · `deep_forensics` · `whale_network_map` · `cross_chain_trace` · `full_wallet_dossier` |
-|| 💸 DeFi | 4 | `defi_yield_scanner` · `yield_aggregator` · `impermanent_loss` · `protocol_risk` |
-|| 🖼️ NFT | 2 | `nft_health` · `nft_floor_analytics` |
-|| 📦 Bundles | 4 | `security_pack` · `intelligence_pack` · `market_bundle` · `forensic_pack` |
-|| 🔌 API | 2 | `catalog` · `mcp-proxy` · `human-execute` |
-|| 🔄 Variants | 80 | Per-chain overrides for top tools across Solana, Base, Ethereum, BSC |
-
-### 🌐 Supported Blockchains
-
-| ⛓️ Chain | Network | ⛓️ Chain | Network | ⛓️ Chain | Network |
-|:---|:---|:---|:---|:---|:---|
-| Solana | Mainnet | Base | Mainnet | Ethereum | Mainnet |
-| BSC | Mainnet | Arbitrum | Mainnet | Optimism | Mainnet |
-| Polygon | Mainnet | Avalanche | C-Chain | Fantom | Opera |
-| Gnosis | Mainnet | TRON | Mainnet | Bitcoin | Mainnet |
-| SEPA | EUR Banking | | | | |
-
----
-
-## 🚀 Quick Start
-
-### Claude Desktop
-
-1. Install the package:
+## Quick Start
 
 ```bash
-pip install rug-munch-intelligence-mcp
+# Discover the platform
+curl https://mcp.rugmunch.io/.well-known/mcp
+
+# List all tools
+curl https://mcp.rugmunch.io/mcp/tools
+
+# Check platform health
+curl https://mcp.rugmunch.io/mcp/health
+
+# Get SDK examples
+curl https://mcp.rugmunch.io/mcp/sdk
 ```
 
-2. Add to your Claude config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS or `%APPDATA%\Claude\claude_desktop_config.json` on Windows):
-
+**MCP Native (Claude Desktop, Cursor, Windsurf):**
 ```json
 {
   "mcpServers": {
-    "rug-munch-intelligence": {
-      "command": "python3",
-      "args": ["-m", "rug_munch_mcp"],
-      "env": {
-        "RUG_MUNCH_API_BASE": "https://mcp.rugmunch.io/api/v1"
-      }
+    "rug-munch": {
+      "url": "https://mcp.rugmunch.io/mcp",
+      "transport": "streamable-http"
     }
   }
 }
 ```
 
-3. Restart Claude Desktop — you'll see **210 tools** available.
+---
 
-> 💡 **No API key needed.** Free trials start automatically.
+## Platform Capabilities
 
-### Cursor
+### Tool Categories (234 total)
 
-Add to your `.cursor/mcp.json` in your project root:
+| Category | Count | Description |
+|----------|-------|-------------|
+| Security Scanning | 45 | Rug pulls, honeypots, audits, clone detection, MEV protection |
+| Wallet Intelligence | 38 | PnL, clustering, insider networks, whale tracking, forensics |
+| Market Data | 32 | Prices, liquidity, volume, arbitrage, trends, OHLCV |
+| Token Analytics | 28 | Holder distribution, sniper detection, deployer history |
+| DeFi Analytics | 24 | TVL, yields, protocol risk, liquidity flow, bridges |
+| Social Signals | 18 | Sentiment, KOL tracking, profile flips, meme scoring |
+| Caching Shield | 13 | Internal multi-provider data access layer |
+| Local MCP | 85 | Self-hosted Solana RPC (60) + EVM (25 tools, 86 networks) |
+| Free Public MCP | 50 | Boar blockchain (ETH, ENS, contracts, keyless) |
 
-```json
-{
-  "mcpServers": {
-    "rug-munch-intelligence": {
-      "command": "python3",
-      "args": ["-m", "rug_munch_mcp"],
-      "env": {
-        "RUG_MUNCH_API_BASE": "https://mcp.rugmunch.io/api/v1"
-      }
-    }
-  }
-}
-```
+### Supported Chains (13)
+Solana, Ethereum, Base, BSC, Polygon, Arbitrum, Optimism, Avalanche, Fantom, Gnosis, TRON, Bitcoin, SEPA (fiat) + 86 EVM networks via local MCP
 
-### Windsurf
-
-Add to `~/.codeium/windsurf/mcp_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "rug-munch-intelligence": {
-      "command": "python3",
-      "args": ["-m", "rug_munch_mcp"],
-      "env": {
-        "RUG_MUNCH_API_BASE": "https://mcp.rugmunch.io/api/v1"
-      }
-    }
-  }
-}
-```
-
-### Raw HTTP (No Install Needed)
-
-Call any tool directly — works with any language or HTTP client. Six discovery endpoints are available:
-
-| Endpoint | Format | Description |
-|:---|:---|:---|
-| `GET /api/v1/x402-tools/discovery` | x402 v2 | Full x402 protocol discovery with tool metadata |
-| `GET /api/v1/x402-tools/catalog` | JSON | Human-readable organized tool catalog |
-| `GET /api/v1/x402-tools/openai-tools` | OpenAI | OpenAI function calling format (210 tools) |
-| `GET /api/v1/x402-tools/anthropic-tools` | Anthropic | Anthropic tool use format (210 tools) |
-| `GET /api/v1/x402-tools/gemini-tools` | Gemini | Google Gemini function declarations (210 tools) |
-| `GET /api/v1/x402-tools/langchain-tools` | LangChain | LangChain tool schema format (210 tools) |
-
-```bash
-# List all tools in OpenAI function format
-curl https://mcp.rugmunch.io/api/v1/x402-tools/openai-tools
-
-# Anthropic format
-curl https://mcp.rugmunch.io/api/v1/x402-tools/anthropic-tools
-
-# Google Gemini format
-curl https://mcp.rugmunch.io/api/v1/x402-tools/gemini-tools
-
-# LangChain format
-curl https://mcp.rugmunch.io/api/v1/x402-tools/langchain-tools
-
-# x402 v2 protocol discovery
-curl https://mcp.rugmunch.io/api/v1/x402-tools/discovery
-
-# Call a specific tool
-curl -X POST https://mcp.rugmunch.io/api/v1/x402-tools/honeypot_check \
-  -H "Content-Type: application/json" \
-  -d '{"address": "0x...", "chain": "ethereum"}'
-```
-
-### MCP Streamable HTTP (Direct)
-
-Point any MCP client at our endpoint:
-
-```
-https://rugmunch.io/mcp
-```
-
-Discovery: `https://mcp.rugmunch.io/.well-known/mcp.json`
+### Payment Facilitators (8)
+Coinbase CDP, EIP-7702 Universal EVM, Cloudflare x402, PayAI, Asterpay (SEPA), TRON Self-Verify, Bitcoin Self-Verify, PrimeV
 
 ---
 
-## 💰 Payments & Pricing
+## Pricing & Access
 
-RMI uses the **x402 protocol** for seamless per-call crypto payments. No subscriptions. No commitments. Pay only for what you use.
+### Free Trials
+Every paid tool includes 1-5 free trial calls. No payment required until trials exhausted. Fingerprint-gated anti-abuse. Monthly reset.
 
-### Pricing Tiers
+### Individual Tools
+$0.01 - $0.40 per call. Pay only for what you use. Full automatic refund within 48 hours if tool returns no data.
 
-| Tier | Calls | Cost | Requirement |
-|:---|:---:|:---|:---|
-| 🆓 **Free Trial** | 1–5 per tool | $0.00 | Device fingerprint (auto) |
-| 🔗 **Wallet Connected** | +3 per tool | $0.00 | MetaMask / Phantom / TronLink |
-| 💳 **Paid** | Unlimited | $0.01–$0.40/call | USDC · USDT · BTC · EUR/SEPA |
+### Scan Packs (50-53% off)
+| Pack | Tools | Price |
+|------|-------|-------|
+| Token Hunter Pack | Fresh pairs, snipers, security, deployer, clone detection | $0.09 |
+| Whale Watcher Suite | Whale scan, accumulation, smart money, syndicates, PnL | $0.14 |
+| Wallet Forensics | Funding trace, insider network, wash trading, wallet graph | $0.17 |
+| Market Pulse | Prices, liquidity, arbitrage, sentiment, listings | $0.12 |
 
-### 8 Payment Facilitators
+### Membership Tiers (60-90% discount)
+| Tier | Price/mo | Daily Calls | Best For |
+|------|----------|-------------|----------|
+| Scout | $4.99 | 50 | Casual traders, hobby agents |
+| Hunter | $14.99 | 200 | Active traders, alpha groups |
+| Whale | $49.99 | 1,000 | Professional funds, market makers |
+| Institution | $199.99 | 5,000 | Enterprises, high-frequency agents |
 
-| # | Facilitator | Supported Chains | Method |
-|:---:|:---|:---|:---|
-| 1 | 🪙 **Coinbase CDP** | Base, Ethereum, Polygon, Arbitrum, Optimism | USDC via Coinbase Developer Platform |
-| 2 | 🤖 **PayAI** | Multi-chain | AI-native payment agent |
-| 3 | ☁️ **Cloudflare x402** | Base | USDC via Cloudflare Workers x402 |
-| 4 | ⚡ **EIP-7702** | Ethereum, Base, Arbitrum, Optimism, Polygon, BSC | Batch USDC approval + transfer |
-| 5 | 🔶 **TRON Self-Verify** | TRON | USDT self-verified payment |
-| 6 | 🟠 **Bitcoin Self-Verify** | Bitcoin | BTC self-verified payment |
-| 7 | 🌐 **AsterPay** | SEPA (EUR) | Bank transfer with SEPA mandate |
-| 8 | 🦀 **x402-rs** | Base, Solana | Rust-based x402 facilitator |
+### Streaming Feeds
+Real-time data via WebSocket + webhook delivery:
+- New Token Firehose ($0.50/hr) — Every new token across all chains
+- Whale Alert Stream ($0.75/hr) — Large transfers, positions, accumulation
+- Multi-Chain Price Feed ($0.30/hr) — OHLCV, volume, arbitrage
+- Security Alert Feed ($0.60/hr) — Rug pulls, exploits, suspicious activity
 
-### Accepted Currencies
+### Deep Research Reports
+- Token Deep Dive ($0.75) — Full contract audit + deployer + holders + sentiment
+- Wallet Intelligence Profile ($0.50) — PnL, style, associations, risk
+- Chain Health Report ($0.25) — Gas, congestion, MEV, TVL, governance
+- Cross-Chain Fund Trace ($1.50) — Follow money through bridges and mixers
 
-| Currency | Chains | Stable? |
-|:---|:---|:---:|
-| 💵 USDC | Solana · Base · Ethereum · BSC · Arbitrum · Optimism · Polygon | ✅ |
-| 💵 USDT | TRON · BSC | ✅ |
-| ₿ BTC | Bitcoin | ❌ |
-| 💶 EUR | SEPA | ✅ |
+### Batch Processing (75-90% off)
+- Batch Token Scanner — 100 tokens, $0.05 per 10
+- Batch Wallet Analysis — 50 wallets, $0.03 per 10
+- Batch Pre-Buy Screen — 200 tokens, $0.02 per 50
 
-### Refund Policy
-
-| Condition | Policy |
-|:---|:---|
-| Tool returns no data | **Full refund** — automatic |
-| Changed your mind | Request within **48 hours** for manual review |
-
----
-
-## 🔗 Wallet Connect Instructions
-
-Connecting a wallet unlocks **bonus free calls** (+3 per tool) and is required for paid usage.
-
-### MetaMask (EVM chains)
-
-1. Open the RMI dashboard at [rugmunch.io](https://rugmunch.io)
-2. Click **"Connect Wallet"**
-3. Select **MetaMask**
-4. Sign the verification message (no gas, no transaction)
-5. Your device is now authenticated for bonus calls + paid usage
-
-### Phantom (Solana)
-
-1. Open the RMI dashboard at [rugmunch.io](https://rugmunch.io)
-2. Click **"Connect Wallet"**
-3. Select **Phantom**
-4. Sign the verification message
-5. Solana USDC payments are now enabled
-
-### TronLink (TRON)
-
-1. Open the RMI dashboard at [rugmunch.io](https://rugmunch.io)
-2. Click **"Connect Wallet"**
-3. Select **TronLink**
-4. Sign the verification message
-5. TRON USDT Self-Verify payments are now enabled
-
-> 🔑 **No API keys are ever required.** Wallet signatures authenticate your device — that's it.
+### AI Data Feeds
+- Market Context Feed ($9.99/mo) — LLM-optimized market summaries
+- Alpha Signal Feed ($19.99/mo) — Scored trading signals
+- Entity Relationship Graph ($14.99/mo) — Pre-computed wallet clusters
 
 ---
 
-## 🏗️ Architecture
+## Agent Skills (18 Workflows)
 
+Every agent gets 18 guided workflows teaching best practices:
+
+**Security & Vetting:** Pre-Buy Token Vetting, Scam Investigation, Post-Rug Forensics, Compliance Screening
+
+**Trading & Execution:** Launch Day Playbook, MEV/Sandwich Avoidance, Market Making Intelligence, Portfolio Defense
+
+**Alpha Discovery:** Alpha Discovery Pipeline, Whale Movement Tracking, CEX Listing Prediction, Insider Trading Detection
+
+**DeFi & Yield:** Yield Farming Optimizer, Cross-Chain Bridge Monitor, DAO Governance Intelligence
+
+**NFTs & Influencers:** NFT Mint Sniper, KOL Performance Tracker, Airdrop Hunting
+
+Access at `GET /mcp/skills` — includes anti-abuse rules and 4 ready-to-use agent prompts.
+
+---
+
+## Technical Architecture
+
+### Caching Shield
+Every data call passes through three layers:
+1. **L1 Memory Cache** — Sub-millisecond TTL lookup (8s-1hr depending on data type)
+2. **Rate Limiter** — Token bucket per provider (prevents burning free tier quotas)
+3. **Provider Chain** — Ordered fallback (3-4 providers per data type)
+
+### Provider Fallback Chains
+| Data Type | Primary | Fallback 1 | Fallback 2 | Fallback 3 |
+|-----------|---------|------------|------------|------------|
+| Token Price | Jupiter | Solana Tracker | DexScreener | Binance |
+| Token Metadata | Helius DAS | Solana Tracker | Jupiter | DexScreener |
+| Wallet Balance | Helius | QuickNode | Alchemy | PublicNode |
+| Risk Scan | GoPlus | RugCheck | Honeypot | Local Labels |
+| EVM Funding | Blockscout | Etherscan | Public RPC | Boar MCP |
+
+### Infrastructure
+- **Server:** Bare metal VPS, Docker Compose (30 containers)
+- **Secrets:** GPG-encrypted vault (76 secrets), age-encrypted runtime injection
+- **CI/CD:** GitHub Actions auto-deploy on push to main
+- **Edge:** Cloudflare Workers for x402 payment gateway
+- **Observability:** Langfuse cloud with smart sampling (20% normal, 100% errors)
+
+### Local MCP Servers
+Two self-hosted MCP servers run on our infrastructure:
+- **Solana SVM MCP** (Rust, 32MB binary) — 60 RPC tools, WebSocket subscriptions, built-in x402
+- **EVM MCP** (TypeScript, bun runtime) — 25 tools across 86 networks, ENS, contracts, gas
+
+---
+
+## API Reference
+
+### MCP Protocol (Streamable HTTP)
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        YOUR AI AGENT                                │
-│         (Claude Desktop · Cursor · Windsurf · ChatGPT · HTTP)      │
-└───────────────────────────────┬─────────────────────────────────────┘
-                                │
-                                │  MCP Protocol / Streamable HTTP
-                                ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                    🛡️ RMI MCP SERVER                                │
-│                  (Thin wrapper · this package)                      │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │  • Protocol translation (MCP ↔ HTTP)                         │   │
-│  │  • Tool registration (210 tools)                            │   │
-│  │  • Request routing & response formatting                     │   │
-│  └─────────────────────────────┬───────────────────────────────┘   │
-└────────────────────────────────┼────────────────────────────────────┘
-                                 │
-                    x402 / Streamable HTTP
-                                 │
-                                 ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                    ⚡ RMI BACKEND (FastAPI)                         │
-│                  13 Blockchain Connectors                           │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐             │
-│  │ 🔐 Sec   │ │ 🧠 Intel │ │ 📈 Market│ │ 🐦 Social│  ...×210   │
-│  │  20 tools │ │  18 tools│ │  15 tools│ │   6 tools│             │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────┘             │
-│  ┌──────────────────────────────────────────────────────────────┐  │
-│  │              💳 Payment Layer (x402 Protocol)                │  │
-│  │  Coinbase · PayAI · CF-x402 · EIP-7702 · TRON · BTC · AP   │  │
-│  └──────────────────────────────────────────────────────────────┘  │
-└───────────────────────────────┬─────────────────────────────────────┘
-                                │
-                 ┌──────────────┼──────────────┐
-                 ▼              ▼              ▼
-          ┌────────────┐ ┌────────────┐ ┌────────────┐
-          │  Solana    │ │  Ethereum  │ │  TRON      │
-          │  Base      │ │  BSC       │ │  Bitcoin   │
-          │  Arbitrum  │ │  Polygon   │ │  SEPA/EUR  │
-          │  Optimism  │ │  Avalanche │ │            │
-          │  Fantom    │ │  Gnosis    │ │            │
-          └────────────┘ └────────────┘ └────────────┘
-                        13 BLOCKCHAINS
+POST /mcp                    JSON-RPC endpoint
+GET  /mcp/tools              Tool catalog with input schemas
+GET  /mcp/call/{tool_id}     Direct tool execution
+GET  /.well-known/mcp        Server discovery
+GET  /.well-known/x402       Payment protocol discovery
 ```
 
-**Stack**: Python 3.10+ · FastAPI · Docker · Cloudflare Tunnels · x402 Protocol
+### Platform Endpoints
+```
+GET  /mcp/health             Uptime + response time
+GET  /mcp/status             Cache stats, provider health
+GET  /mcp/manifest           Auto-updating platform manifest
+GET  /mcp/skills             18 agent workflow guides
+GET  /mcp/membership         Plans, pricing, scan packs
+GET  /mcp/sdk                Python/TS/curl quick-start
+GET  /mcp/changelog          Version history
+GET  /mcp/trials             Free trial status
+GET  /mcp/earnings           Revenue dashboard
+```
+
+### REST API
+```
+POST /api/v1/investigate/trace    Wallet funding source tracing
+POST /api/v1/investigate/scan     Full investigation
+GET  /api/v1/investigate/chains   Supported chains
+GET  /api/v1/cache/health         Caching shield status
+```
+
+### Dashboard Pages
+```
+/earnings          Revenue dashboard (auto-refreshing)
+/investigate       Wallet investigation tool
+```
 
 ---
 
-## 📡 Links & Resources
+## SDKs & Integration
 
-| Resource | URL |
-|:---|:---|
-| 🌐 Website | [rugmunch.io](https://rugmunch.io) |
-| 📖 MCP Docs | [rugmunch.io/docs/mcp](https://rugmunch.io/docs/mcp) |
-| 🔗 MCP Endpoint | [rugmunch.io/mcp](https://rugmunch.io/mcp) |
-| 🔍 MCP Discovery | [rugmunch.io/.well-known/mcp.json](https://mcp.rugmunch.io/.well-known/mcp.json) |
-| 💳 x402 Discovery | [rugmunch.io/.well-known/x402](https://mcp.rugmunch.io/.well-known/x402) |
-| 📦 GitHub | [github.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp](https://github.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp) |
-| 🛠️ Smithery | [smithery.ai/server/@cryptorugmuncher/rug-munch-intelligence](https://smithery.ai/server/@cryptorugmuncher/rug-munch-intelligence) |
-| 🪞 Glama | [glama.ai/mcp/servers/@cryptorugmuncher/rug-munch-intelligence](https://glama.ai/mcp/servers/@cryptorugmuncher/rug-munch-intelligence) |
-| 🐦 Twitter/X | [x.com/cryptorugmunch](https://x.com/cryptorugmunch) |
-| 💬 Telegram | [t.me/cryptorugmuncher](https://t.me/cryptorugmuncher) |
-| 🖼️ Logo | [rugmunch.io/logo.png](https://rugmunch.io/logo.png) |
+**Python:** `pip install rmi-agent-sdk`
+```python
+from rmi_agent import RMIAgent
+agent = RMIAgent()  # auto-discovers via /.well-known/mcp
+result = agent.call("rug_pull_predictor", {"token": "So111..."})
+```
 
----
-
-## 🔑 Keywords
-
-`mcp-server` `crypto-security` `scam-detection` `rug-pull` `blockchain-forensics` `wallet-analysis` `smart-money` `whale-tracking` `defi-security` `token-analysis` `sentiment-analysis` `x402` `model-context-protocol` `ai-agents` `claude-tools` `cursor-tools` `windsurf-tools` `web3-security` `solana` `ethereum` `base` `arbitrum` `optimism` `polygon` `bsc` `avalanche` `fantom` `gnosis` `tron` `bitcoin` `sepa` `usdc-payments` `honeypot-detection` `wash-trading` `mev-protection` `portfolio-tracking` `kol-tracking` `token-launch` `nft-analysis` `coinbase-cdp` `payai` `cloudflare-x402` `eip-7702` `asterpay` `fastapi` `mcp-streamable-http`
+**TypeScript:** `npm install @rugmunch/agent-sdk`
+```typescript
+import { RMIAgent } from "@rugmunch/agent-sdk";
+const agent = new RMIAgent();
+const result = await agent.call("rug_pull_predictor", { token: "So111..." });
+```
 
 ---
 
-<p align="center">
-  <sub>© 2026 Rug Munch Media LLC — Proprietary. All Rights Reserved. Wyoming DAO LLC transition pending.</sub><br/>
-  <sub>Follow the build. 🛡️</sub>
-</p>
+## Directory Listings
+
+- **Smithery:** `https://smithery.ai/server/@cryptorugmuncher/rug-munch-intelligence`
+- **Glama:** `https://glama.ai/mcp/servers/@cryptorugmuncher/rug-munch-intelligence`
+- **mcp.so:** `https://mcp.so/server/rug-munch-intelligence`
+- **GitHub:** `https://github.com/Rug-Munch-Media-LLC/rug-munch-intelligence-mcp`
+- **HuggingFace:** `https://huggingface.co/cryptorugmunch/rug-munch-intelligence`
+
+---
+
+## Version History
+
+### v3.3.0 (2026-06-01)
+- 18 agent skills with workflow guides and anti-abuse rules
+- 4 membership tiers with daily call limits (60-90% discount)
+- 4 scan packs at 50-53% off individual tools
+- 4 real-time streaming feeds (WebSocket + webhook)
+- 4 deep research report products
+- 3 batch scanning products (75-90% off)
+- 3 AI-optimized data feeds for LLM consumption
+- 85 local MCP tools (Solana RPC + EVM 86 networks)
+- 50 free Boar blockchain tools (ETH, ENS, contracts)
+- Multi-provider caching shield on every data call
+- Platform manifest — single source of truth, auto-syncing
+- Earnings dashboard with wallet tracking
+- Quality endpoints: health, status, SDK, changelog, trials
+
+### v3.2.0 (2026-05-15)
+- POST /mcp JSON-RPC handler
+- inputSchema on every tool
+- Dynamic facilitator count
+- CORS headers for browser clients
+
+### v3.1.0 (2026-04-01)
+- /.well-known/mcp discovery
+- llms.txt for AI agent discovery
+- x402 payment protocol support
+- 8 payment facilitators across 13 chains
+
+---
+
+**Contact:** mcp@rugmunch.io | **GitHub:** github.com/Rug-Munch-Media-LLC
