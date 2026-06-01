@@ -8,6 +8,7 @@ import { Brain } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import RugMunchIntelligence from './RugMunchIntelligence';
 import LiveStats from './hero/LiveStats';
+import LiveStatusBar from './LiveStatusBar';
 import ScrollReveal from './hero/ScrollReveal';
 import Header from './landing/Header';
 import HeroSection from './landing/HeroSection';
@@ -60,6 +61,7 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white font-sans">
+      <LiveStatusBar />
       <Header onNavigate={navigateTo} onScrollTo={scrollToSection} onAirdropClick={() => setShowAirdropModal(true)} />
       <HeroSection onNavigate={navigateTo} onAirdropClick={() => setShowAirdropModal(true)} />
 

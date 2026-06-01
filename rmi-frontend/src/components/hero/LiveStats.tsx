@@ -1,101 +1,39 @@
 /**
- * Live Stats Counter
- * ==================
- * Animated counting numbers that tick up on viewport entry.
+ * LiveStats — Real-time animated counters on the landing page
+ * Data from /api/v1/stats, refreshes every 15s
  */
-import { useEffect, useState, useRef } from 'react';
-
-interface Stat {
-  label: string;
-  value: number;
-  suffix?: string;
-  prefix?: string;
-}
-
-const STATS: Stat[] = [
-  { label: 'Scams Detected', value: 2847, suffix: '+' },
-  { label: 'Value Saved', value: 2.4, suffix: 'M+', prefix: '$' },
-  { label: 'Active Agents', value: 8 },
-  { label: 'Community Members', value: 12450, suffix: '+' },
-];
-
-function AnimatedCounter({ stat, inView }: { stat: Stat; inView: boolean }) {
-  const [count, setCount] = useState(0);
-  const countRef = useRef(0);
-  const rafRef = useRef<number>(0);
-
-  useEffect(() => {
-    if (!inView) return;
-
-    const duration = 2000;
-    const startTime = performance.now();
-    const target = stat.value;
-
-    const animate = (now: number) => {
-      const elapsed = now - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      // Ease out cubic
-      const eased = 1 - Math.pow(1 - progress, 3);
-      countRef.current = eased * target;
-      setCount(countRef.current);
-
-      if (progress < 1) {
-        rafRef.current = requestAnimationFrame(animate);
-      }
-    };
-
-    rafRef.current = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [inView, stat.value]);
-
-  const displayValue = stat.value < 10 ? count.toFixed(1) : Math.floor(count).toLocaleString();
-
-  return (
-    <div className="text-center">
-      <div className="text-3xl sm:text-4xl font-bold text-white">
-        {stat.prefix || ''}
-        {displayValue}
-        {stat.suffix || ''}
-      </div>
-      <div className="text-sm text-gray-500 mt-1">{stat.label}</div>
-    </div>
-  );
-}
+import { Shield, Activity, Users, Radio } from 'lucide-react';
+import CountUp from '../CountUp';
+import { useLiveStats } from '../../hooks/useLiveStats';
 
 export default function LiveStats() {
-  const [inView, setInView] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const stats = useLiveStats(15000);
 
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setInView(true);
-        }
-      },
-      { threshold: 0.3 }
-    );
-
-    if (ref.current) {
-      observer.observe(ref.current);
-    }
-
-    return () => observer.disconnect();
-  }, []);
+  const items = [
+    { label: 'Scams Detected', value: stats.scams_detected, icon: Shield, color: 'text-red-400' },
+    { label: 'Scans Today', value: stats.scans_today, icon: Activity, color: 'text-purple-400' },
+    { label: 'Active Alerts', value: stats.alerts_active, icon: Radio, color: 'text-yellow-400' },
+    { label: 'Active Users', value: stats.active_users, icon: Users, color: 'text-emerald-400' },
+  ];
 
   return (
-    <div ref={ref} className="grid grid-cols-2 md:grid-cols-4 gap-6">
-      {STATS.map((stat, i) => (
-        <div
-          key={stat.label}
-          className={`bg-[#12121a]/80 backdrop-blur border border-purple-500/10 rounded-xl p-5 transition-all duration-700 ${
-            inView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
-          }`}
-          style={{ transitionDelay: `${i * 150}ms` }}
-        >
-          <AnimatedCounter stat={stat} inView={inView} />
-        </div>
-      ))}
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {items.map((item) => {
+        const Icon = item.icon;
+        return (
+          <div key={item.label} className="glass-card rounded-xl p-4 text-center transition-all duration-300 hover:scale-[1.02]">
+            <Icon className={`w-5 h-5 mx-auto mb-2 ${item.color}`} />
+            <div className={`text-2xl sm:text-3xl font-bold tabular-nums ${item.color}`}>
+              {stats.loading && item.value === 0 ? (
+                <span className="text-slate-700 text-lg">---</span>
+              ) : (
+                <CountUp value={item.value} duration={1500} />
+              )}
+            </div>
+            <div className="text-xs text-slate-500 mt-1">{item.label}</div>
+          </div>
+        );
+      })}
     </div>
   );
 }

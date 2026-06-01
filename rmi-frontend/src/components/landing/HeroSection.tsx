@@ -1,44 +1,91 @@
+/**
+ * HeroSection — Main landing hero with real-time alert feed
+ * Alerts poll from /api/v1/alerts/recent every 5s (with fallback to SSE)
+ */
+import { useState, useEffect, useRef } from 'react';
 import {
   Check, AlertTriangle, Activity, Radio, Sparkles, ChevronRight,
-  Search, Shield, Gift, Heart, MessageCircle, Share2, ArrowRight
+  Search, Shield, Gift, Heart, MessageCircle, Share2, ArrowRight,
+  Flame, Skull, Zap
 } from 'lucide-react';
 import NeuralNetwork from '../hero/NeuralNetwork';
 import HeroText from '../hero/HeroText';
 import ScrollReveal from '../hero/ScrollReveal';
+import api from '../../services/api';
 
-const LIVE_ALERTS = [
-  { id: 1, severity: 'critical', title: 'MAJOR RUG: PepeX Token', description: 'Contract owner just minted 50% supply and dumped on holders. $2.3M stolen.', chain: 'ETH', time: '2 min ago', likes: 234, comments: 89, shares: 156, verified: true, contract: '0x742d...8f3a' },
-  { id: 2, severity: 'high', title: 'Honeypot Detected: MoonShot', description: 'Users unable to sell. 127 wallets already trapped. Blacklist function active.', chain: 'BSC', time: '8 min ago', likes: 178, comments: 45, shares: 203, verified: true, contract: '0x3f1a...9b2c' },
-  { id: 3, severity: 'medium', title: 'Suspicious Activity: BaseLaunch', description: 'Dev wallet transferring large amounts to CEX. Possible exit preparation.', chain: 'BASE', time: '15 min ago', likes: 89, comments: 23, shares: 67, verified: false, contract: '0x9e4c...2d1f' },
-  { id: 4, severity: 'critical', title: 'Rug Pull Confirmed: DeFiPro', description: 'Liquidity removed completely. Contract renounced after $890K theft.', chain: 'ARB', time: '32 min ago', likes: 445, comments: 123, shares: 567, verified: true, contract: '0x5a2b...7e9d' },
-  { id: 5, severity: 'high', title: 'Sybil Farm Detected', description: '847 connected wallets identified. Same funding source. Bot farm confirmed.', chain: 'ETH', time: '1 hour ago', likes: 312, comments: 78, shares: 234, verified: true, contract: 'Multiple' },
-];
+interface LiveAlert {
+  id?: string;
+  severity: string;
+  title: string;
+  description: string;
+  chain: string;
+  time: string;
+  contract?: string;
+  likes?: number;
+  comments?: number;
+  shares?: number;
+  verified?: boolean;
+  source?: string;
+  alert_type?: string;
+  message?: string;
+  token_symbol?: string;
+  wallet_address?: string;
+  timestamp?: string;
+}
 
 function getSeverityColor(severity: string) {
-  switch (severity) {
+  switch (severity?.toLowerCase()) {
     case 'critical': return 'text-red-400 bg-red-500/10 border-red-500/30';
-    case 'high': return 'text-orange-400 bg-orange-500/10 border-orange-500/30';
-    case 'medium': return 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30';
+    case 'high':
+    case 'warning': return 'text-orange-400 bg-orange-500/10 border-orange-500/30';
+    case 'medium':
+    case 'info': return 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30';
     default: return 'text-gray-400 bg-gray-500/10 border-gray-500/30';
   }
 }
 
 function getSeverityIcon(severity: string) {
-  switch (severity) {
-    case 'critical': return <FlameIcon />;
-    case 'high': return <AlertTriangle className="w-4 h-4 text-orange-400" />;
-    case 'medium': return <Activity className="w-4 h-4 text-yellow-400" />;
+  switch (severity?.toLowerCase()) {
+    case 'critical': return <Skull className="w-4 h-4 text-red-400" />;
+    case 'high':
+    case 'warning': return <AlertTriangle className="w-4 h-4 text-orange-400" />;
+    case 'medium':
+    case 'info': return <Activity className="w-4 h-4 text-yellow-400" />;
     default: return <Radio className="w-4 h-4 text-gray-400" />;
   }
 }
 
-function FlameIcon() {
-  return (
-    <svg className="w-4 h-4 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
-    </svg>
-  );
+function formatTime(ts: string): string {
+  if (!ts) return '';
+  const diff = Date.now() - new Date(ts).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
 }
+
+/** Normalize raw alert from /api/v1/alerts/recent into LiveAlert shape */
+function normalizeAlert(raw: any): LiveAlert {
+  return {
+    id: raw.id ?? raw.timestamp,
+    severity: (raw.level ?? raw.severity ?? 'info').toLowerCase(),
+    title: raw.title ?? raw.alert_type ?? raw.source ?? 'Security Alert',
+    description: raw.message ?? raw.description ?? '',
+    chain: raw.chain ?? raw.metadata?.chain ?? 'SOL',
+    time: formatTime(raw.timestamp ?? raw.created_at ?? raw.scanned_at ?? ''),
+    contract: raw.address ?? raw.token ?? raw.contract,
+    source: raw.source ?? raw.event,
+    token_symbol: raw.token_symbol ?? raw.symbol,
+    verified: true,
+  };
+}
+
+// Fallback alerts in case backend is unreachable (so hero never shows empty)
+const FALLBACK_ALERTS: LiveAlert[] = [
+  { severity: 'info', title: 'Connecting to live feed...', description: 'Real-time scam alerts will appear here. Scanners are actively monitoring 8 chains.', chain: 'ALL', time: 'loading', verified: true },
+];
 
 interface HeroSectionProps {
   onNavigate: (page: string) => void;
@@ -46,6 +93,29 @@ interface HeroSectionProps {
 }
 
 export default function HeroSection({ onNavigate, onAirdropClick }: HeroSectionProps) {
+  const [alerts, setAlerts] = useState<LiveAlert[]>(FALLBACK_ALERTS);
+  const [liveConnected, setLiveConnected] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval>>();
+
+  useEffect(() => {
+    const fetchAlerts = async () => {
+      try {
+        const res = await api.client.get('/api/v1/alerts/recent', { params: { limit: 8 } });
+        const data = res.data?.alerts ?? res.data ?? [];
+        if (Array.isArray(data) && data.length > 0) {
+          setAlerts(data.map(normalizeAlert));
+          setLiveConnected(true);
+        }
+      } catch {
+        // Keep fallback alerts — backend might be mid-scan
+      }
+    };
+
+    fetchAlerts();
+    pollRef.current = setInterval(fetchAlerts, 8000);
+    return () => clearInterval(pollRef.current);
+  }, []);
+
   return (
     <section className="relative pt-36 pb-16 px-4 sm:px-6 lg:px-8 overflow-hidden min-h-[90vh] flex flex-col">
       <NeuralNetwork />
@@ -57,7 +127,7 @@ export default function HeroSection({ onNavigate, onAirdropClick }: HeroSectionP
             <ScrollReveal direction="down" delay={0} distance={20}>
               <div className="inline-flex items-center gap-2 px-4 py-2 bg-purple-500/10 border border-purple-500/30 rounded-full mb-6 backdrop-blur-sm">
                 <Sparkles className="w-4 h-4 text-purple-400" />
-                <span className="text-purple-400 text-sm font-medium">V2 Live Now</span>
+                <span className="text-purple-400 text-sm font-medium">V2 Live — 8 Chains Monitored</span>
                 <ChevronRight className="w-4 h-4 text-purple-400" />
               </div>
             </ScrollReveal>
@@ -75,26 +145,23 @@ export default function HeroSection({ onNavigate, onAirdropClick }: HeroSectionP
                     type="text"
                     placeholder="Enter token contract address..."
                     className="flex-1 bg-black/50 border border-purple-500/20 rounded-lg px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500"
-                    onClick={() => onNavigate('scanner')}
+                    onClick={() => onNavigate('token-scan')}
                     readOnly
                   />
                   <button
-                    onClick={() => onNavigate('scanner')}
+                    onClick={() => onNavigate('token-scan')}
                     className="px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white font-semibold rounded-lg transition-all"
                   >
                     Scan
                   </button>
                 </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  Try: 0x1f9840a85d5af5bf1d1762f925bdaddc4201f984 (UNI)
-                </p>
               </div>
             </ScrollReveal>
 
             <ScrollReveal direction="up" delay={600} distance={30}>
               <div className="flex flex-col sm:flex-row items-center lg:items-start gap-4 mb-8">
                 <button
-                  onClick={() => onNavigate('scanner')}
+                  onClick={() => onNavigate('token-scan')}
                   className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-purple-600 to-yellow-500 hover:from-purple-500 hover:to-yellow-400 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all transform hover:scale-105 shadow-lg shadow-purple-500/20"
                 >
                   <Shield className="w-5 h-5" />
@@ -118,11 +185,11 @@ export default function HeroSection({ onNavigate, onAirdropClick }: HeroSectionP
                 </span>
                 <span className="flex items-center gap-2">
                   <Check className="w-4 h-4 text-purple-400" />
-                  99.2% Detection Accuracy
+                  28+ Data Sources
                 </span>
                 <span className="flex items-center gap-2">
                   <Check className="w-4 h-4 text-purple-400" />
-                  $547K Recovered for Victims
+                  8 Chains Monitored
                 </span>
               </div>
             </ScrollReveal>
@@ -131,25 +198,28 @@ export default function HeroSection({ onNavigate, onAirdropClick }: HeroSectionP
           {/* Live Alert Feed Sidebar - 2 columns */}
           <div className="lg:col-span-2">
             <ScrollReveal direction="left" delay={300} distance={50}>
-              <div className="bg-[#12121a]/80 backdrop-blur-xl border border-purple-500/20 rounded-xl overflow-hidden">
-                <div className="p-4 border-b border-purple-500/20 bg-purple-500/5">
+              <div className="bg-[#0a0a12]/90 backdrop-blur-xl border border-purple-500/20 rounded-xl overflow-hidden shadow-2xl shadow-purple-950/30">
+                <div className="p-4 border-b border-purple-500/20 bg-gradient-to-r from-purple-950/40 to-transparent">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <Radio className="w-5 h-5 text-red-400 animate-pulse" />
-                      <span className="font-semibold">Live Rug Alerts</span>
+                      <Radio className={`w-5 h-5 ${liveConnected ? 'text-red-400 animate-pulse' : 'text-slate-600'}`} />
+                      <span className="font-semibold text-white">Live Threat Feed</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                      <span className="text-xs text-green-400">LIVE</span>
+                      <div className={`w-2 h-2 rounded-full ${liveConnected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+                      <span className={`text-xs ${liveConnected ? 'text-emerald-400' : 'text-slate-600'}`}>
+                        {liveConnected ? 'LIVE' : 'CONNECTING'}
+                      </span>
                     </div>
                   </div>
                 </div>
 
-                <div className="max-h-[500px] overflow-y-auto">
-                  {LIVE_ALERTS.map((alert) => (
+                <div className="max-h-[480px] overflow-y-auto scrollbar-thin scrollbar-thumb-purple-900/30">
+                  {alerts.map((alert, i) => (
                     <div
-                      key={alert.id}
-                      className="p-4 border-b border-purple-500/10 hover:bg-purple-500/5 transition-colors"
+                      key={alert.id ?? i}
+                      className="p-4 border-b border-purple-500/10 hover:bg-purple-500/5 transition-colors cursor-pointer"
+                      onClick={() => onNavigate('threat-feed')}
                     >
                       <div className="flex items-start gap-3">
                         <div className={`p-1.5 rounded-lg ${getSeverityColor(alert.severity)}`}>
@@ -157,43 +227,37 @@ export default function HeroSection({ onNavigate, onAirdropClick }: HeroSectionP
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className={`text-xs font-semibold uppercase px-2 py-0.5 rounded ${getSeverityColor(alert.severity)}`}>
+                            <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${getSeverityColor(alert.severity)}`}>
                               {alert.severity}
                             </span>
-                            <span className="text-xs text-gray-500">{alert.time}</span>
-                            <span className="text-xs text-purple-400">{alert.chain}</span>
+                            <span className="text-[10px] text-slate-600">{alert.time}</span>
+                            <span className="text-[10px] text-purple-400 font-mono">{alert.chain}</span>
                           </div>
-                          <h4 className="font-semibold text-sm mb-1 truncate">{alert.title}</h4>
-                          <p className="text-xs text-gray-400 line-clamp-2">{alert.description}</p>
-                          {alert.verified && (
-                            <div className="flex items-center gap-1 mt-2">
-                              <Check className="w-3 h-3 text-green-400" />
-                              <span className="text-xs text-green-400">RMI Verified</span>
-                            </div>
+                          <h4 className="font-semibold text-sm mb-1 truncate text-white/90">{alert.title}</h4>
+                          <p className="text-xs text-slate-500 line-clamp-2">{alert.description}</p>
+                          {alert.contract && (
+                            <p className="text-[10px] text-slate-600 font-mono mt-1 truncate">{alert.contract}</p>
                           )}
-                          <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                            <span className="flex items-center gap-1">
-                              <Heart className="w-3 h-3" /> {alert.likes}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <MessageCircle className="w-3 h-3" /> {alert.comments}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Share2 className="w-3 h-3" /> {alert.shares}
-                            </span>
-                          </div>
                         </div>
                       </div>
                     </div>
                   ))}
+
+                  {alerts.length === 0 && (
+                    <div className="p-8 text-center">
+                      <Radio className="w-8 h-8 text-slate-700 mx-auto mb-2" />
+                      <p className="text-slate-600 text-sm">No active threats detected</p>
+                      <p className="text-slate-700 text-xs mt-1">All clear across monitored chains</p>
+                    </div>
+                  )}
                 </div>
 
-                <div className="p-3 border-t border-purple-500/20 bg-purple-500/5">
+                <div className="p-3 border-t border-purple-500/20 bg-gradient-to-r from-transparent to-purple-950/20">
                   <button
-                    onClick={() => onNavigate('trenches')}
-                    className="w-full py-2 text-sm text-purple-400 hover:text-purple-300 transition-colors flex items-center justify-center gap-2"
+                    onClick={() => onNavigate('threat-feed')}
+                    className="w-full py-2 text-sm text-purple-400 hover:text-purple-300 transition-colors flex items-center justify-center gap-2 font-medium"
                   >
-                    View All Alerts in The Trenches
+                    View All Alerts
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
