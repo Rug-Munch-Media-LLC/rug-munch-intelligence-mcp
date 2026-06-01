@@ -7,6 +7,7 @@ on:
 
 jobs:
   deploy:
+    if: github.repository == 'Rug-Munch-Media-LLC/rugmuncher-backend'
     runs-on: ubuntu-latest
     steps:
       - name: Deploy to VPS via SSH
