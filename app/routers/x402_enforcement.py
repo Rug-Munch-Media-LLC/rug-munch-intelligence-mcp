@@ -221,6 +221,10 @@ try:
         "rug_probability": {"price_usd": 0.15, "price_atoms": "150000", "category": "premium", "trial_free": 1, "description": "Predictive rug pull probability 0-100 — honeypot + liquidity + deployer + social signals"},
         "history": {"price_usd": 0.08, "price_atoms": "80000", "category": "analysis", "trial_free": 2, "description": "Historical scanner time-series — risk/liquidity/volume/price trends over hours"},
         "narrative": {"price_usd": 0.05, "price_atoms": "50000", "category": "social", "trial_free": 3, "description": "Market narrative engine — what is the market saying about this token RIGHT NOW"},
+        # Institutional tools
+        "portfolio_risk": {"price_usd": 0.20, "price_atoms": "200000", "category": "premium", "trial_free": 1, "description": "Cross-chain portfolio risk dashboard — unified risk across multiple wallets and chains"},
+        "defi_position": {"price_usd": 0.15, "price_atoms": "150000", "category": "defi", "trial_free": 1, "description": "DeFi position analyzer — LP holdings, impermanent loss estimation, yield sustainability, protocol risk"},
+        "mev_detect": {"price_usd": 0.15, "price_atoms": "150000", "category": "security", "trial_free": 2, "description": "MEV/Sandwich attack detection — sandwich attacks, frontrunning, arbitrage extraction, MEV bot identification"},
     }
     TOOL_PRICES.update(_NEW_TOOL_PRICES)
 except Exception as e:
@@ -1272,6 +1276,10 @@ async def x402_enforcement_middleware(request: Request, call_next) -> Response:
         "/api/v1/x402-tools/bundles",
         "/api/v1/x402-tools/payment-methods",
         "/api/v1/x402-tools/human-execute",
+        "/api/v1/x402-tools/cache/stats",
+        "/api/v1/x402-tools/cache/clear",
+        "/api/v1/x402-tools/stream/alerts",
+        "/api/v1/x402-tools/webhook_list",
     }
     # Also exempt all /api/v1/x402/ admin endpoints
     if path.rstrip("/") in FREE_PATHS or path.startswith("/api/v1/x402/"):

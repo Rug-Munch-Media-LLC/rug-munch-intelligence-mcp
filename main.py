@@ -122,6 +122,7 @@ from app.routers.x402_dashboard import on_startup as x402_dashboard_startup
 from app.routers.x402_token_watch import router as x402_token_watch_router
 from app.routers.x402_premium_tools import router as x402_premium_router
 from app.routers.x402_advanced_tools import router as x402_advanced_router
+from app.routers.x402_institutional_tools import router as x402_institutional_router
 from app.auth import router as auth_router
 app.include_router(x402_middleware_router)
 app.include_router(x402_enforcement_router)
@@ -131,8 +132,9 @@ app.include_router(x402_forensic_router)
 app.include_router(x402_tools_router)
 app.include_router(x402_dashboard_router)
 app.include_router(x402_token_watch_router)
-app.include_router(x402_premium_router)
-app.include_router(x402_advanced_router)
+app.include_router(x402_premium_router, prefix="/api/v1/x402-tools")
+app.include_router(x402_advanced_router, prefix="/api/v1/x402-tools")
+app.include_router(x402_institutional_router, prefix="/api/v1/x402-tools")
 app.include_router(auth_router, prefix="/api/v1/auth")
 
 # ── Darkroom Admin UI (static) ─────────────────────────────────
@@ -325,7 +327,7 @@ app.include_router(degen_router)
 # Proxies /v1/hermes/* → hermes API on host. Uses host.docker.internal
 # added via docker-compose extra_hosts.
 HERMES_API_URL = "http://host.docker.internal:8642"
-HERMES_API_KEY = "hermes-local-8642"
+HERMES_API_KEY = os.getenv("HERMES_API_KEY", "")
 
 @app.api_route("/v1/hermes/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 @app.api_route("/v1/hermes", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])

@@ -17,7 +17,7 @@ import aiohttp
 
 logger = logging.getLogger("x402.premium")
 
-router = APIRouter(prefix="/api/v1/x402-tools", tags=["x402-premium-tools"])
+router = APIRouter()
 
 # ═══════════════════════════════════════════════════════════
 # Request Models

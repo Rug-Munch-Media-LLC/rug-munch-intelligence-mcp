@@ -19,7 +19,7 @@ import aiohttp
 
 logger = logging.getLogger("x402.advanced")
 
-router = APIRouter(prefix="/api/v1/x402-tools", tags=["x402-advanced-tools"])
+router = APIRouter()
 
 # ═══════════════════════════════════════════════════════════
 # LAYER 1: Response Caching
