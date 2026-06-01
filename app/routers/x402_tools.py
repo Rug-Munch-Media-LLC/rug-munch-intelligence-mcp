@@ -27,6 +27,11 @@ logger = logging.getLogger("x402_tools")
 
 router = APIRouter(prefix="/api/v1/x402-tools", tags=["x402-security-tools"])
 
+# Caching shield — all data calls route through cache → rate limit → provider chain
+from app.caching_shield.tool_data import td
+from app.caching_shield.service_mcp import get_service_mcp
+_svc_mcp = get_service_mcp()
+
 # ── Data Sources (multi-layer fallback) ─────────────────────────
 
 # Free public RPCs for blockchain queries

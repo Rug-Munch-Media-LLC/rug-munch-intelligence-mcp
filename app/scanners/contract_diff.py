@@ -390,12 +390,12 @@ class ContractDiffAnalyzer:
         """Fetch contract bytecode from RPC using consensus client."""
         chain_lower = chain.lower()
 
-        # Solana: program data via consensus RPC
+        # Solana: program data via cached consensus RPC
         if chain_lower == "solana":
             try:
-                from app.consensus_rpc import get_consensus_rpc
-                rpc = get_consensus_rpc()
-                result = await rpc.get_account_info(address)
+                from app.caching_shield.rpc_cache import get_rpc_cache
+                cache = get_rpc_cache()
+                result = await cache.get_account_info(address, chain="solana")
                 if result and result.value:
                     # Solana account data is base64-encoded in value.data[0]
                     account_data = result.value
@@ -416,12 +416,12 @@ class ContractDiffAnalyzer:
             return None
 
         try:
-            from app.consensus_rpc import get_consensus_rpc
-            rpc = get_consensus_rpc()
-            result = await rpc.evm_query_with_consensus(
-                chain_id=chain_id,
+            from app.caching_shield.rpc_cache import get_rpc_cache
+            cache = get_rpc_cache()
+            result = await cache.query_with_cache(
                 method="eth_getCode",
                 params=[address, "latest"],
+                chain=str(chain_id),
             )
             code_hex = result.value if result else None
             if code_hex and code_hex != "0x" and len(str(code_hex)) > 10:

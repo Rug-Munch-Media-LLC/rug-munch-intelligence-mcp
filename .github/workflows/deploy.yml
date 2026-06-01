@@ -18,6 +18,7 @@ jobs:
           script: |
             cd /root/backend
             git pull origin main
-            cd /root
-            docker compose -f docker-compose.yml up -d --build backend
-            docker exec rmi_backend curl -sf http://localhost:8000/health && echo "DEPLOY OK" || echo "HEALTH CHECK FAILED"
+            cd /srv/rugmuncher-backend
+            docker compose up -d backend
+            sleep 10
+            docker exec rmi-backend curl -sf http://localhost:8000/health && echo "DEPLOY OK" || echo "HEALTH CHECK FAILED"

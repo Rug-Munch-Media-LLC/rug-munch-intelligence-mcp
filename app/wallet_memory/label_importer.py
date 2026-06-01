@@ -308,6 +308,20 @@ async def _load_csv_labels(
         return 0
 
     src = source_name or os.path.basename(path)
+    
+    # Skip if source already has labels in ClickHouse (prevents re-import)
+    if storage._ch:
+        try:
+            existing = storage._ch.execute(
+                "SELECT count() FROM wallet_labels WHERE source = %(src)s",
+                {"src": src}
+            )
+            if existing and existing[0][0] > 100:
+                logger.info(f"Source '{src}' already has {existing[0][0]:,} labels in CH — skipping re-import")
+                return existing[0][0]
+        except Exception:
+            pass  # CH unavailable — import anyway for Redis
+    
     count = 0
     ch_rows = []
     redis_pipe_ops = []  # Collect for batch Redis ops

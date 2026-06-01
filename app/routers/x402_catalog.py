@@ -293,9 +293,12 @@ def discover_route_tools() -> List[Dict]:
 def get_catalog():
     """Build full tool catalog from TOOL_PRICES + gateway configs + external MCP servers.
     
-    TOOL_PRICES is the source of truth (201 tools). Gateway configs and route discovery
-    are used for enrichment (chains, icons, etc) but never replace TOOL_PRICES entries.
+    TOOL_PRICES is the source of truth. Gateway configs and route discovery
+    are used for enrichment (chains, icons, etc). Unified tool counts from
+    app.caching_shield.tool_registry.
     """
+    from app.caching_shield.tool_registry import TOOL_COUNTS
+    
     # Always rebuild (no stale caching)
     base_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
     
@@ -391,8 +394,32 @@ def get_catalog():
     external_tools = load_external_mcp_tools()
     for t in external_tools:
         tid = t.get("id", "")
-        if tid and tid not in all_tools:
+        if not tid:
+            continue
+        # Normalize pricing - external tools may have price_usd (snake) or priceUsd (camel)
+        price_usd = t.get("price_usd", t.get("priceUsd", 0.01))
+        price_atoms = t.get("price_atoms", t.get("priceAtomic", str(int(price_usd * 1_000_000))))
+        trial_free = t.get("trial_free", t.get("trialFree", 1))
+        
+        if tid in all_tools:
+            # Enrich existing entry with external pricing if missing
+            if not all_tools[tid].get("priceUsd"):
+                all_tools[tid].update({
+                    "price": f"${price_usd:.2f}",
+                    "priceUsd": price_usd,
+                    "priceAtomic": price_atoms,
+                    "trialFree": trial_free,
+                    "method": t.get("method", "POST"),
+                })
+        else:
+            # New tool from external MCP
             t["chains"] = [c.upper() for c in t.get("chains", [])]
+            t["price"] = f"${price_usd:.2f}"
+            t["priceUsd"] = price_usd
+            t["priceAtomic"] = price_atoms
+            t["trialFree"] = trial_free
+            t["method"] = t.get("method", "MCP")
+            t["source"] = t.get("source", "expanded-mcp")
             all_tools[tid] = t
             services.add(t.get("service", "unknown"))
             categories.add(t.get("category", "unknown"))

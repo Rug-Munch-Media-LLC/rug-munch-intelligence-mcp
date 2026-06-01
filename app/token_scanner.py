@@ -1634,18 +1634,19 @@ async def _verify_mint_consensus(token_address: str, chain: str) -> Optional[Dic
     if chain.lower() != "solana":
         return None  # EVM uses etherscan-family which is single-source for now
     try:
-        from app.consensus_rpc import get_consensus_rpc
-        rpc = get_consensus_rpc()
-        # Query mint authority from multiple RPCs
-        result = await asyncio.wait_for(rpc.solana_query_with_consensus(
+        from app.caching_shield.rpc_cache import get_rpc_cache
+        cache = get_rpc_cache()
+        # Query mint authority from multiple RPCs via cache-first path
+        result = await asyncio.wait_for(cache.query_with_cache(
             "getAccountInfo",
             [token_address, {"encoding": "jsonParsed"}],
+            chain="solana",
         ), timeout=8.0)
-        if not result or not result.is_reliable():
+        if not result or not result.is_reliable:
             return None
         
         # Parse mint authority from the parsed data
-        data = result.agreed_value
+        data = result.value
         if isinstance(data, dict):
             parsed = data.get("result", {}).get("value", {}).get("data", {}).get("parsed", {})
             mint_info = parsed.get("info", {})
@@ -1655,10 +1656,10 @@ async def _verify_mint_consensus(token_address: str, chain: str) -> Optional[Dic
             return {
                 "mint_authority": mint_authority,
                 "freeze_authority": freeze_authority,
-                "rpc_sources": result.source_count,
-                "agreeing_rpcs": result.agreeing_count,
-                "total_rpcs": result.total_count,
-                "is_reliable": result.is_reliable(),
+                "rpc_sources": result.total_sources,
+                "agreeing_rpcs": len(result.agreed_sources),
+                "total_rpcs": result.total_sources,
+                "is_reliable": result.is_reliable,
                 "has_mint_authority": mint_authority is not None,
                 "has_freeze_authority": freeze_authority is not None,
             }

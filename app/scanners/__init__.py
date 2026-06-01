@@ -40,11 +40,17 @@ from .pump_dump_detector import PumpDumpDetector, PumpDumpReport
 from .oracle_manipulation import OracleManipulationDetector, OracleManipulationReport
 from .governance_attack import GovernanceAttackDetector, GovernanceAttackReport
 from .proxy_detector import ProxyDetector, ProxyReport
+from .sleep_cycle_scanner import SleepCycleAnalyzer, SleepCycleReport
 from .static_analyzer import StaticAnalyzer, StaticAnalysisReport
 from .decompiler_analyzer import DecompilerAnalyzer, DecompilerReport
 from .address_labeler import AddressLabeler, AddressLabelReport
 from .fund_flow_visualizer import FundFlowVisualizer, FundFlowReport
 from .contract_diff import ContractDiffAnalyzer, ContractDiffReport
+from .guilt_association import GuiltAssociationAnalyzer, GuiltAssociationReport, run_guilt_association
+from .social_velocity import SocialVelocityAnalyzer, SocialVelocityReport
+from .bytecode_similarity import BytecodeSimilarityAnalyzer, BytecodeSimilarityReport, hash_bytecode
+from .block_zero_sniper import BlockZeroSniperAnalyzer, BlockZeroReport
+from .gas_trace import GasTraceAnalyzer, GasTraceReport, run_gas_trace_analysis
 from .rag_citations import query_rag_citations, build_citation_string, query_address_rag
 
 # Pipeline orchestrator
@@ -105,6 +111,9 @@ __all__ = [
     "GovernanceAttackReport",
     "ProxyDetector",
     "ProxyReport",
+    # Sleep Cycle
+    "SleepCycleAnalyzer",
+    "SleepCycleReport",
     # Tier 3 scanners
     "StaticAnalyzer",
     "StaticAnalysisReport",
@@ -141,4 +150,18 @@ __all__ = [
     "run_decompiler_analysis",
     "run_address_labels",
     "run_fund_flow",
+    "GuiltAssociationAnalyzer",
+    "GuiltAssociationReport",
+    "run_guilt_association",
+    # New: Social Velocity + Bytecode Similarity
+    "SocialVelocityAnalyzer",
+    "SocialVelocityReport",
+    "BytecodeSimilarityAnalyzer",
+    "BytecodeSimilarityReport",
+    "hash_bytecode",
+    "BlockZeroSniperAnalyzer",
+    "BlockZeroReport",
+    "GasTraceAnalyzer",
+    "GasTraceReport",
+    "run_gas_trace_analysis",
 ]

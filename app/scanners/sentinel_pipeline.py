@@ -1,7 +1,7 @@
 """
 SENTINEL — Unified Pipeline Orchestrator
 ==========================================
-Runs all 21 scanner modules in parallel with graceful degradation.
+Runs all 22 scanner modules in parallel with graceful degradation.
 If any module fails, the others still return results.
 
 Modules:
@@ -25,6 +25,7 @@ Modules:
   18. StaticAnalyzer            → Slither static analysis, Forta alerts, SmartCheck
   19. DecompilerAnalyzer        → Heimdall decompilation, whatsABI selector extraction, rug patterns
   20. AddressLabeler            → Multi-source address labeling, scam/exchange/MEV identification
+  21. GuiltAssociationAnalyzer  → Mixer/fixedfloat interaction detection, guilt score
 """
 
 import asyncio
@@ -57,6 +58,12 @@ from .decompiler_analyzer import DecompilerAnalyzer, DecompilerReport
 from .address_labeler import AddressLabeler, AddressLabelReport
 from .fund_flow_visualizer import FundFlowVisualizer, FundFlowReport
 from .contract_diff import ContractDiffAnalyzer, ContractDiffReport
+from .guilt_association import GuiltAssociationAnalyzer, GuiltAssociationReport, run_guilt_association
+from .sleep_cycle_scanner import SleepCycleAnalyzer, SleepCycleReport
+from .social_velocity import SocialVelocityAnalyzer, SocialVelocityReport
+from .bytecode_similarity import BytecodeSimilarityAnalyzer, BytecodeSimilarityReport, hash_bytecode
+from .block_zero_sniper import BlockZeroSniperAnalyzer, BlockZeroReport
+from .gas_trace import GasTraceAnalyzer, GasTraceReport, run_gas_trace_analysis
 
 # Wallet Memory Bank integration
 try:
@@ -159,6 +166,24 @@ class SentinelReport:
     fund_flow: Optional[Dict[str, Any]] = None
     contract_diff: Optional[Dict[str, Any]] = None
 
+    # Guilt by Association
+    guilt_association: Optional[Dict[str, Any]] = None
+
+    # Sleep Cycle Analysis
+    sleep_cycle: Optional[Dict[str, Any]] = None
+
+    # Social Velocity
+    social_velocity: Optional[Dict[str, Any]] = None
+
+    # Bytecode Similarity
+    bytecode_similarity: Optional[Dict[str, Any]] = None
+
+    # Block Zero Sniper
+    block_zero_sniper: Optional[Dict[str, Any]] = None
+
+    # Three Hop Gas Trace
+    gas_trace: Optional[Dict[str, Any]] = None
+
     # Module errors (module_name → error message)
     errors: Dict[str, str] = field(default_factory=dict)
 
@@ -209,6 +234,16 @@ _address_labeler: Optional[AddressLabeler] = None
 _fund_flow_visualizer: Optional[FundFlowVisualizer] = None
 _contract_diff: Optional[ContractDiffAnalyzer] = None
 
+# Guilt by Association
+_guilt_association: Optional[GuiltAssociationAnalyzer] = None
+
+# New — Sleep Cycle + Social Velocity + Bytecode + Block Zero + Gas Trace
+_sleep_cycle: Optional[SleepCycleAnalyzer] = None
+_social_velocity: Optional[SocialVelocityAnalyzer] = None
+_bytecode_similarity: Optional[BytecodeSimilarityAnalyzer] = None
+_block_zero_sniper: Optional[BlockZeroSniperAnalyzer] = None
+_gas_trace: Optional[GasTraceAnalyzer] = None
+
 
 def _ensure_modules(config: Optional[SentinelConfig] = None) -> None:
     """Initialize or reinitialize module singletons with the given config.
@@ -225,6 +260,9 @@ def _ensure_modules(config: Optional[SentinelConfig] = None) -> None:
     global _governance_attack, _proxy_detector
     global _static_analyzer, _decompiler_analyzer, _address_labeler
     global _fund_flow_visualizer, _contract_diff
+    global _guilt_association
+    global _sleep_cycle, _social_velocity, _bytecode_similarity
+    global _block_zero_sniper, _gas_trace
 
     cfg = config or _default_config
     dex_client = cfg.get_dexscreener_client()
@@ -286,6 +324,22 @@ def _ensure_modules(config: Optional[SentinelConfig] = None) -> None:
         _fund_flow_visualizer = FundFlowVisualizer()
     if _contract_diff is None:
         _contract_diff = ContractDiffAnalyzer()
+
+    # Guilt by Association
+    if _guilt_association is None:
+        _guilt_association = GuiltAssociationAnalyzer()
+
+    # New modules
+    if _sleep_cycle is None:
+        _sleep_cycle = SleepCycleAnalyzer()
+    if _social_velocity is None:
+        _social_velocity = SocialVelocityAnalyzer()
+    if _bytecode_similarity is None:
+        _bytecode_similarity = BytecodeSimilarityAnalyzer()
+    if _block_zero_sniper is None:
+        _block_zero_sniper = BlockZeroSniperAnalyzer()
+    if _gas_trace is None:
+        _gas_trace = GasTraceAnalyzer()
 
 
 # ─── Risk score extraction helpers ────────────────────────────────────
@@ -372,6 +426,51 @@ def _extract_risk_pumpfun(report: PumpFunReport) -> float:
     return 30.0
 
 
+def _extract_risk_guilt_association(report: GuiltAssociationReport) -> float:
+    """Guilt association risk — use guilt_score directly."""
+    if hasattr(report, "guilt_score"):
+        return float(report.guilt_score)
+    if hasattr(report, "risk_score"):
+        return float(report.risk_score)
+    return 0.0
+
+def _extract_risk_sleep_cycle(report) -> float:
+    """Sleep cycle risk — use sleep_score directly."""
+    if hasattr(report, "sleep_score"):
+        return float(report.sleep_score)
+    return 0.0
+
+def _extract_risk_social_velocity(report) -> float:
+    """Social velocity risk — use velocity_score directly."""
+    if hasattr(report, "velocity_score"):
+        return float(report.velocity_score)
+    return 0.0
+
+def _extract_risk_bytecode_similarity(report) -> float:
+    """Bytecode similarity risk — exact match = 100."""
+    if hasattr(report, "exact_match") and report.exact_match:
+        return 100.0
+    if hasattr(report, "similarity_score"):
+        return float(report.similarity_score)
+    return 0.0
+
+def _extract_risk_block_zero(report) -> float:
+    """Block zero sniper risk — farm confidence * 100."""
+    if hasattr(report, "farm_confidence"):
+        return float(report.farm_confidence) * 100
+    return 0.0
+
+def _extract_risk_gas_trace(report) -> float:
+    """Gas trace — dead end = 100, cex funded = 0."""
+    if hasattr(report, "risk_score"):
+        return float(report.risk_score)
+    if hasattr(report, "dead_end") and report.dead_end:
+        return 100.0
+    if hasattr(report, "cex_funded") and report.cex_funded:
+        return 10.0
+    return 30.0
+
+
 def _compute_composite(scores: Dict[str, float]) -> tuple:
     """Weighted composite risk score → (score, level).
 
@@ -387,6 +486,12 @@ def _compute_composite(scores: Dict[str, float]) -> tuple:
         "metadata_fingerprint": 0.04,
         "sentiment": 0.04,
         "pumpfun_analysis": 0.04,
+        "guilt_association": 0.06,
+        "sleep_cycle": 0.04,
+        "social_velocity": 0.03,
+        "bytecode_similarity": 0.08,
+        "block_zero_sniper": 0.08,
+        "gas_trace": 0.06,
     }
     total = 0.0
     weight_used = 0.0
@@ -513,6 +618,47 @@ async def run_sentinel_scan(
     coros["fund_flow"] = _fund_flow_visualizer.analyze(token_address, chain)
     coros["contract_diff"] = _contract_diff.analyze(token_address, chain)
 
+    # Guilt by Association (requires deployer address)
+    if dev_address:
+        async def _guilt():
+            return await _guilt_association.analyze(dev_address, chain)
+        coros["guilt_association"] = _guilt()
+    else:
+        report.errors["guilt_association"] = "skipped: no dev_address provided"
+        coros["guilt_association"] = None
+
+    # Sleep Cycle (requires deployer deployment timestamps)
+    if dev_address:
+        async def _sleep():
+            # This module needs deployment timestamps, pass empty for now
+            return await _sleep_cycle.analyze([])
+        coros["sleep_cycle"] = _sleep()
+    else:
+        coros["sleep_cycle"] = None
+
+    # Social Velocity (runs on social mention data, pass empty)
+    async def _social():
+        return await _social_velocity.analyze([])
+    coros["social_velocity"] = _social()
+
+    # Bytecode Similarity (needs on-chain bytecode)
+    async def _bytecode():
+        return await _bytecode_similarity.analyze(token_address, chain)
+    coros["bytecode_similarity"] = _bytecode()
+
+    # Block Zero Sniper
+    async def _blockzero():
+        return await _block_zero_sniper.analyze(token_address, chain)
+    coros["block_zero_sniper"] = _blockzero()
+
+    # Gas Trace (requires deployer address)
+    if dev_address:
+        async def _gas():
+            return await _gas_trace.analyze(dev_address, chain)
+        coros["gas_trace"] = _gas()
+    else:
+        coros["gas_trace"] = None
+
     # PumpFun is Solana-only
     if chain.lower() == "solana":
         coros["pumpfun_analysis"] = _pumpfun_analyzer.analyze(token_address)
@@ -560,6 +706,12 @@ async def run_sentinel_scan(
         "wallet_intel": lambda r: float(r.get('risk_score', 0)) if isinstance(r, dict) else 0.0,
         "fund_flow": lambda r: float(getattr(r, 'risk_score', 0)),
         "contract_diff": lambda r: float(getattr(r, 'risk_score', 0)),
+        "guilt_association": _extract_risk_guilt_association,
+        "sleep_cycle": _extract_risk_sleep_cycle,
+        "social_velocity": _extract_risk_social_velocity,
+        "bytecode_similarity": _extract_risk_bytecode_similarity,
+        "block_zero_sniper": _extract_risk_block_zero,
+        "gas_trace": _extract_risk_gas_trace,
     }
 
     # Module name → field name on SentinelReport
@@ -587,6 +739,12 @@ async def run_sentinel_scan(
         "wallet_intel": "wallet_intel",
         "fund_flow": "fund_flow",
         "contract_diff": "contract_diff",
+        "guilt_association": "guilt_association",
+        "sleep_cycle": "sleep_cycle",
+        "social_velocity": "social_velocity",
+        "bytecode_similarity": "bytecode_similarity",
+        "block_zero_sniper": "block_zero_sniper",
+        "gas_trace": "gas_trace",
     }
 
     for module_name, raw_result in results.items():

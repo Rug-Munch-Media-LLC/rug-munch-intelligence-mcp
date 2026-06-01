@@ -11,7 +11,7 @@ async def create_post(request: Request, data: dict):
         content=data.get("content", ""),
         title=data.get("title", ""),
         tags=data.get("tags", []),
-        tier=data.get("tier", "free"),
+        post_type=data.get("post_type", "micro"),
         status=data.get("status", "published"),
     )
 

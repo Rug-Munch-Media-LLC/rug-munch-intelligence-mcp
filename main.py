@@ -84,7 +84,7 @@ from app.routers import profile_router
 app.include_router(supabase_auth_router.router)
 app.include_router(supabase_oauth_router.router)
 app.include_router(profile_router.router)
-from app.routers import admin_control
+from app.routers import admin_control, admin_extensions
 from app.routers import alert_pipeline
 from app.routers import intelligence_panel
 from app.routers import security_intel
@@ -96,6 +96,7 @@ from app.routers import bulletin_board
 from app.routers import wallet_manager_v2
 from app.routers import analytics
 app.include_router(admin_control.router)
+app.include_router(admin_extensions.router)
 app.include_router(alert_pipeline.router)
 app.include_router(intelligence_panel.router)
 app.include_router(security_intel.router)
@@ -106,15 +107,32 @@ app.include_router(admin_backend.router)
 app.include_router(bulletin_board.router)
 app.include_router(wallet_manager_v2.router)
 from app.routers import analytics
+from app.routers import community_forensics
+app.include_router(community_forensics.router)
 app.include_router(analytics.router)
 from app.routers import email_router
 app.include_router(email_router.router)
+from app.caching_shield.router import router as cache_router
+from app.caching_shield.quality_endpoints import router as quality_router
+app.include_router(cache_router)
+app.include_router(quality_router)
+
+# Earnings Dashboard
+from fastapi.responses import HTMLResponse
+@app.get('/earnings', response_class=HTMLResponse)
+async def earnings_page():
+    with open('/app/static/earnings.html') as f:
+        return f.read()
+from app.caching_shield.investigate_router import router as investigate_router
+app.include_router(investigate_router)
 from app.all_connectors import router as connectors_router
 app.include_router(connectors_router)
 from app.routers.x402_middleware import router as x402_middleware_router
 from app.routers.x402_enforcement import router as x402_enforcement_router
 from app.routers.x402_enforcement import discovery_router as x402_discovery_router
 from app.routers.x402_catalog import router as x402_catalog_router
+from app.routers.human_catalog import router as human_catalog_router
+from app.routers.smart_calls import router as smart_calls_router
 from app.routers.x402_forensic_tools import router as x402_forensic_router
 from app.routers.x402_tools import router as x402_tools_router
 from app.routers.x402_dashboard import router as x402_dashboard_router
@@ -123,11 +141,15 @@ from app.routers.x402_token_watch import router as x402_token_watch_router
 from app.routers.x402_premium_tools import router as x402_premium_router
 from app.routers.x402_advanced_tools import router as x402_advanced_router
 from app.routers.x402_institutional_tools import router as x402_institutional_router
+from app.routers.x402_alpha_tools import router as x402_alpha_router
+from app.routers.label_lookup import router as label_lookup_router
 from app.auth import router as auth_router
 app.include_router(x402_middleware_router)
 app.include_router(x402_enforcement_router)
 app.include_router(x402_discovery_router)  # /.well-known/x402 at root (x402 spec)
 app.include_router(x402_catalog_router)
+app.include_router(human_catalog_router)  # /api/v1/catalog — human-facing tool discovery
+app.include_router(smart_calls_router)   # /api/v1/smart-calls — human marketplace mirror
 app.include_router(x402_forensic_router)
 app.include_router(x402_tools_router)
 app.include_router(x402_dashboard_router)
@@ -135,7 +157,16 @@ app.include_router(x402_token_watch_router)
 app.include_router(x402_premium_router, prefix="/api/v1/x402-tools")
 app.include_router(x402_advanced_router, prefix="/api/v1/x402-tools")
 app.include_router(x402_institutional_router, prefix="/api/v1/x402-tools")
+app.include_router(x402_alpha_router, prefix="/api/v1/x402-tools")
+app.include_router(label_lookup_router)
 app.include_router(auth_router, prefix="/api/v1/auth")
+
+# ── Liquidity Watchdog (expiry alerts) ─────────────────────────
+from app.routers import liquidity_watchdog
+app.include_router(liquidity_watchdog.router)
+
+from app.routers import community_badges
+app.include_router(community_badges.router)
 
 # ── Darkroom Admin UI (static) ─────────────────────────────────
 @app.get("/darkroom")
@@ -7120,48 +7151,21 @@ async def ws_stream_alerts(websocket: WebSocket):
 
 
 # Helper to broadcast scan results to WebSocket clients
+# Uses connection-pooled WsClientManager (caching shield) — no per-broadcast Redis connection
 async def ws_broadcast_scan(scan_data: dict):
-    """Publish scan result to Redis for WebSocket streaming."""
+    """Publish scan result to Redis for WebSocket streaming (pooled connection)."""
     try:
-        redis_host = os.getenv("REDIS_HOST", "rmi-redis")
-        redis_pass = os.getenv("REDIS_PASSWORD", "")
-        r = await aioredis.from_url(
-            f"redis://{redis_host}:{os.getenv('REDIS_PORT','6379')}",
-            password=redis_pass or None,
-        )
-        await r.publish("rmi:ws:scans", json.dumps({
-            "type": "scan",
-            **scan_data,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }))
-        await r.close()
+        from app.caching_shield.ws_broadcaster import get_ws_manager
+        await get_ws_manager().broadcast_scan(scan_data)
     except Exception:
         pass
 
 
 async def ws_broadcast_alert(alert_data: dict):
-    """Publish security alert to Redis for WebSocket streaming + persist in sorted set."""
+    """Publish security alert to Redis for WebSocket streaming + persist in sorted set (pooled connection)."""
     try:
-        redis_host = os.getenv("REDIS_HOST", "rmi-redis")
-        redis_pass = os.getenv("REDIS_PASSWORD", "")
-        r = await aioredis.from_url(
-            f"redis://{redis_host}:{os.getenv('REDIS_PORT','6379')}",
-            password=redis_pass or None,
-        )
-        payload = json.dumps({
-            "type": "alert",
-            **alert_data,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
-        # Publish for real-time SSE/WebSocket delivery
-        await r.publish("rmi:ws:alerts", payload)
-        # Persist to sorted set for /api/v1/alerts/recent endpoint
-        # Use timestamp as score so we can retrieve newest-first
-        score = time.time()
-        await r.zadd("rmi:alerts:recent", {payload: score})
-        # Keep only last 500 alerts to bound memory
-        await r.zremrangebyrank("rmi:alerts:recent", 0, -(501))
-        await r.close()
+        from app.caching_shield.ws_broadcaster import get_ws_manager
+        await get_ws_manager().broadcast_alert(alert_data)
     except Exception:
         pass
 

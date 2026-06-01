@@ -155,29 +155,58 @@ class ConsensusRpcClient:
         self._setup_solana_endpoints()
         self._disabled_until: Dict[str, float] = {}
 
-    def _helius_key(self) -> Optional[str]:
-        key = os.getenv("HELIUS_API_KEY", "")
-        if key and key != "your_helius_key_here":
-            return key
-        # Also try HELIUS_API_KEY_2, _3
-        for suffix in ("_2", "_3"):
+    def _helius_keys(self) -> List[str]:
+        """Return all configured Helius API keys (up to 3)."""
+        keys = []
+        for suffix in ("", "_2", "_3"):
             k = os.getenv(f"HELIUS_API_KEY{suffix}", "")
-            if k and k != "your_helius_key_here":
-                return k
-        return None
+            if k and k != "your_helius_key_here" and len(k) > 10:
+                keys.append(k)
+        return keys
 
     def _setup_solana_endpoints(self):
-        """Build Solana RPC endpoint roster with keys where available."""
-        helius_key = self._helius_key()
+        """Build Solana RPC endpoint roster with ALL keys where available.
+
+        Each Helius key becomes its own endpoint (helius, helius_2, helius_3)
+        so consensus voting can use them as independent providers with their
+        own rate limits.
+        """
+        helius_keys = self._helius_keys()
         quicknode_key = os.getenv("QUICKNODE_KEY", "")
         alchemy_key = os.getenv("ALCHEMY_SOLANA_KEY", "")
 
-        endpoints = [
-            # Keyed providers — only add if key exists
-            ("helius", SOLANA_RPC_ENDPOINTS["helius"].format(key=helius_key or ""), 1.2, bool(helius_key)),
-            ("quicknode", SOLANA_RPC_ENDPOINTS["quicknode"].format(key=quicknode_key or "missing"), 1.1, bool(quicknode_key and quicknode_key != "your_quicknode_key_here")),
-            ("alchemy", SOLANA_RPC_ENDPOINTS["alchemy"].format(key=alchemy_key or "missing"), 1.0, bool(alchemy_key)),
-            # Public/free endpoints — always available
+        endpoints = []
+
+        # Helius: one endpoint per key (each has its own 25 RPS free tier)
+        for i, key in enumerate(helius_keys):
+            suffix = f"_{i+1}" if i > 0 else ""
+            endpoints.append((
+                f"helius{suffix}",
+                SOLANA_RPC_ENDPOINTS["helius"].format(key=key),
+                1.2,
+                True,
+            ))
+
+        # QuickNode
+        if quicknode_key and quicknode_key != "your_quicknode_key_here":
+            endpoints.append((
+                "quicknode",
+                SOLANA_RPC_ENDPOINTS["quicknode"].format(key=quicknode_key),
+                1.1,
+                True,
+            ))
+
+        # Alchemy
+        if alchemy_key and len(alchemy_key) > 5:
+            endpoints.append((
+                "alchemy",
+                SOLANA_RPC_ENDPOINTS["alchemy"].format(key=alchemy_key),
+                1.0,
+                True,
+            ))
+
+        # Public/free endpoints — always available
+        endpoints += [
             ("drpc", SOLANA_RPC_ENDPOINTS["drpc"], 0.9, False),
             ("publicnode", SOLANA_RPC_ENDPOINTS["publicnode"], 0.8, False),
             ("anvil", SOLANA_RPC_ENDPOINTS["anvil"], 0.7, False),

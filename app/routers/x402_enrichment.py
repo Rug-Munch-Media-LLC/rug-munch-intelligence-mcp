@@ -42,7 +42,7 @@ ENRICHABLE_CATEGORIES = {
         "wallet_label_registry", "whale_network_map", "whale_profile",
         "whale_scan", "whale_accumulation", "sniper_detect", "syndicate_scan",
         "syndicate_track", "wallet_graph", "deployer_history",
-        "kol_performance", "insider_network",
+        "kol_performance", "insider_network", "airdrop_finder",
     ],
     "token": [
         "audit", "rugshield", "forensics", "comprehensive_audit",
@@ -54,13 +54,20 @@ ENRICHABLE_CATEGORIES = {
         "fair_launch_detect", "listing_predictor", "arbitrage_scan",
         "scam_database", "protocol_risk", "liquidity_depth",
         "liquidity_migration", "wash_trading", "bundler_detect",
-        "mev_alert", "mev_protection",
+        "mev_alert", "mev_protection", "liquidity_flow",
     ],
     "security": [
         "urlcheck", "sentiment", "social_signal", "anomaly",
         "profile_flip", "contract_info", "contract_clone_check",
         "slither_audit", "storage_reader", "tx_decoder",
         "reentrancy_scanner", "phantom_mint_detect",
+        "tw_profile", "tw_timeline", "tw_search",
+        "bridge_security", "nft_wash_detector", "risk_monitor",
+        "pulse", "fresh_pair", "sniper_alert",
+    ],
+    "market": [
+        "market_overview", "chain_health", "defi_yield_scanner",
+        "gas_forecast", "anomaly_detector", "launch_intel",
     ],
 }
 
@@ -129,10 +136,12 @@ def _ch():
     """Lazy ClickHouse connection."""
     from clickhouse_driver import Client
     import os
-    return Client(
+    ch = Client(
         host=os.getenv("CH_HOST", "rmi-clickhouse"),
         port=int(os.getenv("CH_PORT", "9000")),
-        settings={"max_execution_time": 5},
+        user=os.getenv("CH_USER", "default"),
+        password=os.getenv("CH_PASSWORD", "") or None,
+        settings={"max_execution_time": 3},
     )
 
 
@@ -454,6 +463,18 @@ def enrich_tool_response(
         _fire_enrichment_alert(tool_name, "sanctioned", sanctioned, r)
     if scam_flags:
         _fire_enrichment_alert(tool_name, "scam_pattern", [s["address"] for s in scam_flags], r)
+
+    # 8. Track addresses for RAG discovery pipeline
+    if addresses:
+        try:
+            for addr in addresses[:5]:
+                r.lpush("x402:recent:addresses", json.dumps({
+                    "address": addr, "tool": tool_name,
+                    "timestamp": datetime.utcnow().isoformat(),
+                }))
+            r.ltrim("x402:recent:addresses", 0, 999)
+        except Exception:
+            pass
 
     return raw_result
 

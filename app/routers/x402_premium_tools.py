@@ -481,6 +481,8 @@ async def _lookup_labels_async(address: str) -> List[Dict]:
             from clickhouse_driver import Client
             ch = Client(host=os.getenv("CH_HOST", "rmi-clickhouse"),
                        port=int(os.getenv("CH_PORT", "9000")),
+                       user=os.getenv("CH_USER", "default"),
+                       password=os.getenv("CH_PASSWORD", "") or None,
                        settings={"max_execution_time": 3})
             rows = ch.execute(
                 "SELECT address, label_name, label_category, label_subtype, source, is_sanctioned "

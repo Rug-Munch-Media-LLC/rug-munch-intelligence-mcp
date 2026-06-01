@@ -225,6 +225,11 @@ try:
         "portfolio_risk": {"price_usd": 0.20, "price_atoms": "200000", "category": "premium", "trial_free": 1, "description": "Cross-chain portfolio risk dashboard — unified risk across multiple wallets and chains"},
         "defi_position": {"price_usd": 0.15, "price_atoms": "150000", "category": "defi", "trial_free": 1, "description": "DeFi position analyzer — LP holdings, impermanent loss estimation, yield sustainability, protocol risk"},
         "mev_detect": {"price_usd": 0.15, "price_atoms": "150000", "category": "security", "trial_free": 2, "description": "MEV/Sandwich attack detection — sandwich attacks, frontrunning, arbitrage extraction, MEV bot identification"},
+        # Alpha tools
+        "composite_score": {"price_usd": 0.25, "price_atoms": "250000", "category": "premium", "trial_free": 1, "description": "RMI Composite Score — one number combining ALL signals for instant buy/sell/avoid decisions"},
+        "smart_money": {"price_usd": 0.20, "price_atoms": "200000", "category": "intelligence", "trial_free": 1, "description": "Smart Money P&L Tracker — real profitability-based wallet tracking, find the actual profitable traders"},
+        "clone_detect": {"price_usd": 0.10, "price_atoms": "100000", "category": "security", "trial_free": 2, "description": "Token Clone Detector — find tokens cloned from known rug pulls by name, symbol, and deployer patterns"},
+        "wash_trade_detect": {"price_usd": 0.15, "price_atoms": "150000", "category": "security", "trial_free": 2, "description": "Wash Trading & Insider Detection — artificial volume, coordinated buying, insider accumulation patterns"},
     }
     TOOL_PRICES.update(_NEW_TOOL_PRICES)
 except Exception as e:

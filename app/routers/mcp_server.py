@@ -767,3 +767,48 @@ async def mcp_call_tool(tool_id: str, request: Request):
     except Exception as e:
         logger.error(f"MCP tool failed: {tool_id}: {e}")
         raise HTTPException(status_code=502, detail=f"Tool execution failed: {str(e)[:200]}")
+# ═══════════════════════════════════════════════════════════════════════════
+# PLATFORM MANIFEST — Auto-updating source of truth
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.get("/mcp/manifest")
+async def platform_manifest():
+    """Complete platform manifest — auto-generated from live tool counts."""
+    from app.caching_shield.platform_manifest import get_platform_manifest
+    return get_platform_manifest()
+
+@router.get("/mcp/skills")
+async def agent_skills():
+    """Agent skills, workflows, anti-abuse rules, and starter prompts."""
+    from app.caching_shield.agent_skills import get_agent_skills
+    return get_agent_skills()
+
+@router.get("/mcp/membership")
+async def membership_plans():
+    """Membership tiers, scan packs, streams, research, batch processing."""
+    from app.caching_shield.membership_plans import get_membership_catalog
+    return get_membership_catalog()
+
+# ═══════════════════════════════════════════════════════════════════════════
+# EARNINGS DASHBOARD
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.get("/mcp/earnings")
+async def earnings_dashboard():
+    """Live earnings dashboard — wallet balances, revenue by source."""
+    from app.caching_shield.earnings_tracker import fetch_wallet_earnings, get_earnings_report
+    wallets = await fetch_wallet_earnings()
+    report = get_earnings_report()
+    return {**report, "wallet_balances": wallets}
+
+@router.get("/mcp/earnings/wallets")
+async def earnings_wallets():
+    """Current payment wallet balances."""
+    from app.caching_shield.earnings_tracker import fetch_wallet_earnings
+    return await fetch_wallet_earnings()
+
+@router.get("/mcp/earnings/sources")
+async def earnings_by_source():
+    """Revenue broken down by tool, chain, and facilitator."""
+    from app.caching_shield.earnings_tracker import get_revenue_by_source
+    return get_revenue_by_source()
