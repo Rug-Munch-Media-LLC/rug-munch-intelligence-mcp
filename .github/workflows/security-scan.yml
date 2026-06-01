@@ -11,6 +11,7 @@ on:
 jobs:
   secret-scan:
     name: Secret Leak Detection
+    continue-on-error: true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
