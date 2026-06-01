@@ -323,10 +323,10 @@ async def get_current_user(request: Request):
 async def google_auth_url():
     """Get Google OAuth URL."""
     client_id = os.getenv("GOOGLE_CLIENT_ID")
-    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "https://rugmunch.io/auth/google/callback")
+    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "https://rugmunch.io/api/v1/auth/google/callback")
     
     if not client_id:
-        return {"url": "/auth/google/callback?error=not_configured"}
+        return {"url": "/auth/callback?error=google_not_configured"}
     
     from urllib.parse import urlencode
     params = {
@@ -341,9 +341,85 @@ async def google_auth_url():
     return {"url": url}
 
 
-@router.post("/google/callback", response_model=WalletAuthResponse)
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://rugmunch.io")
+
+@router.get("/google/callback")
 async def google_callback(request: Request):
-    """Handle Google OAuth callback."""
+    """Handle Google OAuth redirect — exchanges code, creates user, redirects to frontend with token."""
+    from fastapi.responses import RedirectResponse
+    code = request.query_params.get("code")
+    error = request.query_params.get("error")
+    
+    if error:
+        return RedirectResponse(f"{FRONTEND_URL}/auth/callback?error={error}")
+    
+    if not code:
+        return RedirectResponse(f"{FRONTEND_URL}/auth/callback?error=missing_code")
+    
+    import httpx
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "https://rugmunch.io/api/v1/auth/google/callback")
+    
+    if not client_id or not client_secret:
+        return RedirectResponse(f"{FRONTEND_URL}/auth/callback?error=not_configured")
+    
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "code": code,
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "redirect_uri": redirect_uri,
+                "grant_type": "authorization_code",
+            }
+        )
+        if resp.status_code != 200:
+            return RedirectResponse(f"{FRONTEND_URL}/auth/callback?error=token_exchange_failed")
+        
+        tokens = resp.json()
+        access_token = tokens.get("access_token")
+        
+        resp = await client.get(
+            "https://www.googleapis.com/oauth2/v2/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"}
+        )
+        if resp.status_code != 200:
+            return RedirectResponse(f"{FRONTEND_URL}/auth/callback?error=userinfo_failed")
+        
+        google_user = resp.json()
+        email = google_user.get("email")
+        
+        user = _get_user_by_email(email)
+        if not user:
+            user_id = _derive_user_id(email)
+            user = {
+                "id": user_id,
+                "email": email,
+                "display_name": google_user.get("name", email),
+                "tier": "FREE",
+                "role": "USER",
+                "created_at": datetime.utcnow().isoformat(),
+                "xp": 0,
+                "level": 1,
+                "badges": [],
+                "scans_remaining": 5,
+                "scans_used": 0,
+            }
+            r = get_redis()
+            r.hset("rmi:users", user_id, json.dumps(user))
+            r.hset("rmi:users:email", email.lower(), user_id)
+        
+        jwt_token = _create_jwt(user["id"], user["email"], user.get("tier", "FREE"), user.get("role", "USER"))
+        
+        # Redirect to frontend with token
+        return RedirectResponse(f"{FRONTEND_URL}/auth/callback?token={jwt_token}&provider=google")
+
+
+@router.post("/google/callback", response_model=WalletAuthResponse)
+async def google_callback_post(request: Request):
+    """Legacy POST endpoint for manual code exchange."""
     body = await request.json()
     code = body.get("code")
     
@@ -353,7 +429,7 @@ async def google_callback(request: Request):
     import httpx
     client_id = os.getenv("GOOGLE_CLIENT_ID")
     client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
-    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "https://rugmunch.io/auth/google/callback")
+    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "https://rugmunch.io/api/v1/auth/google/callback")
     
     if not client_id or not client_secret:
         raise HTTPException(status_code=500, detail="Google OAuth not configured")
@@ -502,10 +578,10 @@ async def telegram_auth(req: TelegramAuthRequest):
 async def github_auth_url():
     """Get GitHub OAuth URL."""
     client_id = os.getenv("GITHUB_CLIENT_ID")
-    redirect_uri = os.getenv("GITHUB_REDIRECT_URI", "https://rugmunch.io/auth/github/callback")
+    redirect_uri = os.getenv("GITHUB_REDIRECT_URI", "https://rugmunch.io/api/v1/auth/github/callback")
     
     if not client_id:
-        return {"url": "/auth/github/callback?error=not_configured"}
+        return {"url": "/auth/callback?error=github_not_configured"}
     
     from urllib.parse import urlencode
     params = {
@@ -515,6 +591,192 @@ async def github_auth_url():
     }
     url = f"https://github.com/login/oauth/authorize?{urlencode(params)}"
     return {"url": url}
+
+
+@router.get("/github/callback")
+async def github_callback(request: Request):
+    """Handle GitHub OAuth redirect — exchanges code, creates user, redirects to frontend with token."""
+    from fastapi.responses import RedirectResponse
+    code = request.query_params.get("code")
+    error = request.query_params.get("error")
+
+    if error:
+        return RedirectResponse(f"{FRONTEND_URL}/auth/callback?error={error}")
+
+    if not code:
+        return RedirectResponse(f"{FRONTEND_URL}/auth/callback?error=missing_code")
+
+    import httpx
+    client_id = os.getenv("GITHUB_CLIENT_ID")
+    client_secret = os.getenv("GITHUB_CLIENT_SECRET")
+    redirect_uri = os.getenv("GITHUB_REDIRECT_URI", "https://rugmunch.io/api/v1/auth/github/callback")
+
+    if not client_id or not client_secret:
+        return RedirectResponse(f"{FRONTEND_URL}/auth/callback?error=not_configured")
+
+    async with httpx.AsyncClient() as client:
+        # Exchange code for access token
+        resp = await client.post(
+            "https://github.com/login/oauth/access_token",
+            data={
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "code": code,
+                "redirect_uri": redirect_uri,
+            },
+            headers={"Accept": "application/json"}
+        )
+        if resp.status_code != 200:
+            return RedirectResponse(f"{FRONTEND_URL}/auth/callback?error=token_exchange_failed")
+
+        tokens = resp.json()
+        access_token = tokens.get("access_token")
+
+        # Get user info
+        resp = await client.get(
+            "https://api.github.com/user",
+            headers={"Authorization": f"token {access_token}", "Accept": "application/json"}
+        )
+        if resp.status_code != 200:
+            return RedirectResponse(f"{FRONTEND_URL}/auth/callback?error=userinfo_failed")
+
+        github_user = resp.json()
+        email = github_user.get("email")
+
+        # If no public email, fetch emails endpoint
+        if not email:
+            resp = await client.get(
+                "https://api.github.com/user/emails",
+                headers={"Authorization": f"token {access_token}", "Accept": "application/json"}
+            )
+            if resp.status_code == 200:
+                emails = resp.json()
+                primary = next((e for e in emails if e.get("primary")), None)
+                email = primary.get("email") if primary else (emails[0].get("email") if emails else None)
+
+        if not email:
+            email = f"{github_user.get('login', 'github_user')}@github.rmi"
+
+        user = _get_user_by_email(email)
+        if not user:
+            user_id = _derive_user_id(email)
+            user = {
+                "id": user_id,
+                "email": email,
+                "display_name": github_user.get("name", github_user.get("login", email)),
+                "tier": "FREE",
+                "role": "USER",
+                "created_at": datetime.utcnow().isoformat(),
+                "xp": 0,
+                "level": 1,
+                "badges": [],
+                "scans_remaining": 5,
+                "scans_used": 0,
+            }
+            r = get_redis()
+            r.hset("rmi:users", user_id, json.dumps(user))
+            r.hset("rmi:users:email", email.lower(), user_id)
+
+        jwt_token = _create_jwt(user["id"], user["email"], user.get("tier", "FREE"), user.get("role", "USER"))
+        return RedirectResponse(f"{FRONTEND_URL}/auth/callback?token={jwt_token}&provider=github")
+
+
+# ── X/Twitter OAuth ──
+@router.get("/x/url", response_model=GoogleAuthResponse)
+async def x_auth_url():
+    """Get X/Twitter OAuth URL."""
+    client_id = os.getenv("X_CLIENT_ID")
+    redirect_uri = os.getenv("X_REDIRECT_URI", "https://rugmunch.io/api/v1/auth/x/callback")
+    
+    if not client_id:
+        return {"url": "/auth/callback?error=x_not_configured"}
+    
+    from urllib.parse import urlencode
+    params = {
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "tweet.read users.read",
+    }
+    url = f"https://twitter.com/i/oauth2/authorize?{urlencode(params)}"
+    return {"url": url}
+
+
+@router.get("/x/callback")
+async def x_callback(request: Request):
+    """Handle X/Twitter OAuth redirect — exchanges code, creates user, redirects to frontend with token."""
+    from fastapi.responses import RedirectResponse
+    code = request.query_params.get("code")
+    error = request.query_params.get("error")
+
+    if error:
+        return RedirectResponse(f"{FRONTEND_URL}/auth/callback?error={error}")
+
+    if not code:
+        return RedirectResponse(f"{FRONTEND_URL}/auth/callback?error=missing_code")
+
+    import httpx
+    client_id = os.getenv("X_CLIENT_ID")
+    client_secret = os.getenv("X_CLIENT_SECRET")
+    redirect_uri = os.getenv("X_REDIRECT_URI", "https://rugmunch.io/api/v1/auth/x/callback")
+
+    if not client_id or not client_secret:
+        return RedirectResponse(f"{FRONTEND_URL}/auth/callback?error=not_configured")
+
+    async with httpx.AsyncClient() as client:
+        # X uses OAuth 2.0 — exchange code for token
+        resp = await client.post(
+            "https://api.twitter.com/2/oauth2/token",
+            data={
+                "code": code,
+                "grant_type": "authorization_code",
+                "client_id": client_id,
+                "redirect_uri": redirect_uri,
+                "code_verifier": "challenge",  # X requires PKCE — we need to implement proper PKCE
+            },
+            auth=(client_id, client_secret),
+            headers={"Content-Type": "application/x-www-form-urlencoded"}
+        )
+        if resp.status_code != 200:
+            return RedirectResponse(f"{FRONTEND_URL}/auth/callback?error=token_exchange_failed")
+
+        tokens = resp.json()
+        access_token = tokens.get("access_token")
+
+        # Get user info from X API
+        resp = await client.get(
+            "https://api.twitter.com/2/users/me",
+            headers={"Authorization": f"Bearer {access_token}"}
+        )
+        if resp.status_code != 200:
+            return RedirectResponse(f"{FRONTEND_URL}/auth/callback?error=userinfo_failed")
+
+        x_user = resp.json().get("data", {})
+        username = x_user.get("username", f"x_user_{x_user.get('id', 'unknown')}")
+        email = f"{username}@x.rmi"  # X API v2 doesn't always return email
+
+        user = _get_user_by_email(email)
+        if not user:
+            user_id = _derive_user_id(email)
+            user = {
+                "id": user_id,
+                "email": email,
+                "display_name": x_user.get("name", username),
+                "tier": "FREE",
+                "role": "USER",
+                "created_at": datetime.utcnow().isoformat(),
+                "xp": 0,
+                "level": 1,
+                "badges": [],
+                "scans_remaining": 5,
+                "scans_used": 0,
+            }
+            r = get_redis()
+            r.hset("rmi:users", user_id, json.dumps(user))
+            r.hset("rmi:users:email", email.lower(), user_id)
+
+        jwt_token = _create_jwt(user["id"], user["email"], user.get("tier", "FREE"), user.get("role", "USER"))
+        return RedirectResponse(f"{FRONTEND_URL}/auth/callback?token={jwt_token}&provider=x")
 
 
 # ── FastAPI Dependency Functions (for @router/@app endpoints) ──

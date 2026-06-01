@@ -94,6 +94,7 @@ from app.routers import darkroom_multichain
 from app.routers import admin_backend
 from app.routers import bulletin_board
 from app.routers import wallet_manager_v2
+from app.routers import analytics
 app.include_router(admin_control.router)
 app.include_router(alert_pipeline.router)
 app.include_router(intelligence_panel.router)
@@ -104,6 +105,8 @@ app.include_router(darkroom_multichain.router)
 app.include_router(admin_backend.router)
 app.include_router(bulletin_board.router)
 app.include_router(wallet_manager_v2.router)
+from app.routers import analytics
+app.include_router(analytics.router)
 from app.routers import email_router
 app.include_router(email_router.router)
 from app.all_connectors import router as connectors_router
@@ -117,6 +120,7 @@ from app.routers.x402_tools import router as x402_tools_router
 from app.routers.x402_dashboard import router as x402_dashboard_router
 from app.routers.x402_dashboard import on_startup as x402_dashboard_startup
 from app.routers.x402_token_watch import router as x402_token_watch_router
+from app.auth import router as auth_router
 app.include_router(x402_middleware_router)
 app.include_router(x402_enforcement_router)
 app.include_router(x402_discovery_router)  # /.well-known/x402 at root (x402 spec)
@@ -125,6 +129,7 @@ app.include_router(x402_forensic_router)
 app.include_router(x402_tools_router)
 app.include_router(x402_dashboard_router)
 app.include_router(x402_token_watch_router)
+app.include_router(auth_router, prefix="/api/v1/auth")
 
 # ── Darkroom Admin UI (static) ─────────────────────────────────
 @app.get("/darkroom")
