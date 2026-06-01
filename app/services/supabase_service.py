@@ -227,18 +227,20 @@ async def get_syndicate_wallets(status: str = None, chain: str = None, limit: in
 async def get_watchlist(user_id: str) -> list:
     return await _get("watchlist", {"user_id": user_id}, order="created_at.desc")
 
-async def add_to_watchlist(user_id: str, wallet_address: str, chain: str = "ethereum", tags: list = None) -> dict:
+async def add_to_watchlist(user_id: str, address: str, chain: str = "ethereum", tags: list = None, item_type: str = "wallet") -> dict:
+    """Add an address to a user's watchlist. item_type: 'token' or 'wallet'."""
     return await _post("watchlist", {
         "user_id": user_id,
-        "wallet_address": wallet_address,
+        "address": address,
+        "type": item_type,
         "chain": chain,
         "tags": tags or [],
     })
 
-async def remove_from_watchlist(user_id: str, wallet_address: str, chain: str = "ethereum") -> bool:
+async def remove_from_watchlist(user_id: str, address: str, chain: str = "ethereum") -> bool:
     return await _delete("watchlist", {
         "user_id": user_id,
-        "wallet_address": wallet_address,
+        "address": address,
         "chain": chain,
     })
 

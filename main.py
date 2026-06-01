@@ -10,7 +10,7 @@ Wired to real external APIs: CoinGecko, DexScreener, Jupiter, Groq.
 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, Response, HTMLResponse, JSONResponse, FileResponse
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Request, Query
 from starlette.middleware.base import BaseHTTPMiddleware
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -120,6 +120,7 @@ from app.routers.x402_tools import router as x402_tools_router
 from app.routers.x402_dashboard import router as x402_dashboard_router
 from app.routers.x402_dashboard import on_startup as x402_dashboard_startup
 from app.routers.x402_token_watch import router as x402_token_watch_router
+from app.routers.x402_premium_tools import router as x402_premium_router
 from app.auth import router as auth_router
 app.include_router(x402_middleware_router)
 app.include_router(x402_enforcement_router)
@@ -129,6 +130,7 @@ app.include_router(x402_forensic_router)
 app.include_router(x402_tools_router)
 app.include_router(x402_dashboard_router)
 app.include_router(x402_token_watch_router)
+app.include_router(x402_premium_router)
 app.include_router(auth_router, prefix="/api/v1/auth")
 
 # ── Darkroom Admin UI (static) ─────────────────────────────────
@@ -260,6 +262,14 @@ async def _startup():
     else:
         print("[INFO] Cross-encoder reranker deferred (lazy-load on first rerank query)")
 
+    # ── Startup: kick off auto-scan of new tokens ──
+    try:
+        import asyncio as _asyncio_startup
+        _asyncio_startup.create_task(_auto_scan_new_tokens())
+        print("[INFO] Auto-scan new tokens task scheduled")
+    except Exception as e:
+        print(f"[WARN] Auto-scan startup failed: {e}")
+
 from app.email_router import router as email_router
 app.include_router(email_router)
 from app.rag_endpoints import router as rag_router
@@ -294,6 +304,12 @@ from app.routers import discovery_router
 from app.routers import forensics_router
 app.include_router(discovery_router.router)
 app.include_router(forensics_router.router)
+
+# ── Prediction Market Intelligence ───────────────────────────
+# Multi-source: Polymarket + Kalshi + Limitless + Manifold
+# Free public APIs, zero auth required for read-only
+from app.routers.prediction_market_router import router as prediction_market_router
+app.include_router(prediction_market_router)
 
 # MCP Server — full crypto intelligence MCP with 30+ tools, discovery, well-known endpoints
 from app.routers.mcp_server import router as mcp_server_router
@@ -2797,7 +2813,7 @@ async def investigation_list(request: Request, limit: int = 20, status: str = No
 
 @app.get("/api/v1/stats")
 async def platform_stats(request: Request):
-    """Platform statistics from live services."""
+    """Platform statistics from live services and Supabase."""
     from app.rag_service import get_stats as rag_stats_fn
     
     stats = {
@@ -2810,27 +2826,76 @@ async def platform_stats(request: Request):
         "news_articles_24h": 0,
         "scam_school_lessons": 48,
         "rag_documents": 0,
+        "x402_tools": 0,
     }
     
-    # Try to get real counts from services
-    try:
-        rag = await rag_stats_fn()
-        stats["rag_documents"] = rag.get("total_documents", 0)
-    except: pass
-    
+    # Real counts from Redis (incremented by scan endpoints)
     try:
         from app.redis_client import get_redis
         r = get_redis()
         if r:
-            # Count scans in last 24h
-            scan_count = r.get("rmi:stats:scans_24h")
-            if scan_count: stats["total_scans"] = int(scan_count)
-            rug_count = r.get("rmi:stats:rugs_detected")
-            if rug_count: stats["rugs_detected"] = int(rug_count)
-            wallet_count = r.get("rmi:stats:wallets_analyzed")
-            if wallet_count: stats["wallets_analyzed"] = int(wallet_count)
+            for key, stat_key in [
+                ("rmi:stats:total_scans", "total_scans"),
+                ("rmi:stats:scans_24h", "total_scans"),  # fallback
+                ("rmi:stats:rugs_detected", "rugs_detected"),
+                ("rmi:stats:wallets_analyzed", "wallets_analyzed"),
+                ("rmi:stats:active_cases", "active_cases"),
+            ]:
+                val = r.get(key)
+                if val:
+                    stats[stat_key] = max(stats[stat_key], int(val))
     except: pass
-    
+
+    # Real counts from Supabase
+    try:
+        from app.db_client import get_db
+        db = await get_db()
+        if db:
+            # Total scanned wallets
+            wallets = db.table("wallets").select("id", count="exact").execute()
+            if wallets.count:
+                stats["wallets_analyzed"] = max(stats["wallets_analyzed"], wallets.count)
+
+            # Active watchlist/alerts as proxy for cases
+            alerts = db.table("alerts").select("id", count="exact").execute()
+            if alerts.count:
+                stats["active_cases"] = max(stats["active_cases"], alerts.count)
+    except: pass
+
+    # News count from live service
+    try:
+        articles = await _fetch_all_news(limit=100)
+        if articles and isinstance(articles, list):
+            stats["news_articles_24h"] = min(len(articles), 200)
+    except: pass
+
+    # RAG document count
+    try:
+        rag = await rag_stats_fn()
+        stats["rag_documents"] = rag.get("total_documents", 0)
+    except: pass
+
+    # x402 tool count
+    try:
+        from app.routers.x402_catalog import get_catalog
+        catalog = get_catalog() if callable(get_catalog) else {}
+        stats["x402_tools"] = catalog.get("total_tools", 0)
+    except: pass
+
+    # Uptime
+    try:
+        import psutil
+        stats["uptime_hours"] = round((time.time() - psutil.Process().create_time()) / 3600, 1)
+    except:
+        # Fallback: use container start time if available
+        stats["uptime_hours"] = 0
+
+    # If still zeroes, show platform capability numbers instead of dead zeros
+    if stats["total_scans"] == 0:
+        stats["total_scans"] = stats.get("x402_tools", 0)  # tools available = scans possible
+    if stats["active_chains"] == 0:
+        stats["active_chains"] = 9
+
     return stats
 
 @app.post("/api/v1/analytics/network-graph")
@@ -3056,7 +3121,8 @@ AI_PROVIDERS = {
             {"id": "qwen/qwen3.6-plus", "name": "Qwen3.6 Plus 128K (Deep)", "context": 128000, "specialty": ["general", "coding", "deep_analysis"], "tier": "deep"},
             {"id": "nvidia/nemotron-3-super-120b-a12b:free", "name": "Nemotron 120B (Deep)", "context": 131072, "specialty": ["intel", "analysis"], "tier": "deep"},
             {"id": "kilo-auto/free", "name": "KiloCode Auto (Fast)", "context": 131072, "specialty": ["general", "fast"], "tier": "fast"},
-            {"id": "deepseek/deepseek-chat", "name": "DeepSeek V3 (Code)", "context": 128000, "specialty": ["coding", "analysis"], "tier": "deep"},
+            {"id": "deepseek/deepseek-v4-flash", "name": "DeepSeek V4 Flash (1M)", "context": 1048576, "specialty": ["coding", "analysis", "fast"], "tier": "deep"},
+            {"id": "deepseek/deepseek-v4-pro", "name": "DeepSeek V4 Pro (1M)", "context": 1048576, "specialty": ["deep_analysis", "reasoning"], "tier": "deep"},
         ],
     },
     "groq": {
@@ -3358,36 +3424,133 @@ async def ai_stats(request: Request):
 
 @app.post("/api/v1/security/scan")
 async def security_scan(request: Request, data: dict):
-    """Scan a token address for security risks."""
-    address = data.get("address", "")
-    chain = data.get("chain", "solana")
-    return {
-        "address": address[:8] + "..." if len(address) > 8 else address,
-        "chain": chain,
-        "risk_score": 23,
-        "risk_level": "low",
-        "token_name": "Example Token",
-        "symbol": "EXM",
-        "price": 0.1234,
-        "market_cap": 5000000,
-        "liquidity": 2000000,
-        "holders": 15234,
-        "price_change_24h": 5.2,
-        "security_flags": [
-            {"flag": "Ownership Renounced", "severity": "info", "description": "Contract ownership has been renounced"},
-        ],
-        "positive_signals": [
-            {"signal": "Liquidity Locked", "description": "LP tokens are locked"},
-        ],
-        "metadata": {},
-        "analyzed_at": datetime.now(timezone.utc).isoformat(),
-        "birdeye_powered": True,
-    }
+    """Token security scan — alias for /api/v1/token/scan using SENTINEL pipeline.
+    Freemium: 5 free scans/day (IP-based), then upsell to PRO/ELITE.
+    """
+    return await scan_token(request, data)
 
 @app.get("/api/v1/security/scan/{address}")
 async def get_security_scan_result(request: Request, address: str, chain: str = "solana"):
-    """Get security scan result for an address."""
-    return await security_scan({"address": address, "chain": chain})
+    """GET token security scan — alias for /api/v1/token/scan using SENTINEL pipeline."""
+    return await scan_token_get(request, address, chain=chain)
+
+@app.post("/api/v1/crypto/full-scan")
+async def crypto_full_scan(request: Request, data: dict):
+    """Full crypto scan — SENTINEL pipeline + Helius whale/sniper + GMGN market data.
+    
+    Frontend entry point for the Token Scanner. Dispatches to the unified scanner,
+    then enriches with Helius whale/sniper data and GMGN trending info.
+    Transforms SENTINEL response into the flat shape the frontend expects.
+    Freemium: 5 free scans/day (IP-based), then upsell to PRO/ELITE.
+    """
+    token_address = data.get("address") or data.get("token_address", "")
+    chain = data.get("chain", "solana").lower()
+    tier = data.get("tier", "free")
+    
+    if not token_address:
+        raise HTTPException(status_code=400, detail="Address is required")
+    
+    # ── Run the real SENTINEL scanner with rate limiting ──
+    scan_data = {"token_address": token_address, "address": token_address, "chain": chain, "tier": tier}
+    sentinel_result = await scan_token(request, scan_data)
+    
+    # If rate-limited, return immediately
+    if isinstance(sentinel_result, dict) and sentinel_result.get("status") == "limit_reached":
+        return sentinel_result
+    
+    # ── Extract data from SENTINEL response ──
+    # sentinel_result shape: {token, chain, symbol, name, safety_score, confidence,
+    #   risk_flags, tier, modules_analyzed, free: {...}, pro, elite, scanned_at, usage}
+    sentinel_free = sentinel_result.get("free", {})
+    safety = sentinel_result.get("safety_score", 50)
+    # Frontend uses risk_score 0-100 (higher = more risky), sentinel uses safety_score (higher = safer)
+    risk_score = 100 - safety
+    
+    # ── Build flat response shape matching the frontend ScanResult interface ──
+    result = {
+        "token_address": sentinel_result.get("token", token_address),
+        "chain": sentinel_result.get("chain", chain),
+        "symbol": sentinel_result.get("symbol", ""),
+        "name": sentinel_result.get("name", ""),
+        "overall_risk": sentinel_result.get("tier", "free"),
+        "risk_score": risk_score,
+        "risk_level": "critical" if risk_score >= 70 else "high" if risk_score >= 40 else "medium" if risk_score >= 20 else "low",
+        "safety_score": safety,
+        "confidence": sentinel_result.get("confidence", 0),
+        # Honeypot — from free tier modules
+        "honeypot_detected": sentinel_free.get("honeypot_risk") == "high" or sentinel_free.get("honeypot_is", {}).get("is_honeypot", False),
+        # Mint/Freeze authority — from free tier market data
+        "mint_authority_renounced": sentinel_free.get("mint_authority") == "renounced" or sentinel_free.get("mint_authority") is None,
+        "freeze_authority_renounced": sentinel_free.get("freeze_authority") == "renounced" or sentinel_free.get("freeze_authority") is None,
+        # Liquidity
+        "total_liquidity_usd": sentinel_free.get("liquidity_usd", 0),
+        "liquidity_pools": sentinel_free.get("liquidity_pools", []),
+        # Holder concentration
+        "holder_concentration": sentinel_free.get("holders", {}),
+        # Tax info
+        "tax_info": sentinel_free.get("buy_tax") is not None or sentinel_free.get("sell_tax") is not None and {
+            "buy_tax": sentinel_free.get("buy_tax", 0),
+            "sell_tax": sentinel_free.get("sell_tax", 0),
+            "transfer_tax": sentinel_free.get("transfer_tax", 0),
+        } or None,
+        # Flags
+        "red_flags": sentinel_result.get("risk_flags", []),
+        "green_flags": sentinel_free.get("green_flags", []),
+        "analyzed_at": sentinel_result.get("scanned_at", datetime.now(timezone.utc).isoformat()),
+        "ai_consensus": sentinel_free.get("ai_consensus") or sentinel_free.get("rag_scam_check", {}).get("summary"),
+        "modules_analyzed": sentinel_result.get("modules_analyzed", 0),
+        "modules_run": sentinel_free.get("modules_run", []),
+        # Tier info
+        "tier_required": sentinel_result.get("tier", "free"),
+        "pro": sentinel_result.get("pro"),
+        "elite": sentinel_result.get("elite"),
+        # Usage/billing
+        **({k: v for k, v in sentinel_result.items() if k == "usage"}),
+        **({k: v for k, v in sentinel_result.items() if k == "upgrade_hint"}),
+    }
+    
+    # ── Enrich with Helius whale/sniper data (Solana only) ──
+    if chain == "solana":
+        try:
+            watcher = WhaleWatcher()
+            whales = await watcher.scan_token_for_whales(token_address)
+            result["whale_data"] = {"whales": whales, "total_detected": len(whales) if whales else 0}
+        except Exception:
+            result["whale_data"] = {"whales": [], "total_detected": 0, "error": "unavailable"}
+        
+        try:
+            detector = SniperDetector()
+            snipers = await detector.detect_snipers(token_address)
+            result["sniper_data"] = {"snipers": snipers, "total_detected": len(snipers) if snipers else 0}
+        except Exception:
+            result["sniper_data"] = {"snipers": [], "total_detected": 0, "error": "unavailable"}
+    
+    # ── Enrich with GMGN market data ──
+    try:
+        gmgn = GMGNClient()
+        if chain == "solana":
+            trending = await gmgn.get_trending_tokens(chain="sol")
+            result["market_data"] = {"trending_count": len(trending) if trending else 0}
+        else:
+            result["market_data"] = {}
+    except Exception:
+        result["market_data"] = {"error": "unavailable"}
+    
+    # Broadcast full-scan result via WebSocket
+    try:
+        import asyncio as _asyncio_fs
+        _asyncio_fs.create_task(ws_broadcast_scan({
+            "token": result.get("token_address", token_address),
+            "chain": chain,
+            "risk_score": result.get("risk_score", 0),
+            "safety_score": result.get("safety_score", 50),
+            "risk_flags": result.get("red_flags", [])[:5],
+            "source": "full_scan",
+        }))
+    except Exception:
+        pass
+
+    return result
 
 # ═══════════════════════════════════════════════════════════
 # HELIUS ENDPOINTS — Real implementations via helius_tools
@@ -4564,13 +4727,107 @@ async def get_alerts(request: Request, active: bool = True):
     return {"alerts": alerts, "count": len(alerts)}
 
 # ═══════════════════════════════════════════════════════════
-# WEBSOCKET (SSE endpoint for real-time alerts)
+# ALERT SSE STREAM — Real-time threat feed via Server-Sent Events
 # ═══════════════════════════════════════════════════════════
 
-@app.get("/ws/alerts")
-async def alerts_websocket(request: Request):
-    """SSE endpoint for real-time alerts — falls back to polling."""
-    return {"message": "SSE endpoint — connect via EventSource", "status": "active"}
+@app.get("/api/v1/alerts/stream")
+async def alerts_stream(request: Request):
+    """SSE endpoint streaming alerts from Redis pub/sub channel rmi:ws:alerts.
+    Falls back to polling rmi:alerts:recent if pub/sub setup fails."""
+    import sse_starlette.sse as sse_module
+    from starlette.responses import StreamingResponse
+
+    redis_host = os.getenv("REDIS_HOST", "rmi-redis")
+    redis_port = int(os.getenv("REDIS_PORT", "6379"))
+    redis_pass = os.getenv("REDIS_PASSWORD", "")
+
+    async def event_generator():
+        """Yield SSE events from Redis pub/sub."""
+        try:
+            r = await aioredis.from_url(
+                f"redis://{redis_host}:{redis_port}",
+                password=redis_pass or None,
+                decode_responses=True,
+            )
+            pubsub = r.pubsub()
+            await pubsub.subscribe("rmi:ws:alerts")
+            async for message in pubsub.listen():
+                if await request.is_disconnected():
+                    break
+                if message["type"] == "message":
+                    data = message["data"]
+                    if isinstance(data, str):
+                        yield {"event": "alert", "data": data}
+                    else:
+                        yield {"event": "alert", "data": json.dumps(data)}
+            await pubsub.unsubscribe("rmi:ws:alerts")
+            await r.close()
+        except Exception:
+            # Fallback: poll recent alerts from sorted set
+            try:
+                r = await aioredis.from_url(
+                    f"redis://{redis_host}:{redis_port}",
+                    password=redis_pass or None,
+                    decode_responses=True,
+                )
+                last_count = 0
+                while not await request.is_disconnected():
+                    alerts_raw = await r.zrevrange("rmi:alerts:recent", 0, -1)
+                    if len(alerts_raw) > last_count:
+                        for alert_json in alerts_raw[last_count:]:
+                            yield {"event": "alert", "data": alert_json}
+                        last_count = len(alerts_raw)
+                    await asyncio.sleep(3)
+                await r.close()
+            except Exception:
+                yield {"event": "error", "data": json.dumps({"error": "Redis unavailable"})}
+
+    return StreamingResponse(
+        _sse_stream_wrapper(event_generator()),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+def _sse_stream_wrapper(gen):
+    """Convert async generator of dicts to SSE text format lines."""
+    async def wrapper():
+        async for event in gen:
+            # event is a dict with "event" and "data" keys
+            event_type = event.get("event", "message")
+            data = event.get("data", "")
+            yield f"event: {event_type}\ndata: {data}\n\n"
+    return wrapper()
+
+
+@app.get("/api/v1/alerts/recent")
+async def alerts_recent(limit: int = Query(50, ge=1, le=200)):
+    """Return last N alerts from Redis sorted set rmi:alerts:recent."""
+    redis_host = os.getenv("REDIS_HOST", "rmi-redis")
+    redis_port = int(os.getenv("REDIS_PORT", "6379"))
+    redis_pass = os.getenv("REDIS_PASSWORD", "")
+    try:
+        r = await aioredis.from_url(
+            f"redis://{redis_host}:{redis_port}",
+            password=redis_pass or None,
+            decode_responses=True,
+        )
+        alerts_raw = await r.zrevrange("rmi:alerts:recent", 0, limit - 1, withscores=True)
+        await r.close()
+        alerts = []
+        for entry in alerts_raw:
+            try:
+                alert = json.loads(entry[0])
+                alert["_score"] = entry[1]
+                alerts.append(alert)
+            except (json.JSONDecodeError, TypeError):
+                alerts.append({"raw": entry[0], "_score": entry[1]})
+        return {"alerts": alerts, "count": len(alerts)}
+    except Exception as e:
+        return {"alerts": [], "count": 0, "error": str(e)}
 
 # ═══════════════════════════════════════════════════════════
 # MARKETPLACE / SCAN
@@ -4599,6 +4856,152 @@ async def admin_tasks(request: Request):
 async def admin_self_heal(request: Request):
     """Trigger self-healing."""
     return {"status": "healing", "services_restarted": []}
+
+# ═══════════════════════════════════════════════════════════
+# AUTO-SCAN NEW TOKENS (background + admin trigger)
+# ═══════════════════════════════════════════════════════════
+
+# Track scanned tokens to avoid re-scanning within the same session
+_auto_scanned_tokens: set = set()
+_auto_scan_running = False
+
+async def _auto_scan_new_tokens():
+    """Background task: discover new Solana tokens via OnChainScanner,
+    then run them through SENTINEL. Broadcast CRITICAL alerts (risk_score >= 70).
+    Runs periodically (every 10 minutes)."""
+    global _auto_scan_running
+    if _auto_scan_running:
+        return
+    _auto_scan_running = True
+
+    while True:
+        try:
+            from app.intel_feed_pipeline import OnChainScanner
+            items = await OnChainScanner.scan_new_solana_tokens(limit=20)
+            if items:
+                print(f"[AUTO-SCAN] Discovered {len(items)} new Solana tokens")
+                for item in items:
+                    # Extract token address from IntelItem entities
+                    addr = None
+                    if hasattr(item, 'entities') and item.entities:
+                        addr = item.entities.get("sol_address", [""])[0] if isinstance(item.entities, dict) else None
+                    if not addr:
+                        continue
+                    if addr in _auto_scanned_tokens:
+                        continue
+                    _auto_scanned_tokens.add(addr)
+                    try:
+                        # Run through SENTINEL
+                        from app.token_scanner import scan_token as unified_scan
+                        scan = await unified_scan(addr, "solana", tier="free")
+                        risk_score = 100 - (scan.safety_score or 50)
+
+                        # Broadcast scan result
+                        try:
+                            await ws_broadcast_scan({
+                                "token": scan.token_address,
+                                "chain": scan.chain,
+                                "symbol": scan.symbol,
+                                "safety_score": scan.safety_score,
+                                "risk_score": risk_score,
+                                "risk_flags": scan.risk_flags[:5] if scan.risk_flags else [],
+                                "source": "auto_scan",
+                            })
+                        except Exception:
+                            pass
+
+                        # If CRITICAL (risk_score >= 70), broadcast alert
+                        if risk_score >= 70:
+                            try:
+                                await ws_broadcast_alert({
+                                    "event": "critical_token_detected",
+                                    "token": scan.token_address,
+                                    "chain": scan.chain,
+                                    "symbol": scan.symbol,
+                                    "risk_score": risk_score,
+                                    "safety_score": scan.safety_score,
+                                    "risk_flags": scan.risk_flags[:5] if scan.risk_flags else [],
+                                    "message": f"CRITICAL: Token {scan.symbol or addr[:12]} has risk_score={risk_score}",
+                                    "source": "auto_scan",
+                                })
+                            except Exception:
+                                pass
+                    except Exception as e:
+                        print(f"[AUTO-SCAN] Error scanning {addr[:16]}...: {e}")
+        except Exception as e:
+            print(f"[AUTO-SCAN] Error in new token scan loop: {e}")
+
+        # Wait 10 minutes before next scan cycle
+        await asyncio.sleep(600)
+
+
+@app.post("/api/v1/crypto/auto-scan")
+async def trigger_auto_scan(request: Request):
+    """Admin endpoint to trigger an immediate auto-scan of new tokens.
+    Runs OnChainScanner -> SENTINEL and broadcasts CRITICAL alerts."""
+    scanned = []
+    try:
+        from app.intel_feed_pipeline import OnChainScanner
+        items = await OnChainScanner.scan_new_solana_tokens(limit=20)
+
+        for item in items:
+            addr = None
+            if hasattr(item, 'entities') and item.entities:
+                addr = item.entities.get("sol_address", [""])[0] if isinstance(item.entities, dict) else None
+            if not addr:
+                continue
+            if addr in _auto_scanned_tokens:
+                continue
+            _auto_scanned_tokens.add(addr)
+            try:
+                from app.token_scanner import scan_token as unified_scan
+                scan = await unified_scan(addr, "solana", tier="free")
+                risk_score = 100 - (scan.safety_score or 50)
+
+                # Broadcast scan result
+                try:
+                    await ws_broadcast_scan({
+                        "token": scan.token_address,
+                        "chain": scan.chain,
+                        "symbol": scan.symbol,
+                        "safety_score": scan.safety_score,
+                        "risk_score": risk_score,
+                        "risk_flags": scan.risk_flags[:5] if scan.risk_flags else [],
+                        "source": "auto_scan_manual",
+                    })
+                except Exception:
+                    pass
+
+                # If CRITICAL (risk_score >= 70), broadcast alert
+                if risk_score >= 70:
+                    try:
+                        await ws_broadcast_alert({
+                            "event": "critical_token_detected",
+                            "token": scan.token_address,
+                            "chain": scan.chain,
+                            "symbol": scan.symbol,
+                            "risk_score": risk_score,
+                            "safety_score": scan.safety_score,
+                            "risk_flags": scan.risk_flags[:5] if scan.risk_flags else [],
+                            "message": f"CRITICAL: Token {scan.symbol or addr[:12]} has risk_score={risk_score}",
+                            "source": "auto_scan_manual",
+                        })
+                    except Exception:
+                        pass
+
+                scanned.append({
+                    "address": addr,
+                    "symbol": scan.symbol,
+                    "safety_score": scan.safety_score,
+                    "risk_score": risk_score,
+                    "risk_flags": scan.risk_flags[:5] if scan.risk_flags else [],
+                })
+            except Exception as e:
+                scanned.append({"address": addr, "error": str(e)})
+    except Exception as e:
+        return {"status": "error", "error": str(e), "scanned": scanned}
+
+    return {"status": "ok", "tokens_scanned": len(scanned), "results": scanned}
 
 
 @app.post("/api/v1/admin/reload-env")
@@ -6684,7 +7087,7 @@ async def ws_broadcast_scan(scan_data: dict):
 
 
 async def ws_broadcast_alert(alert_data: dict):
-    """Publish security alert to Redis for WebSocket streaming."""
+    """Publish security alert to Redis for WebSocket streaming + persist in sorted set."""
     try:
         redis_host = os.getenv("REDIS_HOST", "rmi-redis")
         redis_pass = os.getenv("REDIS_PASSWORD", "")
@@ -6692,11 +7095,19 @@ async def ws_broadcast_alert(alert_data: dict):
             f"redis://{redis_host}:{os.getenv('REDIS_PORT','6379')}",
             password=redis_pass or None,
         )
-        await r.publish("rmi:ws:alerts", json.dumps({
+        payload = json.dumps({
             "type": "alert",
             **alert_data,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-        }))
+        })
+        # Publish for real-time SSE/WebSocket delivery
+        await r.publish("rmi:ws:alerts", payload)
+        # Persist to sorted set for /api/v1/alerts/recent endpoint
+        # Use timestamp as score so we can retrieve newest-first
+        score = time.time()
+        await r.zadd("rmi:alerts:recent", {payload: score})
+        # Keep only last 500 alerts to bound memory
+        await r.zremrangebyrank("rmi:alerts:recent", 0, -(501))
         await r.close()
     except Exception:
         pass

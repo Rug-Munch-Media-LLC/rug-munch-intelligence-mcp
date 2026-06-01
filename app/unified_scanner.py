@@ -775,6 +775,7 @@ async def scan_wallet(wallet_address: str, chain: str = "solana", tier: str = "f
     start = time.time()
     data_sources = []
     token_list = []
+    modules_run = []  # Track which modules succeeded/failed
     
     # ── On-chain data: chain-specific multi-source fetchers ──
     onchain = {}
@@ -1064,6 +1065,21 @@ async def scan_wallet(wallet_address: str, chain: str = "solana", tier: str = "f
     factors.confidence = min(100, confidence)
     factors.data_sources = data_sources
     
+    # Build modules_run list from data_sources with status
+    for src in data_sources:
+        modules_run.append({"module": src, "status": "ok"})
+    # Add known modules that were attempted but failed (not in data_sources)
+    attempted_modules = [
+        "helius_wallet", "moralis_wallet", "etherscan_wallet", "dexscreener",
+        "rugcheck", "goplus_security", "wallet_labels", "wallet_memory",
+        "sentinel_risk", "gmgn", "funding_trace", "free_entity", "jupiter_pnl",
+        "entity_clustering",
+    ]
+    succeeded_set = set(data_sources)
+    for mod in attempted_modules:
+        if mod not in succeeded_set:
+            modules_run.append({"module": mod, "status": "degraded", "error": "no_data_returned"})
+    
     elapsed = time.time() - start
     logger.info(f"Wallet scan {wallet_address[:12]}... [{chain}] = {factors.total_risk_score}/100 ({factors.risk_category}) conf={factors.confidence}% in {elapsed:.1f}s")
     
@@ -1129,6 +1145,7 @@ async def scan_wallet(wallet_address: str, chain: str = "solana", tier: str = "f
             "highest_risk": factors.highest_risk_token,
             "risks": factors.held_token_risks[:10],
         },
+        "modules_run": modules_run,
         "scanned_at": datetime.now(timezone.utc).isoformat(),
         "tool_fingerprints": None,
     }

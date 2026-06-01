@@ -37,7 +37,8 @@ class WalletUpsert(BaseModel):
 
 class WatchlistItem(BaseModel):
     user_id: str
-    wallet_address: str
+    address: str
+    type: str = "wallet"  # "token" or "wallet"
     chain: str = "ethereum"
     tags: Optional[List[str]] = None
 
@@ -136,24 +137,140 @@ async def syndicates(
     return {"syndicate_wallets": data, "total": len(data)}
 
 # ═════════════════════════════════════════════════════════
-# WATCHLIST
+# WATCHLIST (supports tokens and wallets)
 # ═════════════════════════════════════════════════════════
 
 @router.get("/watchlist/{user_id}")
-async def watchlist(user_id: str):
-    data = await get_watchlist(user_id)
+async def watchlist(user_id: str, type: Optional[str] = Query(None)):
+    """Get user's watchlist. Optional ?type=token|wallet filter.
+    Tries Supabase first, falls back to Redis."""
+    data = []
+    # Try Supabase first
+    try:
+        data = await get_watchlist(user_id)
+    except Exception:
+        pass
+
+    # Redis fallback
+    if not data:
+        import json as _json
+        import os
+        try:
+            import redis as _redis
+            _r = _redis.Redis(
+                host=os.getenv("REDIS_HOST", "rmi-redis"),
+                port=int(os.getenv("REDIS_PORT", "6379")),
+                password=os.getenv("REDIS_PASSWORD") or None,
+                decode_responses=True,
+            )
+            wl_key = f"rmi:watchlist:{user_id}"
+            raw_entries = _r.lrange(wl_key, 0, -1)
+            data = [_json.loads(e) for e in raw_entries]
+        except Exception:
+            pass
+
+    if type:
+        data = [item for item in data if item.get("type") == type]
     return {"watchlist": data, "total": len(data)}
 
 @router.post("/watchlist")
 async def watchlist_add(item: WatchlistItem):
-    result = await add_to_watchlist(item.user_id, item.wallet_address, item.chain, item.tags)
+    """Add a token or wallet address to the user's watchlist.
+    Tries Supabase first, falls back to Redis."""
+    if item.type not in ("token", "wallet"):
+        raise HTTPException(status_code=400, detail="type must be 'token' or 'wallet'")
+
+    result = None
+    # Try Supabase first
+    try:
+        result = await add_to_watchlist(
+            user_id=item.user_id,
+            address=item.address,
+            chain=item.chain,
+            tags=item.tags,
+            item_type=item.type,
+        )
+    except Exception:
+        pass
+
+    # Redis fallback — always written so watchlist works even without Supabase
     if not result:
-        raise HTTPException(status_code=500, detail="Add failed")
+        import json as _json
+        import os
+        try:
+            import redis as _redis
+            _r = _redis.Redis(
+                host=os.getenv("REDIS_HOST", "rmi-redis"),
+                port=int(os.getenv("REDIS_PORT", "6379")),
+                password=os.getenv("REDIS_PASSWORD") or None,
+                decode_responses=True,
+            )
+            from datetime import timezone
+            wl_key = f"rmi:watchlist:{item.user_id}"
+            entry = _json.dumps({
+                "user_id": item.user_id,
+                "address": item.address,
+                "type": item.type,
+                "chain": item.chain,
+                "tags": item.tags or [],
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+            _r.lpush(wl_key, entry)
+            _r.expire(wl_key, 86400 * 30)  # 30 day TTL
+            result = _json.loads(entry)
+        except Exception:
+            pass
+
+    if not result:
+        raise HTTPException(status_code=500, detail="Add failed — both Supabase and Redis unavailable")
+
+    # Broadcast alert via WebSocket so frontend gets notified
+    try:
+        import asyncio
+        from main import ws_broadcast_alert
+        asyncio.create_task(ws_broadcast_alert({
+            "event": "watchlist_add",
+            "user_id": item.user_id,
+            "address": item.address,
+            "type": item.type,
+            "chain": item.chain,
+        }))
+    except Exception:
+        pass
+
     return result
 
-@router.delete("/watchlist/{user_id}/{wallet_address}")
-async def watchlist_remove(user_id: str, wallet_address: str, chain: str = Query("ethereum")):
-    ok = await remove_from_watchlist(user_id, wallet_address, chain)
+@router.delete("/watchlist/{user_id}/{address}")
+async def watchlist_remove(user_id: str, address: str, chain: str = Query("ethereum")):
+    """Remove item from watchlist. Tries Supabase and Redis."""
+    ok = False
+    try:
+        ok = await remove_from_watchlist(user_id, address, chain)
+    except Exception:
+        pass
+
+    # Also remove from Redis
+    import json as _json
+    import os
+    try:
+        import redis as _redis
+        _r = _redis.Redis(
+            host=os.getenv("REDIS_HOST", "rmi-redis"),
+            port=int(os.getenv("REDIS_PORT", "6379")),
+            password=os.getenv("REDIS_PASSWORD") or None,
+            decode_responses=True,
+        )
+        wl_key = f"rmi:watchlist:{user_id}"
+        raw_entries = _r.lrange(wl_key, 0, -1)
+        for raw in raw_entries:
+            entry = _json.loads(raw)
+            if entry.get("address") == address and entry.get("chain", "ethereum") == chain:
+                _r.lrem(wl_key, 1, raw)
+                ok = True
+                break
+    except Exception:
+        pass
+
     if not ok:
         raise HTTPException(status_code=404, detail="Not found")
     return {"status": "removed"}

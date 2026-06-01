@@ -40,6 +40,7 @@ class ScanResult:
     risk_flags: List[str] = field(default_factory=list)
     tier_required: str = "free"
     confidence: int = 0  # 0-100, how much data backs this score
+    modules_run: List[Dict[str, Any]] = field(default_factory=list)  # [{module, status, error?}]
 
 
 CHAIN_IDS = {
@@ -3001,9 +3002,15 @@ async def scan_token(
             scan.confidence = 60
         else:
             scan.confidence = 40
+        
+        # Build modules_run with status tracking
+        if hasattr(sentinel, 'modules_run') and sentinel.modules_run:
+            for mod in sentinel.modules_run:
+                scan.modules_run.append({"module": mod, "status": "ok"})
     else:
         safety = 50  # unknown
         scan.confidence = 30
+        scan.modules_run.append({"module": "sentinel", "status": "error", "error": "sentinel_not_available"})
     
     # Adjust from market data
     if market.get("honeypot_risk") == "high":
