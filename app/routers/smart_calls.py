@@ -247,7 +247,7 @@ def _build_marketplace_data() -> Dict[str, Any]:
         "external_services": external_services,
         "trial_tiers": TRIAL_TIERS,
         "price_tiers": PRICE_TIERS,
-        "chains": CHAIN_USDC,
+        "chains": {k: v for k, v in CHAIN_USDC.items() if k not in ("sepa",)},
         "refund_policy": "Full automatic refund within 48h if tool returns no data",
     }
 
