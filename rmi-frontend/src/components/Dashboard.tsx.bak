@@ -1,0 +1,505 @@
+/**
+ * RMI COMMAND CENTER — Intelligence-Driven Dashboard
+ * Left: Live intel feed (alerts, news, bulletin, whale moves)
+ * Center: Market data panels (BTC/ETH/SOL, trending, charts)
+ * Right: Feature launch grid (all platform tools, no dupes)
+ *
+ * API: /api/v1/content/market-overview, /api/v1/markets/trending,
+ * /api/v1/whales/top, /api/v1/x402/tools-catalog, /api/v1/rugcharts/trending,
+ * /api/v1/content/news, /api/v1/alerts/recent, /api/v1/bulletin/latest,
+ * /api/v1/bulletin/alerts, /api/v1/x402/dashboard, /mcp/health
+ */
+import { useState, useEffect, useCallback } from 'react';
+import { useAppStore } from '../store/appStore';
+import {
+  TrendingUp, TrendingDown, Activity, Zap, Globe, Radio, Shield,
+  ChevronRight, BarChart3, AlertTriangle, Cpu, RefreshCw,
+  Search, Eye, Brain, Flame, MessageSquare, Newspaper,
+  CreditCard, Gem, Trophy, Database, Map, Terminal,
+  Crosshair, Fingerprint, Scan, Bug, Radar, Target,
+  Wallet, Lock, Vote, Megaphone, Layers,
+} from 'lucide-react';
+
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
+function useApiFetch<T>(path: string, def: T, ms = 60000) {
+  const [s, set] = useState<{ data: T | null; loading: boolean }>({ data: null, loading: true });
+  const go = useCallback(async () => {
+    try {
+      const r = await fetch(`${API_BASE}/api/v1${path}`);
+      if (r.ok) set({ data: await r.json(), loading: false });
+      else set(p => ({ data: p.data || def, loading: false }));
+    } catch { set(p => ({ data: p.data || def, loading: false })); }
+  }, [path]);
+  useEffect(() => { go(); const i = setInterval(go, ms); return () => clearInterval(i); }, [go, ms]);
+  return s;
+}
+
+function useDirectFetch<T>(url: string, def: T, ms = 60000) {
+  const [s, set] = useState<{ data: T | null; loading: boolean }>({ data: null, loading: true });
+  const go = useCallback(async () => {
+    try {
+      const r = await fetch(url);
+      if (r.ok) set({ data: await r.json(), loading: false });
+      else set(p => ({ data: p.data || def, loading: false }));
+    } catch { set(p => ({ data: p.data || def, loading: false })); }
+  }, [url]);
+  useEffect(() => { go(); const i = setInterval(go, ms); return () => clearInterval(i); }, [go, ms]);
+  return s;
+}
+
+// ── Formatters ──
+function fmtUSD(v: number): string {
+  if (!v && v !== 0) return '—';
+  if (v >= 1e12) return `$${(v / 1e12).toFixed(2)}T`;
+  if (v >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
+  if (v >= 1e6) return `$${(v / 1e6).toFixed(2)}M`;
+  if (v >= 1e3) return `$${(v / 1e3).toFixed(1)}K`;
+  if (v < 0.01 && v > 0) return `$${v.toExponential(1)}`;
+  return `$${v.toFixed(2)}`;
+}
+function fmtPct(v: number | undefined) {
+  if (v === undefined || v === null) return '—';
+  return `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
+}
+function chainClr(c: string) {
+  const m: Record<string, string> = {
+    solana: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
+    ethereum: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+    base: 'bg-blue-600/20 text-blue-200 border-blue-600/30',
+    bsc: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
+    arbitrum: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
+    optimism: 'bg-red-500/20 text-red-300 border-red-500/30',
+    polygon: 'bg-violet-500/20 text-violet-300 border-violet-500/30',
+    pulsechain: 'bg-pink-500/20 text-pink-300 border-pink-500/30',
+  };
+  return m[c?.toLowerCase()] || 'bg-gray-500/20 text-gray-300 border-gray-500/30';
+}
+function sevClr(s: string) {
+  if (s === 'critical') return 'text-red-400 bg-red-500/15';
+  if (s === 'high') return 'text-orange-400 bg-orange-500/15';
+  if (s === 'medium') return 'text-yellow-400 bg-yellow-500/15';
+  return 'text-blue-400 bg-blue-500/15';
+}
+
+// ── Feature launch tiles (no dupes, no fluff) ──
+const FEATURES = [
+  { id: 'scanner', label: 'Wallet Scanner', icon: Search, cat: 'Security', desc: 'Address risk scan' },
+  { id: 'token-scan', label: 'Token Scanner', icon: Scan, cat: 'Security', desc: 'Contract analysis' },
+  { id: 'intel-terminal', label: 'Token Intel', icon: Brain, cat: 'Security', desc: 'Deep token research' },
+  { id: 'whale-watch', label: 'Whale Watch', icon: Eye, cat: 'Intelligence', desc: 'Smart money tracking' },
+  { id: 'meme-radar', label: 'Meme Radar', icon: Flame, cat: 'Intelligence', desc: 'Meme token detection' },
+  { id: 'rugmaps', label: 'RugMaps', icon: Map, cat: 'Intelligence', desc: 'Bubble map visualization' },
+  { id: 'rugcharts', label: 'RugCharts', icon: BarChart3, cat: 'Intelligence', desc: 'DexScreener charts' },
+  { id: 'datamarket', label: 'Data Market', icon: Database, cat: 'Intelligence', desc: 'x402 paid tools catalog' },
+  { id: 'datamarket', label: 'Coin Compare', icon: Target, cat: 'Intelligence', desc: 'Cross-token side-by-side', path: 'datamarket' },
+  { id: 'trenches', label: 'The Trenches', icon: Crosshair, cat: 'Community', desc: 'Live threat BBS' },
+  { id: 'rehab', label: 'Rug Pull Rehab', icon: Shield, cat: 'Community', desc: 'Recovery guidance' },
+  { id: 'rundown', label: 'Daily Rundown', icon: Newspaper, cat: 'Community', desc: 'Morning briefing' },
+  { id: 'gamification', label: 'Agent Profile', icon: Trophy, cat: 'Community', desc: 'Badges & XP' },
+  { id: 'wallets', label: 'My Wallets', icon: Wallet, cat: 'Wallet', desc: 'Portfolio tracking' },
+  { id: 'payment-hub', label: 'Monetization Hub', icon: Gem, cat: 'Monetize', desc: 'x402 revenue & tiers' },
+  { id: 'tier-checkout', label: 'Upgrade Tier', icon: CreditCard, cat: 'Monetize', desc: 'Alpha / Pro / Elite' },
+  { id: 'telegram-dashboard', label: 'Telegram Bot', icon: MessageSquare, cat: 'Community', desc: 'Bot management' },
+  { id: 'newsletter-subscribe', label: 'Newsletter', icon: Vote, cat: 'Community', desc: 'Weekly intel digest' },
+];
+
+const CAT_CLR: Record<string, string> = {
+  Security: 'border-red-500/30 bg-red-500/5',
+  Intelligence: 'border-cyan-500/30 bg-cyan-500/5',
+  Community: 'border-purple-500/30 bg-purple-500/5',
+  Wallet: 'border-green-500/30 bg-green-500/5',
+  Monetize: 'border-amber-500/30 bg-amber-500/5',
+};
+
+export default function Dashboard() {
+  const go = useAppStore((s) => s.setCurrentPage);
+
+  // ── Data fetching ──
+  const overview = useApiFetch<any>('/content/market-overview', { prices: {}, trending_tokens: [] }, 30000);
+  const trending = useApiFetch<any>('/markets/trending', { tokens: [] }, 60000);
+  const whales = useApiFetch<any>('/whales/top', { whales: [] }, 60000);
+  const x402 = useApiFetch<any>('/x402/tools-catalog', { chains: {}, tools: [], total_tools: 0, total_chains: 0 }, 120000);
+  const solanaHot = useApiFetch<any>('/rugcharts/trending?chain=solana&limit=8', { tokens: [] }, 60000);
+  const news = useApiFetch<any>('/content/news?limit=8', { articles: [] }, 120000);
+  const alerts = useApiFetch<any>('/alerts/recent', { alerts: [] }, 30000);
+  const bulletin = useApiFetch<any>('/bulletin/alerts', { alerts: [] }, 60000);
+  const x402dash = useApiFetch<any>('/x402/dashboard', { earnings: {}, trials: {} }, 60000);
+  const mcp = useDirectFetch<any>(`${API_BASE || ''}/mcp/health`, { status: 'unknown', tools: 0 }, 60000);
+
+  const prices = overview.data?.prices || {};
+  const btc = prices.bitcoin; const eth = prices.ethereum; const sol = prices.solana;
+  const mcap = overview.data?.total_market_cap_usd || overview.data?.total_market_cap || 0;
+  const mcapCh = overview.data?.market_cap_change_24h;
+  const trendingTokens = trending.data?.tokens || overview.data?.trending_tokens || [];
+  const whaleList = whales.data?.whales || [];
+  const chainMap = x402.data?.chains || {};
+  const toolCount = x402.data?.total_tools || 97;
+  const chainCount = x402.data?.total_chains || 7;
+  const solTokens = solanaHot.data?.tokens || [];
+  const alertsList = alerts.data?.alerts || [];
+  const bulletinAlerts = bulletin.data?.alerts || [];
+  const newsList = news.data?.articles || [];
+  const earnings = x402dash.data?.earnings || {};
+  const trials = x402dash.data?.trials || {};
+  const mcpStatus = mcp.data?.status || 'unknown';
+  const mcpTools = mcp.data?.tools || 0;
+
+  // Merge all intel feed items
+  const intelItems = [
+    ...bulletinAlerts.map((a: any) => ({ type: 'alert', sev: a.severity || 'high', title: a.title, desc: a.description, chain: a.chain, time: a.created_at, source: 'Bulletin' })),
+    ...alertsList.map((a: any) => ({ type: 'alert', sev: a.severity || 'info', title: a.title || a.message, desc: a.description || '', chain: a.chain, time: a.created_at, source: 'System' })),
+    ...newsList.map((a: any) => ({ type: 'news', sev: 'info', title: a.title, desc: a.description || '', chain: null, time: a.published_at, source: a.category || 'News' })),
+  ].sort((a, b) => (b.time || '').localeCompare(a.time || ''));
+
+  return (
+    <div className="min-h-screen">
+      {/* ── Top Header Bar ── */}
+      <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center">
+            <Shield className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-white tracking-wide">RMI COMMAND CENTER</h1>
+            <p className="text-xs text-gray-500">{chainCount} Chains · {toolCount} x402 Tools · {mcpTools} MCP Tools · {FEATURES.length} Features</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 text-xs">
+            <span className={`w-2 h-2 rounded-full ${mcpStatus === 'healthy' ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
+            <span className={`font-mono ${mcpStatus === 'healthy' ? 'text-emerald-400' : 'text-red-400'}`}>MCP {mcpStatus.toUpperCase()}</span>
+          </div>
+          <div className="text-xs text-gray-500 font-mono">
+            ${earnings.total_earnings_usdc?.toFixed(2) || '0.00'} USDC
+            {trials.trials_today > 0 && <span className="ml-2 text-purple-400">{trials.trials_today} trials today</span>}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Market Ticker ── */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-5">
+        <Ticker symbol="BTC" price={btc?.price_usd} change={btc?.change_24h} icon="₿" />
+        <Ticker symbol="ETH" price={eth?.price_usd} change={eth?.change_24h} icon="Ξ" />
+        <Ticker symbol="SOL" price={sol?.price_usd} change={sol?.change_24h} icon="◎" />
+        <Ticker symbol="MCAP" price={mcap} change={mcapCh} icon="⬡" isMcap />
+        <div className="flex items-center justify-center gap-2">
+          {Object.entries(chainMap).slice(0, 4).map(([c]) => (
+            <span key={c} className={`text-[10px] px-1.5 py-0.5 rounded border ${chainClr(c)}`}>{c}</span>
+          ))}
+          {Object.keys(chainMap).length > 4 && <span className="text-[10px] text-gray-500">+{Object.keys(chainMap).length - 4}</span>}
+        </div>
+      </div>
+
+      {/* ── 3-Column Layout: Intel | Market Data | Features ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+        {/* ══════ LEFT: INTELLIGENCE FEED ══════ */}
+        <div className="lg:col-span-3 space-y-4">
+          <div className="bg-[#0d0d14] border border-purple-500/20 rounded-xl overflow-hidden">
+            <div className="p-3 border-b border-purple-500/20 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+                <Radar className="w-4 h-4 text-red-400" /> LIVE INTEL
+              </h2>
+              <span className="text-[10px] text-gray-500">{intelItems.length} items</span>
+            </div>
+            <div className="p-2 space-y-1.5 max-h-[calc(100vh-220px)] overflow-y-auto thin-scroll">
+              {intelItems.length === 0 ? (
+                <p className="text-xs text-gray-600 text-center py-8">No intel feeds active</p>
+              ) : intelItems.slice(0, 20).map((item, i) => (
+                <div key={i} className="p-2.5 rounded-lg bg-white/[0.02] hover:bg-white/[0.04] transition-colors cursor-pointer border-l-2"
+                  style={{ borderColor: item.type === 'alert'
+                    ? item.sev === 'critical' ? '#ef4444' : item.sev === 'high' ? '#f97316' : '#eab308'
+                    : '#6366f1' }}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${sevClr(item.sev)}`}>
+                      {item.sev?.toUpperCase()}
+                    </span>
+                    <span className="text-[9px] text-gray-600">{item.source}</span>
+                  </div>
+                  <p className="text-xs text-white font-medium leading-tight mb-0.5 line-clamp-2">{item.title}</p>
+                  {item.desc && <p className="text-[10px] text-gray-500 line-clamp-1">{item.desc}</p>}
+                  {item.chain && <span className={`text-[9px] px-1 py-0.5 rounded border ${chainClr(item.chain)} mt-1 inline-block`}>{item.chain}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* x402 Revenue Panel */}
+          <div className="bg-[#0d0d14] border border-purple-500/20 rounded-xl overflow-hidden">
+            <div className="p-3 border-b border-purple-500/20">
+              <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+                <Gem className="w-4 h-4 text-amber-400" /> x402 REVENUE
+              </h2>
+            </div>
+            <div className="p-3 space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-400">Total Earned</span>
+                <span className="text-sm font-mono text-amber-300">{fmtUSD(earnings.total_earnings_usdc || 0)} USDC</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-400">Today</span>
+                <span className="text-sm font-mono text-gray-300">{fmtUSD(earnings.today_earnings_usdc || 0)} USDC</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-400">Unique Payers</span>
+                <span className="text-sm font-mono text-gray-300">{earnings.unique_payers || 0}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-400">Trials Today</span>
+                <span className="text-sm font-mono text-purple-300">{trials.trials_today || 0}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-400">All-Time Trials</span>
+                <span className="text-sm font-mono text-gray-300">{trials.trials_all_time || 0}</span>
+              </div>
+              {(earnings.top_tools_by_usage || []).slice(0, 3).map((t: any, i: number) => (
+                <div key={i} className="flex justify-between items-center text-xs">
+                  <span className="text-gray-500 truncate">{t.tool_id || t.tool}</span>
+                  <span className="text-gray-400">{t.calls || t.count} calls</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Chain Status */}
+          <div className="bg-[#0d0d14] border border-purple-500/20 rounded-xl overflow-hidden">
+            <div className="p-3 border-b border-purple-500/20">
+              <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+                <Globe className="w-4 h-4 text-blue-400" /> CHAIN STATUS
+              </h2>
+            </div>
+            <div className="p-2 space-y-1">
+              {Object.entries(chainMap).length === 0 ? (
+                <div className="h-4 bg-white/[0.03] rounded animate-pulse" />
+              ) : Object.entries(chainMap).map(([chain, tools]: [string, any]) => (
+                <div key={chain} className="flex items-center justify-between p-2 bg-white/[0.02] rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                    <span className="text-xs text-white capitalize">{chain}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-gray-500">{tools} tools</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">OK</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ══════ CENTER: MARKET DATA ══════ */}
+        <div className="lg:col-span-5 space-y-4">
+
+          {/* Trending Tokens */}
+          <div className="bg-[#0d0d14] border border-purple-500/20 rounded-xl overflow-hidden">
+            <div className="p-3 border-b border-purple-500/20 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-emerald-400" /> TRENDING TOKENS
+              </h2>
+              <button onClick={() => go('rugcharts')} className="text-[10px] text-purple-400 hover:text-purple-300">
+                RugCharts →
+              </button>
+            </div>
+            <div className="p-2 space-y-1 max-h-[360px] overflow-y-auto thin_scroll">
+              {trending.loading ? <LoadSkeleton n={8} /> : trendingTokens.length === 0 ? (
+                <p className="text-xs text-gray-600 text-center py-6">No trending data</p>
+              ) : trendingTokens.slice(0, 12).map((t: any, i: number) => (
+                <div key={t.address || t.symbol || i}
+                  className="flex items-center justify-between p-2 bg-white/[0.02] hover:bg-white/[0.05] rounded-lg transition-colors cursor-pointer"
+                  onClick={() => go('intel-terminal')}>
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="text-[10px] text-gray-600 font-mono w-4">{i + 1}</span>
+                    {t.icon && <img src={t.icon} alt="" className="w-5 h-5 rounded-full" onError={(e) => (e.currentTarget.style.display = 'none')} />}
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-white truncate">{t.name || t.symbol}</p>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-gray-500 uppercase">${(t.symbol || '').toLowerCase()}</span>
+                        <span className={`text-[9px] px-1 py-0.5 rounded border ${chainClr(t.chain)}`}>{t.chain || '?'}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0 ml-2">
+                    <p className="text-xs text-white font-mono">{fmtUSD(t.price_usd || t.price_btc || 0)}</p>
+                    <div className="flex items-center justify-end gap-0.5">
+                      {t.change_24h !== undefined && (t.change_24h >= 0
+                        ? <TrendingUp className="w-3 h-3 text-emerald-400" />
+                        : <TrendingDown className="w-3 h-3 text-rose-400" />)}
+                      <span className={`text-[10px] font-mono ${t.change_24h >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {fmtPct(t.change_24h)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Solana Hot Zone */}
+          <div className="bg-[#0d0d14] border border-purple-500/20 rounded-xl overflow-hidden">
+            <div className="p-3 border-b border-purple-500/20 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+                <Radio className="w-4 h-4 text-pink-400" /> SOLANA HOT ZONE
+              </h2>
+              <button onClick={() => go('rugcharts')} className="text-[10px] text-purple-400 hover:text-purple-300">
+                Full Board →
+              </button>
+            </div>
+            <div className="p-2 space-y-1 max-h-[280px] overflow-y-auto thin_scroll">
+              {solanaHot.loading ? <LoadSkeleton n={6} /> : solTokens.length === 0 ? (
+                <p className="text-xs text-gray-600 text-center py-6">No Solana tokens</p>
+              ) : solTokens.slice(0, 8).map((t: any, i: number) => (
+                <div key={t.address || i}
+                  className="flex items-center justify-between p-2 bg-white/[0.02] hover:bg-white/[0.05] rounded-lg transition-colors cursor-pointer"
+                  onClick={() => go('rugmaps')}>
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-white truncate">{t.name || t.symbol}</p>
+                    <p className="text-[10px] text-gray-500">{t.dex || '—'} · {t.source || '—'}</p>
+                  </div>
+                  <div className="text-right shrink-0 ml-2">
+                    <p className="text-xs font-mono text-white">{fmtUSD(t.price_usd)}</p>
+                    <span className={`text-[10px] font-mono ${t.change_24h >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {fmtPct(t.change_24h)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Whale Activity */}
+          <div className="bg-[#0d0d14] border border-purple-500/20 rounded-xl overflow-hidden">
+            <div className="p-3 border-b border-purple-500/20 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+                <Zap className="w-4 h-4 text-cyan-400" /> WHALE MOVES
+              </h2>
+              <button onClick={() => go('whale-watch')} className="text-[10px] text-purple-400 hover:text-purple-300">
+                Track →
+              </button>
+            </div>
+            <div className="p-2 space-y-1 max-h-[280px] overflow-y-auto thin_scroll">
+              {whales.loading ? <LoadSkeleton n={6} /> : whaleList.length === 0 ? (
+                <p className="text-xs text-gray-600 text-center py-6">No whale activity</p>
+              ) : whaleList.slice(0, 10).map((w: any, i: number) => (
+                <div key={i} className="flex items-center justify-between p-2 bg-white/[0.02] rounded-lg hover:bg-white/[0.04] transition-colors cursor-pointer"
+                  onClick={() => go('whale-watch')}>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[10px] font-mono text-cyan-400 truncate max-w-[100px]">{w.wallet}</span>
+                    <span className={`text-[9px] px-1 py-0.5 rounded border ${chainClr(w.chain)}`}>{w.chain}</span>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="text-[10px] font-mono text-gray-300">Liq {fmtUSD(w.liquidity_usd)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ══════ RIGHT: FEATURE LAUNCH GRID ══════ */}
+        <div className="lg:col-span-4 space-y-4">
+          <div className="bg-[#0d0d14] border border-purple-500/20 rounded-xl overflow-hidden">
+            <div className="p-3 border-b border-purple-500/20 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+                <Layers className="w-4 h-4 text-purple-400" /> PLATFORM FEATURES
+              </h2>
+              <span className="text-[10px] text-gray-500">{FEATURES.length} tools</span>
+            </div>
+            <div className="p-2 max-h-[calc(100vh-220px)] overflow-y-auto thin_scroll">
+              {/* Group by category */}
+              {Object.entries(
+                FEATURES.reduce((acc, f) => {
+                  (acc[f.cat] = acc[f.cat] || []).push(f);
+                  return acc;
+                }, {} as Record<string, typeof FEATURES>)
+              ).map(([cat, feats]) => (
+                <div key={cat} className="mb-3">
+                  <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5 px-1">{cat}</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {feats.map((f) => {
+                      const Icon = f.icon;
+                      return (
+                        <button key={f.id + f.label}
+                          onClick={() => go(f.path || f.id)}
+                          className={`flex flex-col items-start p-2.5 rounded-lg border transition-all hover:scale-[1.02] active:scale-[0.98] ${CAT_CLR[f.cat] || 'border-gray-500/30 bg-gray-500/5'}`}>
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <Icon className="w-3.5 h-3.5 text-white/80" />
+                            <span className="text-xs font-medium text-white truncate">{f.label}</span>
+                          </div>
+                          <span className="text-[9px] text-gray-500 leading-tight">{f.desc}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* x402 Tool Categories Quick View */}
+          <div className="bg-[#0d0d14] border border-purple-500/20 rounded-xl overflow-hidden">
+            <div className="p-3 border-b border-purple-500/20 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+                <Cpu className="w-4 h-4 text-purple-400" /> x402 TOOL CATEGORIES
+              </h2>
+              <button onClick={() => go('datamarket')} className="text-[10px] text-purple-400 hover:text-purple-300">
+                Browse →
+              </button>
+            </div>
+            <div className="p-2">
+              {(x402.data?.tools || []).reduce((acc: Record<string, number>, t: any) => {
+                acc[t.category] = (acc[t.category] || 0) + 1;
+                return acc;
+              }, {}) && Object.entries(
+                (x402.data?.tools || []).reduce((acc: Record<string, number>, t: any) => {
+                  acc[t.category] = (acc[t.category] || 0) + 1;
+                  return acc;
+                }, {})
+              ).sort((a, b) => b[1] - a[1]).map(([cat, cnt]) => (
+                <div key={cat} className="flex items-center justify-between p-1.5 bg-white/[0.02] rounded-lg mb-1">
+                  <span className="text-[11px] text-gray-300 capitalize">{cat}</span>
+                  <span className="text-[10px] font-mono text-purple-300">{cnt}</span>
+                </div>
+              ))}
+              <div className="mt-2 text-center">
+                <span className="text-xs text-gray-500">{toolCount} tools across {chainCount} chains</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Sub-components ──
+
+function Ticker({ symbol, price, change, icon, isMcap }: { symbol: string; price?: number; change?: number; icon: string; isMcap?: boolean }) {
+  return (
+    <div className="bg-[#0d0d14] border border-purple-500/20 rounded-lg p-2.5 flex flex-col items-center">
+      <div className="flex items-center gap-1.5 mb-0.5">
+        <span className="text-sm">{icon}</span>
+        <span className="text-xs font-medium text-white">{symbol}</span>
+      </div>
+      <span className="text-sm font-bold font-mono text-white">{price ? fmtUSD(price) : '—'}</span>
+      <div className="flex items-center gap-0.5">
+        {change !== undefined && (change >= 0
+          ? <TrendingUp className="w-3 h-3 text-emerald-400" />
+          : <TrendingDown className="w-3 h-3 text-rose-400" />)}
+        <span className={`text-[10px] font-mono ${change !== undefined && change >= 0 ? 'text-emerald-400' : change !== undefined ? 'text-rose-400' : 'text-gray-600'}`}>
+          {fmtPct(change)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function LoadSkeleton({ n = 4 }: { n?: number }) {
+  return (
+    <div className="space-y-1">
+      {Array.from({ length: n }).map((_, i) => (
+        <div key={i} className="h-10 bg-white/[0.03] rounded-lg animate-pulse" />
+      ))}
+    </div>
+  );
+}
