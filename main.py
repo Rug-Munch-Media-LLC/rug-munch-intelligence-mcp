@@ -7175,3 +7175,9 @@ async def rundown_page():
     with open("/app/static/rundown.html") as f:
         return f.read()
 
+
+@app.get("/news", response_class=HTMLResponse)
+async def news_page():
+    with open("/app/static/news.html") as f:
+        return f.read()
+

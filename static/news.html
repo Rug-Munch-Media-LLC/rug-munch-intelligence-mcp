@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RMI News Network — The World's Crypto News</title>
+<style>
+:root{--bg:#06060f;--fg:#e8e8f0;--accent:#7c6ff7;--green:#2ecc71;--red:#e74c3c;--card:#0f0f1d;--border:#1e1e35;--muted:#888;--yellow:#f1c40f;--orange:#e67e22;--surface:#121224;--glow:rgba(124,111,247,.15)}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif}
+header{background:var(--card);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:100;backdrop-filter:blur(12px)}
+.logo{font-size:22px;font-weight:800;background:linear-gradient(135deg,var(--accent),#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.badge{background:var(--accent);color:#fff;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:600;letter-spacing:.5px}
+main{max-width:1400px;margin:0 auto;padding:20px;display:grid;grid-template-columns:230px 1fr 320px;gap:20px}
+.sidebar{position:sticky;top:80px;height:fit-content;max-height:calc(100vh - 100px);overflow-y:auto}
+.sidebar::-webkit-scrollbar{width:4px}
+.sidebar::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+.section-title{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin:20px 0 8px 0;font-weight:700}
+.filter-btn{display:block;width:100%;text-align:left;padding:7px 12px;border-radius:6px;color:var(--muted);font-size:12px;cursor:pointer;border:none;background:none;transition:all .15s;margin:1px 0}
+.filter-btn:hover{background:var(--surface);color:var(--fg)}
+.filter-btn.active{background:var(--accent);color:#fff;font-weight:600}
+.filter-count{float:right;font-size:10px;opacity:.6}
+.search-box{width:100%;padding:9px 12px 9px 32px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--fg);font-size:13px;outline:none}
+.search-box:focus{border-color:var(--accent)}
+.search-wrap{position:relative;margin-bottom:12px}
+.search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--muted)}
+.sort-bar{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
+.sort-btn{padding:6px 14px;border-radius:20px;font-size:11px;cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--muted);transition:all .15s}
+.sort-btn:hover,.sort-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.panel{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:14px}
+.panel h4{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px}
+.article-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:10px;transition:all .2s;cursor:pointer;position:relative;overflow:hidden}
+.article-card:hover{border-color:var(--accent);box-shadow:0 4px 20px var(--glow);transform:translateY(-1px)}
+.article-card.high-impact{border-left:3px solid var(--red)}
+.article-card.medium-impact{border-left:3px solid var(--orange)}
+.article-source-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.source-avatar{width:18px;height:18px;border-radius:4px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff}
+.source-name{font-size:11px;color:var(--accent);font-weight:600}
+.source-tier{font-size:9px;color:var(--muted);margin-left:4px}
+.article-title{font-size:16px;font-weight:700;line-height:1.4;margin-bottom:8px}
+.article-title a{color:var(--fg);text-decoration:none}
+.article-title a:hover{color:var(--accent)}
+.article-summary{font-size:13px;color:#b0b0c0;line-height:1.5;margin-bottom:12px}
+.article-footer{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.tag{display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:600}
+.tag-bull{background:rgba(46,204,113,.12);color:var(--green)}
+.tag-bear{background:rgba(231,76,60,.12);color:var(--red)}
+.tag-neutral{background:rgba(136,136,136,.12);color:var(--muted)}
+.action-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--muted);transition:all .15s}
+.action-btn:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+.action-btn.voted{background:rgba(124,111,247,.2);border-color:var(--accent);color:var(--accent)}
+.metric{text-align:center;padding:10px}
+.metric-value{font-size:22px;font-weight:800;margin-bottom:2px}
+.metric-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+.metric-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.fg-gauge{text-align:center;padding:12px 0}
+.fg-value{font-size:42px;font-weight:800;line-height:1}
+.fg-label{font-size:11px;color:var(--muted);margin-top:4px}
+.pulse{display:inline-block;width:6px;height:6px;background:var(--green);border-radius:50%;margin-right:4px;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:200;justify-content:center;align-items:center;padding:20px}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;max-width:600px;width:100%;max-height:80vh;overflow-y:auto}
+.modal h3{font-size:18px;margin-bottom:12px}
+.modal textarea{width:100%;padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--fg);font-size:13px;resize:vertical;min-height:80px;margin:12px 0}
+.modal input{width:100%;padding:10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--fg);font-size:13px;margin:8px 0}
+.modal button{padding:8px 20px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:600}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-close{background:var(--surface);color:var(--muted);position:absolute;top:12px;right:12px;cursor:pointer;border:none;font-size:18px}
+.comment-item{padding:10px 0;border-bottom:1px solid var(--border)}
+.comment-user{font-size:12px;font-weight:600;color:var(--accent)}
+.comment-text{font-size:13px;margin:4px 0;line-height:1.4}
+.comment-time{font-size:10px;color:var(--muted)}
+.spinner-wrap{text-align:center;padding:40px}
+.spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<header>
+  <span class="logo">RMI News</span>
+  <span style="font-size:14px;color:var(--muted)">The World's Crypto Intelligence</span>
+  <span class="badge">30 Sources</span>
+  <span style="font-size:11px;color:var(--muted);margin-left:auto"><span class="pulse"></span> Live</span>
+</header>
+
+<main>
+<aside class="sidebar">
+  <div class="search-wrap"><span class="search-icon">🔍</span><input class="search-box" placeholder="Search 30 sources..." id="search" oninput="search()"></div>
+  
+  <div class="section-title">Sort By</div>
+  <div class="sort-bar" id="sortBar">
+    <button class="sort-btn active" onclick="setSort('latest',this)">Latest</button>
+    <button class="sort-btn" onclick="setSort('popular',this)">Popular</button>
+    <button class="sort-btn" onclick="setSort('impact',this)">Impact</button>
+    <button class="sort-btn" onclick="setSort('bullish',this)">Bullish</button>
+    <button class="sort-btn" onclick="setSort('bearish',this)">Bearish</button>
+  </div>
+
+  <div class="section-title">Categories</div>
+  <div id="categories"><button class="filter-btn active" onclick="setCat('All',this)">📰 All News</button></div>
+
+  <div class="section-title">Sentiment</div>
+  <button class="filter-btn" onclick="setSent('',this)">All Sentiment</button>
+  <button class="filter-btn" onclick="setSent('bullish',this)">🟢 Bullish</button>
+  <button class="filter-btn" onclick="setSent('bearish',this)">🔴 Bearish</button>
+  <button class="filter-btn" onclick="setSent('neutral',this)">⚪ Neutral</button>
+
+  <div class="section-title">Tier</div>
+  <button class="filter-btn" onclick="setTier('',this)">All Sources</button>
+  <button class="filter-btn" onclick="setTier(1,this)">⭐ Tier 1 (Major)</button>
+  <button class="filter-btn" onclick="setTier(2,this)">Tier 2 (Quality)</button>
+  <button class="filter-btn" onclick="setTier(3,this)">Tier 3 (Niche)</button>
+</aside>
+
+<section id="feed">
+  <div id="summary" style="margin-bottom:16px"></div>
+  <div id="articles"><div class="spinner-wrap"><div class="spinner"></div><p style="color:var(--muted);margin-top:12px;font-size:13px">Aggregating from 30 sources...</p></div></div>
+</section>
+
+<aside id="panel">
+  <div class="panel"><h4>Fear & Greed</h4><div id="fg"></div></div>
+  <div class="panel"><h4>Market Stats</h4><div id="stats"></div></div>
+  <div class="panel"><h4>Price Watch</h4><div id="prices"></div></div>
+  <div class="panel"><h4>Security Alerts</h4><div id="alerts"></div></div>
+</aside>
+</main>
+
+<div class="modal-overlay" id="commentModal">
+  <div class="modal">
+    <button class="btn-close" onclick="closeModal()">✕</button>
+    <h3>💬 Comments</h3>
+    <div id="commentList"></div>
+    <input placeholder="Your name" id="commentUser" maxlength="50">
+    <textarea placeholder="Share your thoughts..." id="commentText" maxlength="500"></textarea>
+    <button class="btn-primary" onclick="submitComment()">Post Comment</button>
+  </div>
+</div>
+
+<script>
+let state={cat:'All',sent:'',tier:'',sort:'latest',search:'',currentArticleId:''};
+const votesUsed=new Set();
+
+function setCat(c,el){state.cat=c;state.search='';document.getElementById('search').value='';document.querySelectorAll('#categories .filter-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');load()}
+function setSent(s,el){state.sent=s;el.parentElement.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');load()}
+function setTier(t,el){state.tier=t;el.parentElement.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');load()}
+function setSort(s,el){state.sort=s;document.querySelectorAll('.sort-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');load()}
+function search(){state.search=document.getElementById('search').value;state.cat='All';document.querySelectorAll('#categories .filter-btn').forEach(b=>b.classList.remove('active'));load()}
+
+async function load(){
+  document.getElementById('articles').innerHTML='<div class="spinner-wrap"><div class="spinner"></div></div>';
+  try{
+    const p=new URLSearchParams({limit:40,sort:state.sort});
+    if(state.cat!=='All')p.set('category',state.cat);
+    if(state.sent)p.set('sentiment',state.sent);
+    if(state.tier)p.set('tier',state.tier);
+    
+    let url='/news/feed?'+p;
+    if(state.search){url='/news/search?q='+encodeURIComponent(state.search);}
+    
+    const r=await fetch(url).then(r=>r.json());
+    const articles=state.search?r.results:r.articles;
+    
+    // Update categories
+    if(!state.search&&r.all_categories){
+      let catsHTML='<button class="filter-btn'+(state.cat==='All'?' active':'')+'" onclick="setCat(\'All\',this)">📰 All News</button>';
+      r.all_categories.forEach(c=>{catsHTML+=`<button class="filter-btn${state.cat===c?' active':''}" onclick="setCat('${c}',this)">${c}</button>`;});
+      document.getElementById('categories').innerHTML=catsHTML;
+    }
+
+    // Stats
+    if(!state.search&&r.stats){
+      document.getElementById('stats').innerHTML=`
+        <div class="metric-grid">
+          <div class="metric"><div class="metric-value">${r.stats.total_articles}</div><div class="metric-label">Articles</div></div>
+          <div class="metric"><div class="metric-value">${r.stats.sources_indexed}</div><div class="metric-label">Sources</div></div>
+          <div class="metric"><div class="metric-value" style="color:var(--green)">${r.stats.sentiment.bullish}</div><div class="metric-label">Bullish</div></div>
+          <div class="metric"><div class="metric-value" style="color:var(--red)">${r.stats.sentiment.bearish}</div><div class="metric-label">Bearish</div></div>
+        </div>`;
+    }
+
+    // Articles
+    document.getElementById('articles').innerHTML=(articles||[]).map(a=>`
+      <div class="article-card ${a.impact_level==='high'?'high-impact':a.impact_level==='medium'?'medium-impact':''}">
+        <div class="article-source-row">
+          <div class="source-avatar">${a.source[0]}</div>
+          <span class="source-name">${a.source}</span>
+          <span class="source-tier">Tier ${a.source_tier||'?'}</span>
+        </div>
+        <div class="article-title"><a href="${a.url}" target="_blank">${a.title}</a></div>
+        <div class="article-summary">${a.summary||''}</div>
+        <div class="article-footer">
+          ${a.categories.map(c=>`<span class="tag tag-cat" style="background:rgba(124,111,247,.12);color:var(--accent)">${c}</span>`).join('')}
+          <span class="tag tag-${(a.sentiment_label||'neutral').slice(0,4)}">${a.sentiment_label||'neutral'}</span>
+          <span style="font-size:10px;color:var(--muted)">${a.reading_time||1}m read</span>
+          <button class="action-btn ${votesUsed.has(a.id)?'voted':''}" onclick="voteUp('${a.id}',this)">▲ ${a.votes_up||0}</button>
+          <span style="font-size:11px;color:var(--muted)">${(a.votes_up||0)-(a.votes_down||0)}</span>
+          <button class="action-btn" onclick="voteDown('${a.id}')">▼</button>
+          <button class="action-btn" onclick="openComments('${a.id}')">💬 ${a.comment_count||0}</button>
+          <button class="action-btn" onclick="bookmark('${a.id}')">🔖 ${a.bookmarks||0}</button>
+        </div>
+      </div>
+    `).join('')||'<p style="text-align:center;color:var(--muted);padding:40px">No articles found. Try different filters.</p>';
+  }catch(e){document.getElementById('articles').innerHTML='<p style="text-align:center;color:var(--red);padding:40px">Failed to load. Retrying...</p>';setTimeout(load,5000);}
+}
+
+async function voteUp(id,el){if(votesUsed.has(id))return;votesUsed.add(id);el.classList.add('voted');await fetch('/news/vote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({article_id:id,direction:'up'})});load()}
+async function voteDown(id){await fetch('/news/vote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({article_id:id,direction:'down'})});load()}
+async function bookmark(id){await fetch('/news/bookmark',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({article_id:id})});load()}
+
+async function openComments(id){
+  state.currentArticleId=id;
+  document.getElementById('commentModal').style.display='flex';
+  const r=await fetch('/news/comments/'+id).then(r=>r.json());
+  document.getElementById('commentList').innerHTML=(r.comments||[]).map(c=>`
+    <div class="comment-item"><div class="comment-user">${c.user}</div><div class="comment-text">${c.text}</div><div class="comment-time">${c.timestamp?.slice(0,19)||''}</div></div>
+  `).join('')||'<p style="color:var(--muted);font-size:12px">No comments yet. Be the first.</p>';
+}
+function closeModal(){document.getElementById('commentModal').style.display='none';}
+async function submitComment(){
+  const user=document.getElementById('commentUser').value||'anon';
+  const text=document.getElementById('commentText').value;
+  if(!text)return;
+  await fetch('/news/comment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({article_id:state.currentArticleId,user,text})});
+  document.getElementById('commentText').value='';
+  openComments(state.currentArticleId);
+}
+
+async function loadPanel(){
+  try{
+    const d=await fetch('/news/daily-data').then(r=>r.json());
+    const fg=d.fear_greed||{};
+    const fgColor=fg.value>60?'var(--green)':fg.value<40?'var(--red)':'var(--yellow)';
+    document.getElementById('fg').innerHTML=`<div class="fg-gauge"><div class="fg-value" style="color:${fgColor}">${fg.value||50}</div><div class="fg-label">${fg.classification||'Neutral'}</div></div>`;
+    
+    const pa=d.price_action||{};
+    document.getElementById('prices').innerHTML=Object.entries(pa.major_assets||{}).map(([k,v])=>`<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px;border-bottom:1px solid rgba(255,255,255,.02)"><span>${k.toUpperCase()}</span><span>\$${(v.price||0).toFixed(2)}</span></div>`).join('')||'Loading...';
+    
+    const sa=d.security_alerts||{};
+    document.getElementById('alerts').innerHTML=sa.alerts?.length?sa.alerts.slice(0,3).map(a=>`<div style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,.02);font-size:11px"><span style="color:var(--red)">⚠</span> ${a.project||a.amount_lost||a.type}</div>`).join(''):'<p style="font-size:11px;color:var(--muted)">No major alerts</p>';
+  }catch(e){}
+}
+
+async function genSummary(){
+  try{
+    const s=await fetch('/mcp/news/summary').then(r=>r.json());
+    document.getElementById('summary').innerHTML=s.summary?`<div class="panel" style="background:linear-gradient(135deg,#1a1a3e,#2a1a4e);border-color:var(--accent)"><h4 style="color:var(--accent)">AI Market Analysis</h4><p style="font-size:13px;line-height:1.6;color:#c0c0d0">${s.summary}</p></div>`:'';
+  }catch(e){}
+}
+
+load();loadPanel();genSummary();
+setInterval(load,300000);
+</script>
+</body>
+</html>

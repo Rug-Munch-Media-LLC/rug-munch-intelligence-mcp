@@ -864,3 +864,53 @@ async def daily_market_data():
     """Enhanced daily data — price action, sentiment, security, whales, prediction markets."""
     from app.caching_shield.daily_data import get_daily_rundown_data
     return await get_daily_rundown_data()
+
+# ═══════════════════════════════════════════════════════════════════════════
+# RMI NEWS NETWORK — 30 sources, community interaction
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.get("/news/feed")
+async def news_feed(category: str = None, sentiment: str = None, tier: int = None,
+                    sort: str = "latest", limit: int = 50, offset: int = 0,
+                    impact: str = None, source: str = None):
+    """Main news feed with all filters."""
+    from app.caching_shield.news_network import get_feed, fetch_all
+    await fetch_all(max_per_source=5)
+    return get_feed(category=category, sentiment=sentiment, tier=tier, sort=sort,
+                    limit=limit, offset=offset, impact=impact, source=source)
+
+@router.get("/news/categories")
+async def news_categories():
+    from app.caching_shield.news_network import get_categories, fetch_all
+    await fetch_all(max_per_source=3)
+    return {"categories": get_categories()}
+
+@router.post("/news/vote")
+async def news_vote(data: dict):
+    from app.caching_shield.news_network import vote_article
+    return vote_article(data.get("article_id", ""), data.get("direction", "up"))
+
+@router.post("/news/comment")
+async def news_comment(data: dict):
+    from app.caching_shield.news_network import add_comment
+    return add_comment(data.get("article_id", ""), data.get("user", "anon"), data.get("text", ""))
+
+@router.get("/news/comments/{article_id}")
+async def news_comments(article_id: str):
+    from app.caching_shield.news_network import get_comments
+    return {"comments": get_comments(article_id)}
+
+@router.post("/news/bookmark")
+async def news_bookmark(data: dict):
+    from app.caching_shield.news_network import bookmark
+    return bookmark(data.get("article_id", ""))
+
+@router.get("/news/search")
+async def news_search(q: str = "", limit: int = 20):
+    from app.caching_shield.news_network import search_articles
+    return {"results": search_articles(q, limit)}
+
+@router.get("/news/daily-data")
+async def daily_data():
+    from app.caching_shield.daily_data import get_daily_rundown_data
+    return await get_daily_rundown_data()
