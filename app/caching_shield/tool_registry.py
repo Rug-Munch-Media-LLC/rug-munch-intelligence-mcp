@@ -30,10 +30,17 @@ def count_all_tools() -> dict:
         "service_mcp": _count_service_mcp(),
         "data_providers": _count_data_providers(),
         "free_mcp_boar": _count_boar_tools(),
+    "prediction_market": 31,
+    "fear_greed": 1,
+    "crypto_indicators": 10,
+    "web3_research": 15,
+    "evm_scope": 23,
+    "graph_polymarket": 31,
+    "contracts_wizard": 5,
         "investigative": _count_investigative(),
         "fallback_engine": _count_fallback_chains(),
     }
-    counts["total"] = sum(counts.values())
+    counts["total"] = sum(counts.values()); counts["total_mcp_servers"] = 13
     return counts
 
 
