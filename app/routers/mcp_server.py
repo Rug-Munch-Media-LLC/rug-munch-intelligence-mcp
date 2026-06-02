@@ -914,3 +914,31 @@ async def news_search(q: str = "", limit: int = 20):
 async def daily_data():
     from app.caching_shield.daily_data import get_daily_rundown_data
     return await get_daily_rundown_data()
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SOCIAL FEED — X/Twitter + Reddit
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.get("/news/social")
+async def social_feed(limit_twitter: int = 30, limit_reddit: int = 20):
+    """Combined X/Twitter + Reddit crypto feed — cached, Nitter fallback."""
+    from app.caching_shield.social_feed import get_social_feed
+    return await get_social_feed(limit_twitter, limit_reddit)
+
+@router.get("/news/social/twitter")
+async def twitter_feed(limit: int = 30):
+    """Top 50 crypto X/Twitter accounts — via Nitter (free, cached)."""
+    from app.caching_shield.social_feed import get_twitter_feed
+    return await get_twitter_feed(limit)
+
+@router.get("/news/social/reddit")
+async def reddit_feed(limit: int = 20):
+    """Top crypto subreddits — free, no auth."""
+    from app.caching_shield.social_feed import get_reddit_feed
+    return await get_reddit_feed(limit)
+
+@router.get("/news/social/accounts")
+async def social_accounts():
+    """List of monitored X accounts with profile pics."""
+    from app.caching_shield.social_feed import get_top_accounts
+    return {"accounts": get_top_accounts()}
