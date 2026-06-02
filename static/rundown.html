@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RMI Daily Market Rundown — AI-Powered Crypto News</title>
+<style>
+:root{--bg:#0a0a0f;--fg:#e0e0e0;--accent:#6c5ce7;--green:#27ae60;--red:#e74c3c;--card:#14141f;--border:#2a2a3a;--muted:#888;--yellow:#f39c12}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:system-ui,sans-serif}
+header{background:var(--card);border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:10}
+.logo{font-size:20px;font-weight:700;color:var(--accent)}
+.badge{background:var(--accent);color:#fff;padding:2px 8px;border-radius:12px;font-size:11px}
+main{max-width:1200px;margin:0 auto;padding:24px;display:grid;grid-template-columns:250px 1fr;gap:24px}
+.sidebar{position:sticky;top:80px;height:fit-content}
+.sidebar h3{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px}
+.cat-link{display:block;padding:8px 12px;border-radius:6px;color:var(--fg);text-decoration:none;font-size:13px;margin:2px 0;cursor:pointer}
+.cat-link:hover,.cat-link.active{background:var(--accent);color:#fff}
+.ai-summary{background:linear-gradient(135deg,#1a1a3e,#2a1a4e);border:1px solid var(--accent);border-radius:12px;padding:24px;margin-bottom:24px}
+.ai-summary h2{font-size:20px;margin-bottom:4px;color:var(--accent)}
+.ai-badge{background:var(--accent);color:#fff;padding:2px 8px;border-radius:6px;font-size:10px;display:inline-block;margin-bottom:12px}
+.ai-summary p{line-height:1.6;color:#c0c0d0;font-size:14px}
+.sentiment-bar{display:flex;gap:8px;margin-top:16px}
+.sent{flex:1;text-align:center;padding:8px;border-radius:8px;font-size:12px}
+.sent-bull{background:rgba(39,174,96,.1);border:1px solid var(--green)}
+.sent-bear{background:rgba(231,76,60,.1);border:1px solid var(--red)}
+.sent-neutral{background:rgba(136,136,136,.1);border:1px solid var(--muted)}
+.article{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px;transition:border-color .2s}
+.article:hover{border-color:var(--accent)}
+.article-source{font-size:11px;color:var(--muted);margin-bottom:4px}
+.article-title{font-size:16px;font-weight:600;margin-bottom:8px}
+.article-title a{color:var(--fg);text-decoration:none}
+.article-title a:hover{color:var(--accent)}
+.article-summary{font-size:13px;color:#c0c0d0;line-height:1.5;margin-bottom:12px}
+.article-meta{display:flex;gap:16px;align-items:center;font-size:12px;color:var(--muted)}
+.tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;margin-right:4px}
+.tag-bull{background:rgba(39,174,96,.15);color:var(--green)}
+.tag-bear{background:rgba(231,76,60,.15);color:var(--red)}
+.tag-neutral{background:rgba(136,136,136,.15);color:var(--muted)}
+.tag-cat{background:rgba(108,92,231,.15);color:var(--accent)}
+.vote-btn{background:none;border:1px solid var(--border);color:var(--muted);padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px}
+.vote-btn:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+.vote-count{font-size:12px;min-width:30px;text-align:center}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.search{width:100%;padding:10px 14px;background:#1a1a2e;border:1px solid var(--border);border-radius:8px;color:var(--fg);font-size:14px;margin-bottom:16px}
+</style>
+</head>
+<body>
+<header>
+  <span class="logo">RMI</span>
+  <span>Daily Market Rundown</span>
+  <span class="badge">AI-Powered</span>
+</header>
+<main>
+  <aside class="sidebar">
+    <input class="search" placeholder="Search news..." oninput="filter()" id="search">
+    <h3>Categories</h3>
+    <div id="categories"></div>
+    <h3 style="margin-top:24px">Sentiment</h3>
+    <div id="sentiments"></div>
+  </aside>
+  <div id="content">
+    <div id="summary"></div>
+    <div id="articles"><span class="spinner"></span> Loading news...</div>
+  </div>
+</main>
+<script>
+let activeCat='All',activeSent='',searchText='';
+
+async function load(){
+  // AI Summary
+  try{
+    const s=await fetch('/mcp/news/summary').then(r=>r.json());
+    document.getElementById('summary').innerHTML=`
+      <div class="ai-summary">
+        <span class="ai-badge">AI Market Analysis</span>
+        <h2>Daily Market Rundown</h2>
+        <p>${s.summary}</p>
+        ${s.sentiment?`<div class="sentiment-bar">
+          <div class="sent sent-bull">🟢 Bullish<br>${s.sentiment.bullish||0}</div>
+          <div class="sent sent-bear">🔴 Bearish<br>${s.sentiment.bearish||0}</div>
+          <div class="sent sent-neutral">⚪ Neutral<br>${s.sentiment.neutral||0}</div>
+        </div>`:''}
+      </div>`;
+  }catch(e){}
+
+  // Categories
+  try{
+    const c=await fetch('/mcp/news/categories').then(r=>r.json());
+    document.getElementById('categories').innerHTML=c.categories.map(c=>`<span class="cat-link ${c.name===activeCat?'active':''}" onclick="setCat('${c.name}')">${c.icon} ${c.name}</span>`).join('');
+    document.getElementById('sentiments').innerHTML=['bullish','bearish','neutral'].map(s=>`<span class="cat-link ${s===activeSent?'active':''}" onclick="setSent('${s}')">${s==='bullish'?'🟢':s==='bearish'?'🔴':'⚪'} ${s}</span>`).join('');
+  }catch(e){}
+
+  // Articles
+  loadArticles();
+}
+
+async function loadArticles(){
+  document.getElementById('articles').innerHTML='<span class="spinner"></span> Loading...';
+  try{
+    const params=new URLSearchParams({limit:50});
+    if(activeCat!=='All') params.set('category',activeCat);
+    if(activeSent) params.set('sentiment',activeSent);
+    const r=await fetch('/mcp/news?'+params).then(r=>r.json());
+    document.getElementById('articles').innerHTML=r.articles.map(a=>`
+      <div class="article">
+        <div class="article-source">${a.source} · ${a.published?.slice(0,16)||''}</div>
+        <div class="article-title"><a href="${a.url}" target="_blank" rel="noopener">${a.title}</a></div>
+        <div class="article-summary">${a.summary||''}</div>
+        <div class="article-meta">
+          <span class="tag tag-${a.sentiment_label?.slice(0,4)||'neutral'}">${a.sentiment_label||'neutral'}</span>
+          <span class="tag tag-cat">${a.category}</span>
+          <button class="vote-btn" onclick="vote('${a.id}','up')">▲</button>
+          <span class="vote-count">${a.votes_up-a.votes_down}</span>
+          <button class="vote-btn" onclick="vote('${a.id}','down')">▼</button>
+          <span>💬 ${a.comment_count||0}</span>
+        </div>
+      </div>
+    `).join('')||'<p>No articles found. Try a different category.</p>';
+  }catch(e){
+    document.getElementById('articles').innerHTML='<p>Failed to load news.</p>';
+  }
+}
+
+function setCat(c){activeCat=c;loadArticles();document.querySelectorAll('.cat-link').forEach(el=>el.classList.toggle('active',el.textContent.includes(c)));}
+function setSent(s){activeSent=activeSent===s?'':s;loadArticles();}
+function filter(){searchText=document.getElementById('search').value.toLowerCase();loadArticles();}
+async function vote(id,dir){await fetch('/mcp/news/vote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({article_id:id,direction:dir})});loadArticles();}
+
+load();
+</script>
+</body>
+</html>

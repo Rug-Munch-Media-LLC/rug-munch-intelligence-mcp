@@ -812,3 +812,49 @@ async def earnings_by_source():
     """Revenue broken down by tool, chain, and facilitator."""
     from app.caching_shield.earnings_tracker import get_revenue_by_source
     return get_revenue_by_source()
+
+# ═══════════════════════════════════════════════════════════════════════════
+# DAILY MARKET RUNDOWN
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.get("/mcp/news")
+async def news_feed(category: str = None, sentiment: str = None, source: str = None, limit: int = 50, offset: int = 0):
+    """Aggregated crypto news with sentiment analysis."""
+    from app.caching_shield.market_rundown import get_articles
+    return await get_articles(category=category, sentiment=sentiment, source=source, limit=limit, offset=offset)
+
+@router.get("/mcp/news/summary")
+async def market_summary(force: bool = False):
+    """AI-generated daily market rundown (DeepSeek V4 Pro, cached 24h)."""
+    from app.caching_shield.market_rundown import generate_market_summary
+    return await generate_market_summary(force=force)
+
+@router.get("/mcp/news/categories")
+async def news_categories():
+    """Available news categories."""
+    from app.caching_shield.market_rundown import get_categories
+    return {"categories": get_categories()}
+
+@router.get("/mcp/news/sources")
+async def news_sources():
+    """Available news sources."""
+    from app.caching_shield.market_rundown import get_sources
+    return {"sources": get_sources()}
+
+@router.post("/mcp/news/vote")
+async def news_vote(data: dict):
+    """Vote up/down on an article."""
+    from app.caching_shield.market_rundown import vote
+    return await vote(data.get("article_id", ""), data.get("direction", "up"))
+
+@router.post("/mcp/news/comment")
+async def news_comment(data: dict):
+    """Add a comment to an article."""
+    from app.caching_shield.market_rundown import comment
+    return await comment(data.get("article_id", ""), data.get("user", "anon"), data.get("text", ""))
+
+@router.get("/mcp/news/comments/{article_id}")
+async def news_comments(article_id: str):
+    """Get comments for an article."""
+    from app.caching_shield.market_rundown import get_comments
+    return await get_comments(article_id)

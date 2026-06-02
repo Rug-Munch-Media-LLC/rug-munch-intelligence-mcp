@@ -7169,3 +7169,9 @@ async def ws_broadcast_alert(alert_data: dict):
     except Exception:
         pass
 
+
+@app.get("/rundown", response_class=HTMLResponse)
+async def rundown_page():
+    with open("/app/static/rundown.html") as f:
+        return f.read()
+
