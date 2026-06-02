@@ -400,3 +400,18 @@ def get_data_layer() -> UnifiedDataLayer:
     if _layer is None:
         _layer = UnifiedDataLayer()
     return _layer
+
+
+    async def _cmc_price(self, mint: str, **kw):
+        import httpx, os
+        key = os.getenv("COINMARKETCAP_API_KEY", "")
+        if not key:
+            return None
+        async with httpx.AsyncClient(timeout=10) as c:
+            r = await c.get("https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest",
+                params={"symbol": "SOL", "convert": "USD"},
+                headers={"X-CMC_PRO_API_KEY": key})
+            if r.status_code == 200:
+                data = r.json().get("data", {})
+                if "SOL" in data:
+                    return {"price_usd": data["SOL"]["quote"]["USD"]["price"], "source": "coinmarketcap"}

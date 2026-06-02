@@ -250,7 +250,7 @@ class MoralisTools:
                     headers={"X-API-Key": self._next_key()})
                 if r.status_code == 200:
                     return {"balance_wei": r.json().get("balance")}
-        return await _cached_call("moralis", "balance", {"address": address, "chain": chain}, fn, 15)
+        return await _cached_call("moralis", "coinmarketcap", "balance", {"address": address, "chain": chain}, fn, 15)
 
     async def wallet_tokens(self, address: str, chain: str = "eth") -> Optional[dict]:
         async def fn(address, chain):
@@ -261,7 +261,7 @@ class MoralisTools:
                 if r.status_code == 200:
                     tokens = r.json()
                     return {"token_count": len(tokens), "tokens": tokens[:20]}
-        return await _cached_call("moralis", "tokens", {"address": address, "chain": chain}, fn, 30)
+        return await _cached_call("moralis", "coinmarketcap", "tokens", {"address": address, "chain": chain}, fn, 30)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -278,12 +278,13 @@ class ServiceMCP:
         self.coingecko = CoinGeckoTools()
         self.etherscan = EtherscanTools()
         self.moralis = MoralisTools()
+        self.coinmarketcap = CoinMarketCapTools()
 
     def stats(self) -> dict:
         return {
             "cache_hits": _hits,
             "cache_misses": _misses,
-            "services": ["gmgn", "birdeye", "solscan", "coingecko", "etherscan", "moralis"],
+            "services": ["gmgn", "birdeye", "solscan", "coingecko", "etherscan", "moralis", "coinmarketcap"],
             "l1_size": len(_l1),
         }
 
@@ -295,3 +296,41 @@ def get_service_mcp() -> ServiceMCP:
     if _service_mcp is None:
         _service_mcp = ServiceMCP()
     return _service_mcp
+
+# ═══════════════════════════════════════════════════════════════════════════
+# COINMARKETCAP — Market data, listings, trends, OHLCV (10K free/mo)
+# ═══════════════════════════════════════════════════════════════════════════
+
+class CoinMarketCapTools:
+    def __init__(self):
+        self._key = os.getenv("COINMARKETCAP_API_KEY", "")
+        self._base = "https://pro-api.coinmarketcap.com/v1"
+
+    async def latest_listings(self, limit: int = 10) -> Optional[dict]:
+        async def fn(limit):
+            async with httpx.AsyncClient(timeout=10) as c:
+                r = await c.get(f"{self._base}/cryptocurrency/listings/latest",
+                    params={"limit": limit, "convert": "USD"},
+                    headers={"X-CMC_PRO_API_KEY": self._key})
+                if r.status_code == 200:
+                    coins = r.json().get("data", [])
+                    return {"count": len(coins), "top": [
+                        {"name": c["name"], "symbol": c["symbol"], 
+                         "price": c["quote"]["USD"]["price"],
+                         "market_cap": c["quote"]["USD"]["market_cap"],
+                         "volume_24h": c["quote"]["USD"]["volume_24h"],
+                         "change_24h": c["quote"]["USD"]["percent_change_24h"]}
+                        for c in coins[:limit]
+                    ]}
+        return await _cached_call("cmc", "listings", {"limit": limit}, fn, 60)
+
+    async def quotes(self, symbols: list) -> Optional[dict]:
+        async def fn(symbols):
+            async with httpx.AsyncClient(timeout=10) as c:
+                r = await c.get(f"{self._base}/cryptocurrency/quotes/latest",
+                    params={"symbol": ",".join(symbols), "convert": "USD"},
+                    headers={"X-CMC_PRO_API_KEY": self._key})
+                if r.status_code == 200:
+                    data = r.json().get("data", {})
+                    return {s: {"price": data[s]["quote"]["USD"]["price"]} for s in symbols if s in data}
+        return await _cached_call("cmc", "quotes", {"symbols": tuple(symbols)}, fn, 30)
