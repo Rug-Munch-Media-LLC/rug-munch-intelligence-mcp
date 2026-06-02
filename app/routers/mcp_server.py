@@ -858,3 +858,9 @@ async def news_comments(article_id: str):
     """Get comments for an article."""
     from app.caching_shield.market_rundown import get_comments
     return await get_comments(article_id)
+
+@router.get("/mcp/daily-data")
+async def daily_market_data():
+    """Enhanced daily data — price action, sentiment, security, whales, prediction markets."""
+    from app.caching_shield.daily_data import get_daily_rundown_data
+    return await get_daily_rundown_data()
