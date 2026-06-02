@@ -1,5 +1,6 @@
 # Rug Munch Intelligence — Platform Documentation
 
+[![SafeSkill 84/100](https://img.shields.io/badge/SafeSkill-84%2F100_Passes%20with%20Notes-yellow)](https://safeskill.dev/scan/rug-munch-media-llc-rug-munch-intelligence-mcp)
 ## The Bloomberg Terminal of Shitcoins
 
 Rug Munch Intelligence (RMI) is a unified crypto intelligence platform providing 234 tools for token security, wallet forensics, whale tracking, market data, and blockchain queries. Every data call routes through a multi-layer caching shield with automatic provider fallback across 20+ data sources.
